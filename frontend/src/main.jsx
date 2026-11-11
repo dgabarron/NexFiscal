@@ -7,6 +7,7 @@ import { Button } from "./components/ui/button";
 import { Input } from "./components/ui/input";
 import { Card, CardHeader, CardContent } from "./components/ui/card";
 import "./index.css";
+import { formatCnpj, formatCpf, issuerDisplayName } from "./lib/fiscal-format";
 
 const steps=[
   {number:"01",label:"Conexão SAP HANA",helper:"Infraestrutura",icon:Database},
@@ -14,7 +15,7 @@ const steps=[
   {number:"03",label:"Operação",helper:"Distribuição de documentos",icon:Activity}
 ];
 const details=(label,value)=><div className="flex items-start justify-between gap-5 border-b border-slate-100 py-3.5 last:border-0">
-  <span className="text-sm text-slate-500">{label}</span><span className="text-right text-sm font-medium text-slate-800 break-all max-w-[65%]">{value||"Não identificado"}</span>
+  <span className="text-sm text-slate-500">{label}</span><span className="text-right text-sm font-medium text-slate-800 break-words max-w-[65%]">{value||"Não identificado"}</span>
 </div>;
 function Notice({type="info",children}){return <div className={`flex items-start gap-3 rounded-xl border p-3.5 text-sm leading-relaxed ${type==="error"?"bg-red-50 border-red-200 text-red-800":type==="success"?"bg-emerald-50 border-emerald-200 text-emerald-800":"bg-blue-50 border-blue-100 text-blue-800"}`}><span className="mt-0.5">{type==="success"?<CheckCircle2 size={17}/>:<AlertCircle size={17}/>}</span><div>{children}</div></div>}
 function Label({children}){return <label className="mb-2 block text-sm font-semibold text-slate-700">{children}</label>}
@@ -106,7 +107,7 @@ function App(){
        <div className="rounded-xl border-2 border-dashed border-slate-200 bg-slate-50 p-6 text-center"><CloudUpload className="mx-auto text-blue-500" size={30}/><p className="mt-3 font-semibold text-sm">{file?file.name:"Selecione um arquivo .pfx ou .p12"}</p><p className="text-xs text-slate-400 mt-1">O arquivo é processado localmente pelo serviço.</p><label className="inline-flex mt-4 cursor-pointer items-center rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"><input type="file" accept=".pfx,.p12" className="sr-only" onChange={e=>{setFile(e.target.files?.[0]||null);setIdentity(null);setRegistered(null)}}/>Selecionar certificado</label></div>
        <div className="mt-5"><Label>Senha do certificado</Label><Input type="password" autoComplete="off" value={password} onChange={e=>{setPassword(e.target.value);setIdentity(null);setRegistered(null)}} placeholder="Digite a senha do A1"/></div>
        <div className="flex gap-3 mt-6"><Button disabled={busy||!file||!password} onClick={()=>inspect(false)}>{busy?<RefreshCw size={17}/>:<BadgeCheck size={17}/>}Validar certificado</Button></div>
-       {identity&&<div className="mt-7 border-t border-slate-100 pt-6"><h3 className="flex gap-2 font-bold text-slate-800"><CheckCircle2 size={19} className="text-emerald-500"/>Dados identificados</h3><div className="mt-4">{details("Razão social",identity.legalName)}{details("CNPJ",identity.cnpj)}{details("UF",identity.state||"Não informada no Subject")}{details("Validade",new Date(identity.validUntil).toLocaleDateString("pt-BR"))}{details("Emissor",identity.issuer)}</div>
+       {identity&&<div className="mt-7 border-t border-slate-100 pt-6"><h3 className="flex gap-2 font-bold text-slate-800"><CheckCircle2 size={19} className="text-emerald-500"/>Dados identificados</h3><div className="mt-4">{details("Razão social",identity.legalName)}{details("CNPJ",formatCnpj(identity.cnpj))}{details("UF",identity.state||"Não informada no Subject")}{details("Validade",new Date(identity.validUntil).toLocaleDateString("pt-BR"))}{details("Autoridade certificadora",issuerDisplayName(identity.issuer))}</div>
         <div className="mt-5"><Notice>Validação de cadeia ICP-Brasil, revogação e autorização SEFAZ ainda pendentes. O cadastro permanecerá pausado.</Notice></div>
         <Button className="mt-6" disabled={busy||!hanaReady} onClick={()=>inspect(true)}>Cadastrar empresa<ArrowRight size={17}/></Button>
        </div>}

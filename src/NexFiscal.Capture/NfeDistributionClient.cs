@@ -34,28 +34,41 @@ public sealed class NfeDistributionClient
     private static readonly XNamespace NfeNs = "http://www.portalfiscal.inf.br/nfe";
     private static readonly XNamespace WsNs = "http://www.portalfiscal.inf.br/nfe/wsdl/NFeDistribuicaoDFe";
     private static readonly XNamespace SoapNs = "http://www.w3.org/2003/05/soap-envelope";
+    private static readonly HashSet<int> ValidUfCodes =
+        [11,12,13,14,15,16,17,21,22,23,24,25,26,27,28,29,31,32,33,35,41,42,43,50,51,52,53];
+    private static readonly IReadOnlyDictionary<string, int> StateCodes = new Dictionary<string, int>(StringComparer.Ordinal)
+    {
+        ["RO"]=11, ["AC"]=12, ["AM"]=13, ["RR"]=14, ["PA"]=15, ["AP"]=16, ["TO"]=17,
+        ["MA"]=21, ["PI"]=22, ["CE"]=23, ["RN"]=24, ["PB"]=25, ["PE"]=26, ["AL"]=27,
+        ["SE"]=28, ["BA"]=29, ["MG"]=31, ["ES"]=32, ["RJ"]=33, ["SP"]=35, ["PR"]=41,
+        ["SC"]=42, ["RS"]=43, ["MS"]=50, ["MT"]=51, ["GO"]=52, ["DF"]=53
+    };
 
-    public static string BuildRequest(string cnpj, long lastNsu, int environment, int authorizerUf = 91)
+    public static string BuildRequest(string cnpj, long lastNsu, int environment, int? authorizerUf = null)
     {
         if (cnpj is null || cnpj.Length != 14 || !cnpj.All(char.IsAsciiDigit))
             throw new ArgumentException("CNPJ deve conter 14 dígitos sem máscara.", nameof(cnpj));
         if (lastNsu is < 0 or > 999_999_999_999_999L)
             throw new ArgumentOutOfRangeException(nameof(lastNsu));
         if (environment is not (1 or 2)) throw new ArgumentOutOfRangeException(nameof(environment));
-        if (authorizerUf is < 11 or > 99) throw new ArgumentOutOfRangeException(nameof(authorizerUf));
+        if (authorizerUf.HasValue && !ValidUfCodes.Contains(authorizerUf.Value))
+            throw new ArgumentOutOfRangeException(nameof(authorizerUf), "Informe um código IBGE de UF válido.");
 
-        var request = new XDocument(
-            new XElement(SoapNs + "Envelope",
-                new XElement(SoapNs + "Body",
-                    new XElement(WsNs + "nfeDistDFeInteresse",
-                        new XElement(WsNs + "nfeDadosMsg",
-                            new XElement(NfeNs + "distDFeInt",
-                                new XAttribute("versao", "1.01"),
-                                new XElement(NfeNs + "tpAmb", environment),
-                                new XElement(NfeNs + "cUFAutor", authorizerUf),
-                                new XElement(NfeNs + "CNPJ", cnpj),
-                                new XElement(NfeNs + "distNSU",
-                                    new XElement(NfeNs + "ultNSU", lastNsu.ToString("D15", CultureInfo.InvariantCulture)))))))));
+        var data = new XElement(NfeNs + "distDFeInt",
+            new XAttribute("versao", "1.01"),
+            new XElement(NfeNs + "tpAmb", environment));
+        // XSD distDFeInt_v1.01: cUFAutor é opcional (minOccurs=0),
+        // porém, quando enviado, DEVE ser UF IBGE; 91 é inválido.
+        if (authorizerUf is int uf)
+            data.Add(new XElement(NfeNs + "cUFAutor", uf));
+        data.Add(new XElement(NfeNs + "CNPJ", cnpj));
+        data.Add(new XElement(NfeNs + "distNSU",
+            new XElement(NfeNs + "ultNSU", lastNsu.ToString("D15", CultureInfo.InvariantCulture))));
+
+        var request = new XDocument(new XElement(SoapNs + "Envelope",
+            new XElement(SoapNs + "Body",
+                new XElement(WsNs + "nfeDistDFeInteresse",
+                    new XElement(WsNs + "nfeDadosMsg", data)))));
         return request.ToString(SaveOptions.DisableFormatting);
     }
 
@@ -69,7 +82,12 @@ public sealed class NfeDistributionClient
             DateTimeOffset.UtcNow < certificate.NotBefore.ToUniversalTime())
             throw new InvalidOperationException("A1 fora da validade.");
 
-        var xml = BuildRequest(cnpj, lastNsu, environment);
+        // Derivar a UF do endereço do titular no certificado, não usar o 91
+        // (código de órgão da RFB, fora do tipo TCodUfIBGE).
+        var state = A1CompanyCertificate.GetSubjectState(certificate);
+        int? authorizerUf = state is not null && StateCodes.TryGetValue(state, out var ibge)
+            ? ibge : null;
+        var xml = BuildRequest(cnpj, lastNsu, environment, authorizerUf);
         using var handler = new HttpClientHandler
         {
             ClientCertificateOptions = ClientCertificateOption.Manual,

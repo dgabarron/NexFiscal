@@ -65,6 +65,23 @@ public sealed class HanaSetup(IDataProtectionProvider provider, IWebHostEnvironm
 
     public async Task<HanaSetupResult> TestAsync(HanaSetupRequest request, CancellationToken ct)
     {
+        Validate(request);
+
+        // Não logar ou devolver exceções de conexão contendo credenciais.
+        await using var connection = new HanaConnection(Build(request));
+        await connection.OpenAsync(ct);
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT COUNT(*) FROM SYS.TABLES WHERE SCHEMA_NAME='BRAI_NEX' AND TABLE_NAME IN (" +
+            string.Join(",", RequiredTables.Select(t => "'" + t + "'")) + ")";
+        var count = Convert.ToInt32(await command.ExecuteScalarAsync(ct));
+        return new HanaSetupResult(true, count == RequiredTables.Length, count,
+            count == RequiredTables.Length
+                ? "Conexão estabelecida e schema BRAI_NEX validado."
+                : "Conexão estabelecida, mas faltam tabelas no schema BRAI_NEX.");
+    }
+
+    private static void Validate(HanaSetupRequest request)
+    {
         if (string.IsNullOrWhiteSpace(request.Server) || request.Server.Length > 255 ||
             request.Server.Any(c => !(char.IsAsciiLetterOrDigit(c) || c is '.' or '-' or '_')) ||
             request.Port is < 1 or > 65535 ||
@@ -72,17 +89,16 @@ public sealed class HanaSetup(IDataProtectionProvider provider, IWebHostEnvironm
             string.IsNullOrWhiteSpace(request.Password) || request.Password.Length > 1024)
             throw new ArgumentException("Informe endereço, porta, usuário e senha válidos.");
 
-        // Não logar ou devolver exceções de conexão contendo credenciais.
+    }
+
+    public async Task<HanaSetupResult> ProvisionAsync(HanaSetupRequest request, CancellationToken ct)
+    {
+        // O comando é acionado explicitamente durante a instalação, após
+        // o teste da conexão. Nunca migrar automaticamente na inicialização.
+        Validate(request);
         await using var connection = new HanaConnection(Build(request));
         await connection.OpenAsync(ct);
-        await using var command = connection.CreateCommand();
-        command.CommandText = "SELECT COUNT(*) FROM SYS.TABLES WHERE SCHEMA_NAME='BRAI_NEX' AND TABLE_NAME IN (" +
-            string.Join(",", RequiredTables.Select((_, i) => "'"+RequiredTables[i]+"'")) + ")";
-        var count = Convert.ToInt32(await command.ExecuteScalarAsync(ct));
-        return new HanaSetupResult(true, count == RequiredTables.Length, count,
-            count == RequiredTables.Length
-                ? "Conexão estabelecida e schema BRAI_NEX validado."
-                : "Conexão estabelecida, mas faltam tabelas no schema BRAI_NEX.");
+        return await new HanaSchemaInstaller().InstallAsync(connection, ct);
     }
 
     public async Task<HanaSetupResult> SaveAsync(HanaSetupRequest request, CancellationToken ct)

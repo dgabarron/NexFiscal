@@ -52,3 +52,10 @@ A próxima implementação deve identificar checkpoint anterior de fonte confiá
 - Pastas `.nexfiscal-certificates` e `.nexfiscal-keys` e arquivo `.nexfiscal-hana.dat` são **críticos**: não remover na atualização da aplicação, aplicar ACLs restritas ao usuário de serviço e manter backup seguro de todo o conjunto. Sem a chave DPAPI do mesmo perfil Windows, os dados cifrados **não são necessariamente recuperáveis em outro host/usuário**. Para migração de servidor, será necessário um procedimento próprio de reimportação A1 e configuração HANA; o backup sozinho não garante recuperação.
 - **Ainda não habilitar captura real automaticamente**: faltam cliente SOAP SEFAZ, verificação cadeia/revogação do certificado, renovação de A1, recuperação de falhas e isolamento de usuários na aplicação em rede.
 - O processo atual é somente local `127.0.0.1`, sem autenticação multiusuário. Não expor as rotas de setup a outros computadores.
+
+## Motor de comunicação NF-e — implementação inicial
+
+- `src/NexFiscal.Capture/NfeDistributionClient.cs` contém transporte SOAP 1.2 mTLS para o endpoint oficial do AN, montagem do `distNSU` e leitura de `retDistDFeInt` (137/138/656), com `docZip` descompactado e SHA-256.
+- O cliente **não é invocado por nenhum endpoint nem agendamento**. Não liga a captura automaticamente, não define NSU inicial nem grava XML/NSU no HANA. Somente ativar depois de: validar cadeia/revogação ICP-Brasil, implementar persistência de lote + checkpoint de modo atômico, garantir lease por CNPJ e impedir dois consumidores de NSU.
+- O serviço existente de captura de outros fornecedores pode compartilhar o mesmo CNPJ. Não disparar solicitações reais de produção até planejar migração/coexistência.
+- Testes `NfeDistributionClientTests` cobrem a montagem SOAP, parsing de retornos 137, 138, 656 e a descompactação de XML; sem consulta SEFAZ em CI.

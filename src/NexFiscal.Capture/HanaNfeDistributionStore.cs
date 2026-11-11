@@ -92,6 +92,18 @@ public sealed class HanaNfeDistributionStore(DbProviderFactory factory, string c
                 lastNsu, cooldown, companyId, requestedNsu);
             if (await update.ExecuteNonQueryAsync(cancellationToken) != 1)
                 throw new DBConcurrencyException("Checkpoint mudou durante a gravação.");
+            await using (var log = Command(connection, tx,
+                "INSERT INTO " + Prefix + "\"BRAI_NEX_CaptureLog\" " +
+                "(\"AttemptId\",\"CompanyId\",\"DocumentType\",\"RequestedNsu\",\"Status\",\"Result\",\"Message\",\"StartedAtUtc\",\"FinishedAtUtc\") " +
+                "VALUES (?,?,'NFE',?,?,?,?,CURRENT_UTCTIMESTAMP,CURRENT_UTCTIMESTAMP)",
+                Guid.NewGuid().ToString("D"), companyId, requestedNsu, result.Status,
+                result.Status == 138 ? "DOCUMENTOS_GRAVADOS" :
+                result.Status == 137 ? "SEM_DOCUMENTOS" : "CONSUMO_INDEVIDO",
+                result.Reason.Length > 2000 ? result.Reason[..2000] : result.Reason))
+            {
+                if (await log.ExecuteNonQueryAsync(cancellationToken) != 1)
+                    throw new DataException("Falha ao registrar tentativa de captura.");
+            }
             await tx.CommitAsync(cancellationToken);
             return added;
         }

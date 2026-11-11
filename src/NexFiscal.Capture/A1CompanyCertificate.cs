@@ -19,11 +19,6 @@ public static class A1CompanyCertificate
     private const string CnpjOid = "2.16.76.1.3.3";
     private const string LegalNameOid = "2.16.76.1.3.8";
     private const string SubjectAlternativeNameOid = "2.5.29.17";
-    private static readonly HashSet<string> ValidStates = new(StringComparer.Ordinal)
-    {
-        "AC","AL","AP","AM","BA","CE","DF","ES","GO","MA","MT","MS",
-        "MG","PA","PB","PR","PE","PI","RJ","RN","RS","RO","RR","SC","SP","SE","TO"
-    };
 
     public static A1CompanyIdentity Inspect(byte[] pkcs12, string password, DateTimeOffset? at = null)
     {
@@ -32,9 +27,7 @@ public static class A1CompanyCertificate
         if (pkcs12.Length is 0 or > 5_000_000)
             throw new InvalidDataException("Arquivo A1 vazio ou acima de 5 MB.");
 
-        using var cert = X509CertificateLoader.LoadPkcs12(
-            pkcs12, password, X509KeyStorageFlags.EphemeralKeySet,
-            new Pkcs12LoaderLimits());
+        using var cert = new X509Certificate2(pkcs12, password, X509KeyStorageFlags.EphemeralKeySet);
 
         if (!cert.HasPrivateKey)
             throw new InvalidDataException("O certificado não contém chave privada.");

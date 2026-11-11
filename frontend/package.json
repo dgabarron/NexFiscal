@@ -24,7 +24,7 @@
   },
   "overrides": {
     "@babel/parser": "7.29.13",
-    "@babel/types": "7.29.13",
+    "@babel/types": "7.29.11",
     "@babel/core": "7.29.13"
   }
 }

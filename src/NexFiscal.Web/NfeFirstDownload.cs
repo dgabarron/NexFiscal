@@ -67,9 +67,41 @@ public sealed class NfeFirstDownload(HanaSetup hana, CompanyCertificateVault vau
                 // Fluxo principal: um XML por arquivo na pasta X.
                 // O ZIP de recuperação foi criado antes para não perder os
                 // documentos caso a gravação da pasta selecionada falhe.
-                var individual = result.Status == 138
-                    ? await individualStore.SaveAsync(validatedDestination, result, ct)
-                    : new NfeIndividualSaveResult(validatedDestination, 0, 0, []);
+                NfeIndividualSaveResult individual;
+                try
+                {
+                    individual = result.Status == 138
+                        ? await individualStore.SaveAsync(validatedDestination, result, ct)
+                        : new NfeIndividualSaveResult(validatedDestination, 0, 0, []);
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    // Não avança o checkpoint: somente o ZIP de recuperação
+                    // contém a resposta fiscal completa. Não repetir a SEFAZ
+                    // até reconciliar os arquivos e a reserva de consulta.
+                    return new
+                    {
+                        status = result.Status,
+                        reason = result.Reason,
+                        downloaded = result.Documents.Count,
+                        filesSaved = 0,
+                        filesAlreadyPresent = 0,
+                        saveSucceeded = false,
+                        fileSaveError = "Falha ao salvar XML individual na pasta indicada. " +
+                            "O ZIP de recuperação foi preservado. Verifique permissões, " +
+                            "arquivos existentes e espaço em disco antes de outra consulta.",
+                        destinationDirectory = validatedDestination,
+                        filenames = Array.Empty<string>(),
+                        archiveUrl = archiveId is null ? null :
+                            "/api/capture/archive/" + guid.ToString("D") + "/" + archiveId,
+                        schemas,
+                        hanaSaved = false,
+                        persistenceWarning = "Checkpoint não avançou. É necessário reconciliar os documentos antes de consultar novamente.",
+                        lastNsu = nsu,
+                        maxNsu = result.MaxNsu,
+                        nextAllowedUtc = DateTime.UtcNow.AddHours(1)
+                    };
+                }
 
                 var hanaSaved = false;
                 string? persistenceWarning = null;
@@ -95,6 +127,8 @@ public sealed class NfeFirstDownload(HanaSetup hana, CompanyCertificateVault vau
                     reason = result.Reason,
                     downloaded = result.Documents.Count,
                     filesSaved = individual.Created,
+                    saveSucceeded = true,
+                    fileSaveError = (string?)null,
                     filesAlreadyPresent = individual.AlreadyPresent,
                     destinationDirectory = validatedDestination,
                     filenames = individual.Filenames,

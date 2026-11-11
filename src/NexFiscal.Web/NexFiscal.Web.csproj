@@ -14,7 +14,10 @@
   <!-- F5 no Visual Studio prepara o frontend antes de compilar o ASP.NET. -->
   <PropertyGroup>
     <NexFiscalFrontendDir>$(MSBuildProjectDirectory)/../../frontend/</NexFiscalFrontendDir>
-    <NexFiscalNpm Condition="'$(OS)' == 'Windows_NT'">npm.cmd</NexFiscalNpm>
+    <!-- O Visual Studio pode ter sido aberto antes de instalar o Node.js,
+         portanto não depender apenas do PATH herdado pelo processo. -->
+    <NexFiscalNpm Condition="'$(OS)' == 'Windows_NT' and Exists('$(ProgramFiles)\nodejs\npm.cmd')">&quot;$(ProgramFiles)\nodejs\npm.cmd&quot;</NexFiscalNpm>
+    <NexFiscalNpm Condition="'$(OS)' == 'Windows_NT' and '$(NexFiscalNpm)' == ''">npm.cmd</NexFiscalNpm>
     <NexFiscalNpm Condition="'$(OS)' != 'Windows_NT'">npm</NexFiscalNpm>
   </PropertyGroup>
   <Target Name="NexFiscalInstallFrontendDependencies"

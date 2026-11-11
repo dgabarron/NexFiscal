@@ -59,3 +59,7 @@ A próxima implementação deve identificar checkpoint anterior de fonte confiá
 - O cliente **não é invocado por nenhum endpoint nem agendamento**. Não liga a captura automaticamente, não define NSU inicial nem grava XML/NSU no HANA. Somente ativar depois de: validar cadeia/revogação ICP-Brasil, implementar persistência de lote + checkpoint de modo atômico, garantir lease por CNPJ e impedir dois consumidores de NSU.
 - O serviço existente de captura de outros fornecedores pode compartilhar o mesmo CNPJ. Não disparar solicitações reais de produção até planejar migração/coexistência.
 - Testes `NfeDistributionClientTests` cobrem a montagem SOAP, parsing de retornos 137, 138, 656 e a descompactação de XML; sem consulta SEFAZ em CI.
+
+### Persistência do primeiro lote no HANA
+
+A classe `HanaNfeDistributionStore` recebe a resposta já validada e executa uma única transação: bloqueia `BRAI_NEX_CaptureCursor` com `FOR UPDATE`, compara o checkpoint com o NSU solicitado, grava os XMLs em `BRAI_NEX_Envelope` por NSU e SHA-256, e só então atualiza `LastNsu`. Uma falha provoca rollback. Status 137/656 nunca avançam o NSU; aplicam cooldown. Na falta de cursor preexistente, a gravação é recusada. **Ainda não há job, endpoint ou execução real habilitada.**

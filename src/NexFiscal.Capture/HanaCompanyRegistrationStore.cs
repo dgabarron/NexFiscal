@@ -13,7 +13,7 @@ public sealed class HanaCompanyRegistrationStore(DbProviderFactory factory, stri
     private const string S = "\"BRAI_NEX\".";
 
     public async Task<CompanyRegistration> RegisterPausedAsync(
-        A1CompanyIdentity identity, int environment, CancellationToken ct
+        A1CompanyIdentity identity, int environment, CancellationToken ct)
     {
         if (identity.Cnpj.Length != 14 || environment != 1)
             throw new ArgumentException("Dados de cadastro inválidos.");

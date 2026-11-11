@@ -45,7 +45,9 @@ public sealed class NfeFirstDownload(HanaSetup hana, CompanyCertificateVault vau
                 var result = await new NfeDistributionClient().QueryAsync(cert, cnpj, nsu, 1, ct);
                 if (result.Status is not (137 or 138 or 656))
                     throw new InvalidOperationException(
-                        "A SEFAZ retornou cStat " + result.Status + ". Nenhum XML foi gravado e nova consulta exige aguardar.");
+                        "SEFAZ cStat " + result.Status + " — " +
+                        (result.Reason.Length > 220 ? result.Reason[..220] : result.Reason) +
+                        ". Nenhum XML foi gravado. Aguarde o intervalo de segurança antes de uma nova consulta.");
                 var documents = await new HanaNfeDistributionStore(HanaSetup.Factory,
                         hana.ConnectionString ?? throw new InvalidOperationException("HANA não configurado."))
                     .SaveBatchAsync(guid.ToString("D"), nsu, result, ct);

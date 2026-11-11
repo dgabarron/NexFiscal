@@ -90,3 +90,12 @@ Em 11/11/2026, a comunicação HTTPS com A1 retornou `HttpRequestException → I
 - O endpoint local `POST /api/capture/prepare-handoff` cria uma única vez `BRAI_NEX_CaptureCursor` e grava `HANDOFF_PREPARED` na tabela `BRAI_NEX_CaptureLog` na mesma transação. Se já existe checkpoint, recusa sobrescrever. Se a empresa não está pausada ou o CNPJ não confere, recusa.
 - O cadastro continua com `Enabled=0`, as flags de consulta real permanecem desligadas e **não há requisição à SEFAZ**. A confirmação feita no formulário é uma declaração, não uma verificação automática da parada do fornecedor.
 - Uma autorização operacional futura ainda deve verificar a posse exclusiva do consumidor, a autenticidade do checkpoint e o intervalo desde a última consulta antes da primeira tentativa `distNSU`.
+
+### Primeiro download manual de NF-e (11/11/2026)
+
+- Com o consumidor anterior **desligado**, a Central de operação agora oferece **Baixar NF-e agora**. O navegador solicita confirmação explícita antes de enviar a requisição real; o usuário não informa NSU.
+- `POST /api/capture/download` executa **uma chamada SOAP distNSU** por clique. Se não houver checkpoint para a empresa, grava `LastNsu=0` automaticamente; caso contrário, retoma o último NSU persistido. A operação só roda no portal local (loopback) com A1 válido.
+- Para impedir consulta repetida após erro ou timeout, antes da chamada reserva `NextAllowedAtUtc=agora+1h` e registra uma tentativa em `BRAI_NEX_CaptureLog`. Se ocorrer falha de rede, **não tente novamente imediatamente**: aguarde o intervalo.
+- Em `138`, grava os XMLs em `BRAI_NEX_Envelope` e avança o NSU na mesma transação; em `137`/ `656`, respeita o intervalo de 1h. O status é mostrado ao operador. A aplicação não solicita captura automática nem recupera o histórico completo além do que a SEFAZ disponibilizar pelo serviço.
+- Esta liberação pressupõe que o sistema anterior foi desligado. Confirme novamente antes do clique. Não use se outro consumidor ainda estiver ativo para o mesmo CNPJ.
+- Não existe interface de exportação ZIP dos documentos ainda: **download** aqui significa buscar XMLs da SEFAZ e armazenar no HANA.

@@ -159,6 +159,19 @@ app.MapGet("/api/capture/status", async (NfeCaptureCoordinator coordinator, Canc
     }
 });
 
+// Diagnóstico HTTPS sem distNSU: permitido mesmo antes do handoff.
+app.MapPost("/api/capture/test-connectivity", async (CaptureTestRequest request, NfeCaptureCoordinator coordinator, CancellationToken ct) =>
+{
+    try { return Results.Ok(await coordinator.TestConnectivityAsync(request.CompanyId, ct)); }
+    catch (ArgumentException) { return Results.BadRequest(new { error = "Empresa inválida." }); }
+    catch (InvalidOperationException ex) { return Results.Conflict(new { error = ex.Message }); }
+    catch (Exception ex)
+    {
+        app.Logger.LogError("Teste HTTPS SEFAZ falhou: {Type}", ex.GetType().Name);
+        return Results.Problem("Não foi possível concluir o teste HTTPS com a SEFAZ. Verifique firewall, TLS e certificado A1.", statusCode: 503);
+    }
+});
+
 // Consulta unitária somente para empresa explicitamente autorizada e com
 // checkpoint válido. A rotina nunca cria nem importa NSU automaticamente.
 app.MapPost("/api/capture/test-once", async (CaptureTestRequest request, NfeCaptureCoordinator coordinator, CancellationToken ct) =>

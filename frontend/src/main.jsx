@@ -32,6 +32,7 @@ function App(){
  const [busy,setBusy]=useState(false),[error,setError]=useState(""),[message,setMessage]=useState("");
  const [captureState,setCaptureState]=useState(null),[captureBusy,setCaptureBusy]=useState(false);
  const [captureResult,setCaptureResult]=useState(null);
+ const [destinationDirs,setDestinationDirs]=useState({});
  const [connectivity,setConnectivity]=useState({});
  const [clockNow,setClockNow]=useState(Date.now());
  useEffect(()=>{
@@ -120,14 +121,16 @@ function App(){
   const cooldown=pendingWindow(company);
   if(cooldown){setError("");setMessage(`Consulta temporariamente indisponível. Próxima tentativa após ${cooldown.time} (aproximadamente ${cooldown.minutes} min).`);return;}
   const companyId=company.companyId;
+  const destinationDirectory=(destinationDirs[companyId]||"").trim();
+  if(!destinationDirectory){setError("Informe a pasta X de destino dos XMLs no servidor NexFiscal.");return;}
   if(!window.confirm("O sistema anterior de captura NF-e está desligado para este CNPJ? Esta ação enviará uma consulta REAL à SEFAZ. Se não existir checkpoint, o NexFiscal iniciará pelo NSU zero. Confirma?"))return;
   setCaptureBusy(true);setError("");setMessage("");setCaptureResult(null);
   try{
-    const result=await invoke("/api/capture/download",{companyId,previousConsumerStopped:true});
+    const result=await invoke("/api/capture/download",{companyId,previousConsumerStopped:true,destinationDirectory});
     setCaptureResult(result);
     if(result.status===656)setError("SEFAZ 656 — consumo indevido. Aguarde pelo menos 1 hora antes de nova tentativa. "+result.reason);
     else if(result.status===137)setMessage("");
-    else setMessage(`SEFAZ 138 — ${result.downloaded} XML(s) recebidos. ${result.archiveUrl?"ZIP disponível para baixar.":"Sem ZIP retornado."}`);
+    else setMessage(`SEFAZ 138 — ${result.filesSaved} arquivo(s) XML gravado(s) individualmente em ${result.destinationDirectory}; ${result.filesAlreadyPresent} já existente(s).`);
     await refreshCapture();
   }catch(e){setError(e.message);await refreshCapture();}
   finally{setCaptureBusy(false);}
@@ -188,7 +191,7 @@ function App(){
       </CardContent></Card><div className="space-y-5"><Card><CardHeader><h2 className="font-bold">Infraestrutura conectada</h2></CardHeader><CardContent><div className="flex items-center gap-2 text-sm"><CheckCircle2 size={18} className="text-emerald-500"/>Banco SAP HANA configurado</div><div className="mt-4 flex items-center gap-2 text-sm text-slate-500"><ShieldCheck size={18}/>Controle interno de NSU</div><p className="mt-3 text-xs text-slate-500 leading-5">O NSU não é solicitado ao usuário. A captura começa somente após uma inicialização fiscal segura.</p></CardContent></Card></div></div>}
      {stage===2&&<div className="space-y-5">
        <div className="flex flex-wrap items-center justify-between gap-4">
-         <div><h2 className="text-lg font-bold">Captura de NF-e</h2><p className="mt-1 text-sm text-slate-500">Consulte a SEFAZ e baixe os XMLs recebidos em um arquivo ZIP.</p></div>
+         <div><h2 className="text-lg font-bold">Captura de NF-e</h2><p className="mt-1 text-sm text-slate-500">Consulte a SEFAZ e salve cada XML individualmente na pasta escolhida.</p></div>
          <Button variant="outline" disabled={captureBusy} onClick={refreshCapture}><RefreshCw size={17}/>Atualizar dados</Button>
        </div>
        {!captureState&&<Notice>Não foi possível carregar os dados da operação. Clique em Atualizar dados.</Notice>}
@@ -226,6 +229,12 @@ function App(){
                <div className="font-semibold">{connected.reachable?"Conexão HTTPS com a SEFAZ confirmada":connected.message}</div>
                {!connected.reachable&&<div className="mt-1 text-xs">Etapa: {connected.stage||"não identificada"} · Código: {connected.code||"indisponível"}{connected.causes?.length>0?` · ${connected.causes.join(" → ")}`:""}</div>}
              </Notice></div>}
+             <div className="mt-5">
+               <Label>Pasta de destino dos XMLs (no computador/servidor NexFiscal)</Label>
+               <Input placeholder="Ex.: C:\\NexFiscal\\XML" value={destinationDirs[company.companyId]||""}
+                 onChange={e=>setDestinationDirs(prev=>({...prev,[company.companyId]:e.target.value}))}/>
+               <p className="mt-1 text-xs text-slate-500">A pasta precisa existir e permitir gravação pelo NexFiscal. Cada documento será salvo separadamente como 000000000000001.xml, conforme seu NSU.</p>
+             </div>
              <div className="mt-5 flex flex-wrap gap-3">
                <Button disabled={!company.certificateStored||captureBusy} onClick={()=>downloadNfe(company)}>
                  {captureBusy?<RefreshCw size={17}/>:<CloudUpload size={17}/>}
@@ -237,8 +246,8 @@ function App(){
          </Card>;
        })}
        {captureResult&&<Notice type={captureResult.status===656?"error":captureResult.status===137?"warning":"success"}>
-         SEFAZ {captureResult.status}: {captureResult.reason} · XMLs recebidos: {captureResult.downloaded}
-         {captureResult.archiveUrl&&<div className="mt-3"><a href={captureResult.archiveUrl} className="inline-flex items-center gap-2 rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-800"><CloudUpload size={17}/>Baixar arquivos XML (.zip)</a></div>}
+         SEFAZ {captureResult.status}: {captureResult.reason} · XMLs recebidos: {captureResult.downloaded} · Arquivos novos: {captureResult.filesSaved??0}
+         {captureResult.archiveUrl&&<div className="mt-3"><a href={captureResult.archiveUrl} className="inline-flex items-center gap-2 rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-800"><CloudUpload size={17}/>Baixar cópia de segurança (.zip)</a></div>}
          {captureResult.persistenceWarning&&<div className="mt-3 text-sm text-amber-800">{captureResult.persistenceWarning}</div>}
        </Notice>}
      </div>}

@@ -2,6 +2,7 @@ using System.Globalization;
 using System.IO.Compression;
 using System.Net;
 using System.Net.Http.Headers;
+using System.Security.Authentication;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
@@ -73,6 +74,7 @@ public sealed class NfeDistributionClient
         {
             ClientCertificateOptions = ClientCertificateOption.Manual,
             CheckCertificateRevocationList = true,
+            SslProtocols = SslProtocols.Tls12,
             AutomaticDecompression = DecompressionMethods.None
         };
         handler.ClientCertificates.Add(certificate);

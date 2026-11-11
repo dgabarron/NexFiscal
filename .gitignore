@@ -1,0 +1,16 @@
+**/bin/
+**/obj/
+**/.vs/
+**/node_modules/
+*.pfx
+*.p12
+*.pem
+*.key
+*.db
+*.sqlite
+*.sqlite3
+*.log
+.env
+.env.*
+!/.env.example
+secrets/

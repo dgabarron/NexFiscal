@@ -117,8 +117,8 @@ function App(){
   }catch(e){setError(e.message);}finally{setCaptureBusy(false);}
  }
  async function downloadNfe(company){
-  const window=pendingWindow(company);
-  if(window){setError("");setMessage(`Consulta temporariamente indisponível. Próxima tentativa após ${window.time} (aproximadamente ${window.minutes} min).`);return;}
+  const cooldown=pendingWindow(company);
+  if(cooldown){setError("");setMessage(`Consulta temporariamente indisponível. Próxima tentativa após ${cooldown.time} (aproximadamente ${cooldown.minutes} min).`);return;}
   const companyId=company.companyId;
   if(!window.confirm("O sistema anterior de captura NF-e está desligado para este CNPJ? Esta ação enviará uma consulta REAL à SEFAZ. Se não existir checkpoint, o NexFiscal iniciará pelo NSU zero. Confirma?"))return;
   setCaptureBusy(true);setError("");setMessage("");setCaptureResult(null);
@@ -127,7 +127,7 @@ function App(){
     setCaptureResult(result);
     if(result.status===656)setError("SEFAZ 656 — consumo indevido. Aguarde pelo menos 1 hora antes de nova tentativa. "+result.reason);
     else if(result.status===137)setMessage("");
-    else setMessage(`SEFAZ 138 — ${result.downloaded} XML(s) gravado(s) no HANA. Último NSU: ${String(result.lastNsu).padStart(15,"0")}.`);
+    else setMessage(`SEFAZ 138 — ${result.downloaded} XML(s) recebidos. ${result.archiveUrl?"ZIP disponível para baixar.":"Sem ZIP retornado."}`);
     await refreshCapture();
   }catch(e){setError(e.message);await refreshCapture();}
   finally{setCaptureBusy(false);}
@@ -188,7 +188,7 @@ function App(){
       </CardContent></Card><div className="space-y-5"><Card><CardHeader><h2 className="font-bold">Infraestrutura conectada</h2></CardHeader><CardContent><div className="flex items-center gap-2 text-sm"><CheckCircle2 size={18} className="text-emerald-500"/>Banco SAP HANA configurado</div><div className="mt-4 flex items-center gap-2 text-sm text-slate-500"><ShieldCheck size={18}/>Controle interno de NSU</div><p className="mt-3 text-xs text-slate-500 leading-5">O NSU não é solicitado ao usuário. A captura começa somente após uma inicialização fiscal segura.</p></CardContent></Card></div></div>}
      {stage===2&&<div className="space-y-5">
        <div className="flex flex-wrap items-center justify-between gap-4">
-         <div><h2 className="text-lg font-bold">Captura de NF-e</h2><p className="mt-1 text-sm text-slate-500">Consulte a SEFAZ e acompanhe os XMLs recebidos no SAP HANA.</p></div>
+         <div><h2 className="text-lg font-bold">Captura de NF-e</h2><p className="mt-1 text-sm text-slate-500">Consulte a SEFAZ e baixe os XMLs recebidos em um arquivo ZIP.</p></div>
          <Button variant="outline" disabled={captureBusy} onClick={refreshCapture}><RefreshCw size={17}/>Atualizar dados</Button>
        </div>
        {!captureState&&<Notice>Não foi possível carregar os dados da operação. Clique em Atualizar dados.</Notice>}
@@ -237,7 +237,9 @@ function App(){
          </Card>;
        })}
        {captureResult&&<Notice type={captureResult.status===656?"error":captureResult.status===137?"warning":"success"}>
-         SEFAZ {captureResult.status}: {captureResult.reason} · XMLs novos: {captureResult.downloaded}
+         SEFAZ {captureResult.status}: {captureResult.reason} · XMLs recebidos: {captureResult.downloaded}
+         {captureResult.archiveUrl&&<div className="mt-3"><a href={captureResult.archiveUrl} className="inline-flex items-center gap-2 rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-800"><CloudUpload size={17}/>Baixar arquivos XML (.zip)</a></div>}
+         {captureResult.persistenceWarning&&<div className="mt-3 text-sm text-amber-800">{captureResult.persistenceWarning}</div>}
        </Notice>}
      </div>}
      <div className="mt-10 text-xs text-slate-400">NexFiscal · Microsoft .NET 8 + React + Tailwind CSS · Configuração local</div>

@@ -101,14 +101,18 @@ function App(){
     setConnectivity(x=>({...x,[companyId]:result}));
   }catch(e){setError(e.message);}finally{setCaptureBusy(false);}
  }
- async function testCapture(companyId){
+ async function downloadNfe(companyId){
+  if(!window.confirm("O sistema anterior de captura NF-e está desligado para este CNPJ? Esta ação enviará uma consulta REAL à SEFAZ. Se não existir checkpoint, o NexFiscal iniciará pelo NSU zero. Confirma?"))return;
   setCaptureBusy(true);setError("");setMessage("");setCaptureResult(null);
   try{
-    const result=await invoke("/api/capture/test-once",{companyId});
+    const result=await invoke("/api/capture/download",{companyId,previousConsumerStopped:true});
     setCaptureResult(result);
-    if(result.status===656)setError(`SEFAZ ${result.status}: ${result.reason}. Consumo indevido; consulta bloqueada temporariamente.`);else setMessage(`Consulta finalizada: SEFAZ ${result.status}. ${result.documentsStored} documento(s) gravado(s).`);
+    if(result.status===656)setError("SEFAZ 656 — consumo indevido. Aguarde pelo menos 1 hora antes de nova tentativa. "+result.reason);
+    else if(result.status===137)setMessage("SEFAZ 137 — nenhum documento disponível agora. A próxima consulta só será permitida após 1 hora.");
+    else setMessage(`SEFAZ 138 — ${result.downloaded} XML(s) gravado(s) no HANA. Último NSU: ${String(result.lastNsu).padStart(15,"0")}.`);
     await refreshCapture();
-  }catch(e){setError(e.message);}finally{setCaptureBusy(false);}
+  }catch(e){setError(e.message);await refreshCapture();}
+  finally{setCaptureBusy(false);}
  }
  const current=steps[stage];
  return <div className="min-h-screen bg-[#f5f7fb] text-[#13223d]">
@@ -190,16 +194,16 @@ function App(){
            {connectivity[company.companyId]&&<div className="mt-5"><Notice type={connectivity[company.companyId].reachable?"success":"error"}>{connectivity[company.companyId].message}<div className="mt-1 text-xs font-medium">Etapa: {connectivity[company.companyId].stage || "desconhecida"} · Código: {connectivity[company.companyId].code || "indisponível"}{connectivity[company.companyId].httpStatus ? ` · HTTP ${connectivity[company.companyId].httpStatus}` : ""}{connectivity[company.companyId].hresult ? ` · ${connectivity[company.companyId].hresult}` : ""}</div>{connectivity[company.companyId].chainErrors?.length > 0 && <div className="mt-1 text-xs">Cadeia ICP-Brasil: {connectivity[company.companyId].chainErrors.join(", ")}</div>}{connectivity[company.companyId].causes?.length > 0 && <div className="mt-1 text-xs">Causas técnicas: {connectivity[company.companyId].causes.join(" → ")} · Protocolo: {connectivity[company.companyId].tlsPolicy || "padrão do sistema"}</div>}</Notice></div>}
            <div className="mt-5 flex flex-wrap items-center gap-3">
              <Button variant="outline" disabled={!company.certificateStored||captureBusy} onClick={()=>testConnectivity(company.companyId)}><PlugZap size={17}/>Testar conexão SEFAZ</Button>
-             <Button disabled={!company.ready||captureBusy} onClick={()=>testCapture(company.companyId)}>
-               {captureBusy?<RefreshCw size={17}/>:<PlugZap size={17}/>}
-               {captureBusy?"Consultando...":"Testar consulta real"}
+             <Button disabled={!company.certificateStored||captureBusy||(company.nextAllowedUtc&&new Date(company.nextAllowedUtc)>new Date())} onClick={()=>downloadNfe(company.companyId)}>
+               {captureBusy?<RefreshCw size={17}/>:<CloudUpload size={17}/>}
+               {captureBusy?"Consultando SEFAZ...":"Baixar NF-e agora"}
              </Button>
-             <span className="text-xs text-slate-500">Consulta única, sem agendamento automático</span>
+             <span className="text-xs text-slate-500">Consulta manual controlada, sem agendamento automático</span>
            </div>
          </CardContent>
        </Card>)}
-       {captureResult&&<Notice type={captureResult.status===656?"error":captureResult.status===137?"warning":"success"}>SEFAZ: {captureResult.status} · {captureResult.reason} · XMLs novos: {captureResult.documentsStored}</Notice>}
-       <Notice>O NexFiscal não inicia consultas sem checkpoint autorizado e confirmação de exclusividade do consumidor. Isso evita interferência na captura do sistema fiscal atual e bloqueios por consumo indevido.</Notice>
+       {captureResult&&<Notice type={captureResult.status===656?"error":captureResult.status===137?"warning":"success"}>SEFAZ: {captureResult.status} · {captureResult.reason} · XMLs novos: {captureResult.downloaded}</Notice>}
+       <Notice>A primeira consulta inicializa automaticamente o NSU se não houver checkpoint. Execute somente após desligar o consumidor anterior; o sistema impede consultas repetidas durante o intervalo de segurança.</Notice>
      </div>}
      <div className="mt-10 text-xs text-slate-400">NexFiscal · Microsoft .NET 8 + React + Tailwind CSS · Configuração local</div>
     </main>

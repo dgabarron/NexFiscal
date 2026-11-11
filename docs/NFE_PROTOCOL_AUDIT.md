@@ -36,3 +36,23 @@ Executar uma consulta real ao serviço `NFeDistribuicaoDFe` e armazenar os DF-e 
 3. Aguardar a liberação registrada em `NextAllowedAtUtc`.
 4. Executar **Consultar SEFAZ e salvar XMLs** uma única vez e capturar `cStat`, `xMotivo` e contagem de envelopes.
 5. Resultado esperado: `138` com `docZip` persistido ou `137` sem documentos. Rejeições devem ser analisadas no registro do HANA antes de nova tentativa.
+
+## Foco prioritário: XML para download — revisão complementar 11/11/2026
+
+Fontes cruzadas:
+- [SEFAZ / NT 2014.002 v1.40](https://www.nfe.fazenda.gov.br/portal/listaConteudo.aspx?tipoConteudo=04BIflQt1aY%3D) e [pacote oficial de schemas de Distribuição DF-e v1.04](https://www.nfe.fazenda.gov.br/portal/listaConteudo.aspx?tipoConteudo=BMPFMBoln3w%3D).
+- [NFePHP SPED-NFe — DistDFe](https://github.com/nfephp-org/sped-nfe/blob/master/docs/metodos/DistDFe.md): exemplo SOAP 1.2, execução de distNSU, resposta por lotes, decodificação `docZip` GZip e intervalo de consulta.
+- [NFePHP SPED-NFe — Download](https://github.com/nfephp-org/sped-nfe/blob/master/docs/metodos/Download.md): retorna XML descompactado e distingue resumo de documento completo.
+
+Correções efetivas:
+- **Defeito de navegador**: `const window=pendingWindow(company)` impedia `window.confirm()`. Agora usa `cooldown` e a confirmação funciona.
+- **Entrega do arquivo independente da gravação no HANA**: ao receber um lote `cStat 138`, o servidor grava um ZIP com XMLs originais sob `.nexfiscal-downloads/<CompanyId>/<ArchiveId>.zip`, fora de `wwwroot`; o navegador recebe um link `/api/capture/archive/{companyId}/{archiveId}`. O arquivo pode ser baixado mesmo se a persistência de envelopes no HANA falhar.
+- **Arquivo ZIP**: documentos são nomeados pelo NSU, com `manifest.json` informando `schema`, NSU e hash SHA-256; nenhum campo não confiável é usado como caminho do arquivo.
+- **Testes offline**: o teste `NfeZipExporterTests` cria um lote 138, gera ZIP sem HANA e valida os bytes do XML, o nome do arquivo, os metadados e a rejeição a lotes incorretos.
+- **Confidencialidade**: pasta `.nexfiscal-downloads` ignorada pelo Git, arquivo servido somente no portal local, sem exposição pública direta.
+
+**Atenção**: `docZip` pode trazer `resNFe` (resumo), `procNFe` (documento completo) ou eventos; o download **não garante XML completo da NF-e** para o destinatário sem manifestação quando exigida. Confirmar o `schema` no `manifest.json`. O download aqui é o arquivo do documento fiscal recebido, não o PDF DANFE. A resposta `137` significa sem arquivos no lote; não gera ZIP.
+
+O HANA ainda é usado no serviço atual para identificar a empresa e reservar o NSU (intervalo de segurança), mas **a entrega do ZIP não depende do sucesso da gravação de envelopes no HANA**. Não reiniciar ou retroceder o NSU por falha de persistência; reconciliar a tentativa antes de novo clique.
+
+**Limites não afirmados como resolvidos**: não houve requisição real à SEFAZ ou validação do ZIP oficial v1.04 nesta revisão. CI valida montagem de XML, parsing e exportação ZIP offline. A autorização de distribuição do CNPJ e a disponibilidade de `procNFe` dependem da SEFAZ e da condição fiscal do documento.

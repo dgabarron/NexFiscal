@@ -16,6 +16,7 @@ builder.Services.AddSingleton<CompanyCertificateVault>();
 builder.Services.AddSingleton<NfeCaptureCoordinator>();
 builder.Services.AddSingleton<NfeFirstDownload>();
 builder.Services.AddSingleton<NfeXmlArchive>();
+builder.Services.AddSingleton<NfeIndividualXmlStore>();
 builder.Services.AddSingleton<NfeHandoffPreparation>();
 var app = builder.Build();
 var hanaSetup = app.Services.GetRequiredService<HanaSetup>();
@@ -205,8 +206,9 @@ app.MapGet("/api/capture/archive/{companyId}/{archiveId}", (
 app.MapPost("/api/capture/download", async (CaptureDownloadRequest request,
     NfeFirstDownload capture, CancellationToken ct) =>
 {
-    try { return Results.Ok(await capture.ExecuteAsync(request.CompanyId, request.PreviousConsumerStopped, ct)); }
+    try { return Results.Ok(await capture.ExecuteAsync(request.CompanyId, request.PreviousConsumerStopped, request.DestinationDirectory, ct)); }
     catch (ArgumentException ex) { return Results.BadRequest(new { error = ex.Message }); }
+    catch (DirectoryNotFoundException ex) { return Results.BadRequest(new { error = ex.Message }); }
     catch (InvalidOperationException ex) { return Results.Conflict(new { error = ex.Message }); }
     catch (Exception ex)
     {
@@ -257,4 +259,4 @@ public partial class Program { }
 
 public sealed record CaptureTestRequest(string CompanyId);
 
-public sealed record CaptureDownloadRequest(string CompanyId, bool PreviousConsumerStopped);
+public sealed record CaptureDownloadRequest(string CompanyId, bool PreviousConsumerStopped, string? DestinationDirectory);

@@ -14,10 +14,10 @@ public sealed class NfeIndividualXmlStoreTests
         Directory.CreateDirectory(folder);
         try
         {
-            var first = Encoding.UTF8.GetBytes("<resNFe>first</resNFe>");
-            var second = Encoding.UTF8.GetBytes("<procNFe>second</procNFe>");
+            var first = Encoding.UTF8.GetBytes("<nfeProc xmlns=\\"http://www.portalfiscal.inf.br/nfe\\"><NFe><infNFe Id=\\"NFe1\\"/></NFe><protNFe><infProt/></protNFe></nfeProc>");
+            var second = Encoding.UTF8.GetBytes("<nfeProc xmlns=\\"http://www.portalfiscal.inf.br/nfe\\"><NFe><infNFe Id=\\"NFe2\\"/></NFe><protNFe><infProt/></protNFe></nfeProc>");
             NfeDistributedDocument Doc(long nsu, byte[] bytes) => new(
-                nsu, "resNFe_v1.01.xsd", bytes,
+                nsu, "procNFe_v4.00.xsd", bytes,
                 Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant());
             var response = new NfeDistributionResult(138, "OK", 2, 2,
                 [Doc(1, first), Doc(2, second)]);
@@ -35,6 +35,30 @@ public sealed class NfeIndividualXmlStoreTests
             await File.WriteAllTextAsync(Path.Combine(folder, "000000000000001.xml"), "alterado");
             await Assert.ThrowsAsync<IOException>(() =>
                 store.SaveAsync(folder, response, CancellationToken.None));
+        }
+        finally { Directory.Delete(folder, recursive: true); }
+    }
+
+    [Fact]
+    public async Task OnlyProcNFe_IsSavedAndResNFeIsSkipped()
+    {
+        var folder = Path.Combine(Path.GetTempPath(), "nexfiscal-procnfe-test-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(folder);
+        try
+        {
+            var summary = Encoding.UTF8.GetBytes("<resNFe xmlns=\\\"http://www.portalfiscal.inf.br/nfe\\\"/>");
+            var complete = Encoding.UTF8.GetBytes("<nfeProc xmlns=\\\"http://www.portalfiscal.inf.br/nfe\\\"><NFe><infNFe/></NFe><protNFe><infProt/></protNFe></nfeProc>");
+            var response = new NfeDistributionResult(138, "OK", 2, 2, [
+                new NfeDistributedDocument(1, "resNFe_v1.01.xsd", summary,
+                    Convert.ToHexString(SHA256.HashData(summary)).ToLowerInvariant()),
+                new NfeDistributedDocument(2, "procNFe_v4.00.xsd", complete,
+                    Convert.ToHexString(SHA256.HashData(complete)).ToLowerInvariant())
+            ]);
+            var result = await new NfeIndividualXmlStore().SaveAsync(folder, response, CancellationToken.None);
+            Assert.Equal(1, result.Created);
+            Assert.Equal(1, result.SkippedNonProcNFe);
+            Assert.False(File.Exists(Path.Combine(folder, "000000000000001.xml")));
+            Assert.True(File.Exists(Path.Combine(folder, "000000000000002.xml")));
         }
         finally { Directory.Delete(folder, recursive: true); }
     }

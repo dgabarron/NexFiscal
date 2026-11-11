@@ -33,6 +33,21 @@ function App(){
  const [captureState,setCaptureState]=useState(null),[captureBusy,setCaptureBusy]=useState(false);
  const [captureResult,setCaptureResult]=useState(null);
  const [connectivity,setConnectivity]=useState({});
+ const [clockNow,setClockNow]=useState(Date.now());
+ useEffect(()=>{
+  const timer=setInterval(()=>setClockNow(Date.now()),15000);
+  return ()=>clearInterval(timer);
+ },[]);
+ function pendingWindow(company){
+  const date=company.nextAllowedUtc;
+  if(!date)return null;
+  // O HANA armazena UTC. Alguns drivers serializam TIMESTAMP sem sufixo Z.
+  const canonical=/[zZ]$|[+-]\\d{2}:\\d{2}$/.test(date)?date:date+"Z";
+  const ms=Date.parse(canonical);
+  return Number.isFinite(ms)&&ms>clockNow
+    ?{time:new Date(ms).toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"}),minutes:Math.ceil((ms-clockNow)/60000)}
+    :null;
+ }
  useEffect(()=>{fetch("/api/health").then(r=>r.json()).then(async x=>{
     if(!x.hanaConfigured)return;
     setHanaReady(true);
@@ -101,7 +116,10 @@ function App(){
     setConnectivity(x=>({...x,[companyId]:result}));
   }catch(e){setError(e.message);}finally{setCaptureBusy(false);}
  }
- async function downloadNfe(companyId){
+ async function downloadNfe(company){
+  const window=pendingWindow(company);
+  if(window){setError("");setMessage(`Consulta temporariamente indisponível. Próxima tentativa após ${window.time} (aproximadamente ${window.minutes} min).`);return;}
+  const companyId=company.companyId;
   if(!window.confirm("O sistema anterior de captura NF-e está desligado para este CNPJ? Esta ação enviará uma consulta REAL à SEFAZ. Se não existir checkpoint, o NexFiscal iniciará pelo NSU zero. Confirma?"))return;
   setCaptureBusy(true);setError("");setMessage("");setCaptureResult(null);
   try{
@@ -194,11 +212,11 @@ function App(){
            {connectivity[company.companyId]&&<div className="mt-5"><Notice type={connectivity[company.companyId].reachable?"success":"error"}>{connectivity[company.companyId].message}<div className="mt-1 text-xs font-medium">Etapa: {connectivity[company.companyId].stage || "desconhecida"} · Código: {connectivity[company.companyId].code || "indisponível"}{connectivity[company.companyId].httpStatus ? ` · HTTP ${connectivity[company.companyId].httpStatus}` : ""}{connectivity[company.companyId].hresult ? ` · ${connectivity[company.companyId].hresult}` : ""}</div>{connectivity[company.companyId].chainErrors?.length > 0 && <div className="mt-1 text-xs">Cadeia ICP-Brasil: {connectivity[company.companyId].chainErrors.join(", ")}</div>}{connectivity[company.companyId].causes?.length > 0 && <div className="mt-1 text-xs">Causas técnicas: {connectivity[company.companyId].causes.join(" → ")} · Protocolo: {connectivity[company.companyId].tlsPolicy || "padrão do sistema"}</div>}</Notice></div>}
            <div className="mt-5 flex flex-wrap items-center gap-3">
              <Button variant="outline" disabled={!company.certificateStored||captureBusy} onClick={()=>testConnectivity(company.companyId)}><PlugZap size={17}/>Testar conexão SEFAZ</Button>
-             <Button disabled={!company.certificateStored||captureBusy||(company.nextAllowedUtc&&new Date(company.nextAllowedUtc)>new Date())} onClick={()=>downloadNfe(company.companyId)}>
+             <Button disabled={!company.certificateStored||captureBusy} onClick={()=>downloadNfe(company)}>
                {captureBusy?<RefreshCw size={17}/>:<CloudUpload size={17}/>}
-               {captureBusy?"Consultando SEFAZ...":"Baixar NF-e agora"}
+               {captureBusy?"Consultando SEFAZ...":pendingWindow(company)?"Ver horário da próxima consulta":"Baixar NF-e agora"}
              </Button>
-             <span className="text-xs text-slate-500">Consulta manual controlada, sem agendamento automático</span>
+             {pendingWindow(company)?<span className="text-xs font-medium text-amber-800">Próxima consulta após {pendingWindow(company).time} · {pendingWindow(company).minutes} min restantes</span>:<span className="text-xs text-slate-500">Consulta manual controlada, sem agendamento automático</span>}
            </div>
          </CardContent>
        </Card>)}

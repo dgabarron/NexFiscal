@@ -248,7 +248,7 @@ function App(){
            </CardContent>
          </Card>;
        })}
-       {captureResult&&<Notice type={captureResult.saveSucceeded===false||captureResult.status===656?"error":captureResult.status===137?"warning":"success"}>
+       {captureResult&&<Notice type={captureResult.saveSucceeded===false||captureResult.status===656?"error":captureResult.status===137||(captureResult.status===138&&(captureResult.filesSaved??0)===0&&(captureResult.filesAlreadyPresent??0)===0)?"warning":"success"}>
          SEFAZ {captureResult.status}: {captureResult.reason} · procNFe novos: {captureResult.filesSaved??0} · Outros retornos: {captureResult.skippedNonProcNFe??0}
          {captureResult.fileSaveError&&<div className="mt-2 text-sm font-semibold">{captureResult.fileSaveError}</div>}
          {captureResult.skippedNonProcNFe>0&&<div className="mt-2 text-sm">A SEFAZ retornou resumos ou eventos, que não são XMLs completos. Pode ser necessária a manifestação do destinatário para receber procNFe.</div>}

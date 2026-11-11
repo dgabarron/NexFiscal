@@ -36,6 +36,8 @@ public sealed class NfeCaptureCoordinator(
                 companyId = company.Id, cnpj = company.Cnpj,
                 legalName = company.Name, company.Enabled, certificateStored,
                 company.CursorConfigured,
+                lastNsu = company.LastNsu?.ToString("D15"),
+                maxNsu = (string?)null, // maxNSU ainda não é persistido pelo cursor HANA NF-e.
                 ready = certificateStored &&
                         (company.NextAllowedUtc is null || company.NextAllowedUtc <= DateTime.UtcNow),
                 reason,

@@ -11,21 +11,4 @@
   <ItemGroup>
     <EmbeddedResource Include="../../sql/migrations/001_BRAI_NEX_initial.sql" LogicalName="NexFiscal.Web.sql.migrations.001_BRAI_NEX_initial.sql" />
   </ItemGroup>
-  <!-- O F5 usa Node diretamente e NÃO executa npm install; npm install
-       no Windows pode tentar modificar node_modules bloqueado (EPERM). -->
-  <PropertyGroup>
-    <NexFiscalRootDir>$(MSBuildProjectDirectory)/../../</NexFiscalRootDir>
-    <NexFiscalNode Condition="'$(OS)' == 'Windows_NT' and Exists('$(ProgramFiles)\nodejs\node.exe')">&quot;$(ProgramFiles)\nodejs\node.exe&quot;</NexFiscalNode>
-    <NexFiscalNode Condition="'$(NexFiscalNode)' == ''">node</NexFiscalNode>
-  </PropertyGroup>
-  <Target Name="NexFiscalBuildFrontend"
-          BeforeTargets="BeforeBuild"
-          Condition="'$(DesignTimeBuild)' != 'true' and '$(IsCrossTargetingBuild)' != 'true'">
-    <Message Importance="high" Text="NexFiscal: compilando React (diagnóstico salvo em frontend/.nexfiscal-build.log)..." />
-    <Exec WorkingDirectory="$(NexFiscalRootDir)"
-          Command="$(NexFiscalNode) &quot;$(NexFiscalRootDir)scripts/build-frontend.mjs&quot;"
-          ConsoleToMSBuild="true"
-          StandardOutputImportance="high"
-          StandardErrorImportance="high" />
-  </Target>
 </Project>

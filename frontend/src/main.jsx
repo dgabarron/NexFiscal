@@ -36,7 +36,7 @@ function App(){
  async function invoke(path,data){
    const resp=await fetch(path,{method:"POST",headers:data instanceof FormData?undefined:{"Content-Type":"application/json"},body:data instanceof FormData?data:JSON.stringify(data)});
    const result=await resp.json().catch(()=>({}));
-   if(!resp.ok)throw new Error(result.error||result.detail||"A operação não foi concluída.");
+   if(!resp.ok)throw new Error((result.error||result.detail||"A operação não foi concluída.")+(result.diagnostico?` (Diagnóstico: ${result.diagnostico}; etapa: ${result.etapa})`:""));
    return result;
  }
  async function checkHana(save=false){

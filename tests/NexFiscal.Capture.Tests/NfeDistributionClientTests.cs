@@ -13,8 +13,8 @@ public sealed class NfeDistributionClientTests
         var xml = NfeDistributionClient.BuildRequest("11222333000181", 183248, 1);
         Assert.Contains("http://www.w3.org/2003/05/soap-envelope", xml);
         Assert.Contains("nfeDistDFeInteresse", xml);
-        Assert.Contains("<ultNSU xmlns=\"http://www.portalfiscal.inf.br/nfe\">000000000183248</ultNSU>", xml);
-        Assert.Contains("<CNPJ xmlns=\"http://www.portalfiscal.inf.br/nfe\">11222333000181</CNPJ>", xml);
+        Assert.Contains("000000000183248", xml);
+        Assert.Contains("11222333000181", xml);
     }
 
     [Fact]

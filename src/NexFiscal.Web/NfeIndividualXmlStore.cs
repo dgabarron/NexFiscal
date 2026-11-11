@@ -30,13 +30,19 @@ public sealed class NfeIndividualXmlStore
     {
         var full = ValidateDirectory(directory);
         if (response.Status != 138 || response.Documents.Count == 0)
-            return new NfeIndividualSaveResult(full, 0, 0, []);
+            return new NfeIndividualSaveResult(full, 0, 0, [], 0);
 
         var created = 0;
         var existing = 0;
+        var skipped = 0;
         var names = new List<string>();
         foreach (var document in response.Documents.OrderBy(d => d.Nsu))
         {
+            if (!NfeCompleteDocument.IsProcNFe(document))
+            {
+                skipped++;
+                continue;
+            }
             if (document.Nsu is < 1 or > 999_999_999_999_999L ||
                 document.XmlBytes.Length is < 1 or > 10_000_000)
                 throw new InvalidDataException("XML recebido inválido para gravação individual.");
@@ -79,9 +85,9 @@ public sealed class NfeIndividualXmlStore
                 if (File.Exists(temporary)) File.Delete(temporary);
             }
         }
-        return new NfeIndividualSaveResult(full, created, existing, names.ToArray());
+        return new NfeIndividualSaveResult(full, created, existing, names.ToArray(), skipped);
     }
 }
 
 public sealed record NfeIndividualSaveResult(
-    string Directory, int Created, int AlreadyPresent, string[] Filenames);
+    string Directory, int Created, int AlreadyPresent, string[] Filenames, int SkippedNonProcNFe);

@@ -42,7 +42,7 @@ function App(){
   const date=company.nextAllowedUtc;
   if(!date)return null;
   // O HANA armazena UTC. Alguns drivers serializam TIMESTAMP sem sufixo Z.
-  const canonical=/[zZ]$|[+-]\\d{2}:\\d{2}$/.test(date)?date:date+"Z";
+  const canonical=/[zZ]$|[+-]\d{2}:\d{2}$/.test(date)?date:date+"Z";
   const ms=Date.parse(canonical);
   return Number.isFinite(ms)&&ms>clockNow
     ?{time:new Date(ms).toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"}),minutes:Math.ceil((ms-clockNow)/60000)}
@@ -196,7 +196,7 @@ function App(){
        {captureState?.companies?.map(company=><Card key={company.companyId}>
          <CardHeader><div className="flex flex-wrap justify-between gap-3">
            <div><h3 className="font-bold text-lg">{company.legalName}</h3><p className="text-sm text-slate-500 mt-1">CNPJ {formatCnpj(company.cnpj)}</p></div>
-           <span className={`rounded-full px-3 py-1.5 text-xs font-semibold ${company.ready?"bg-emerald-50 text-emerald-700":"bg-amber-50 text-amber-800"}`}>{company.ready?"Apto para teste controlado":"Consulta bloqueada"}</span>
+           <span className={`rounded-full px-3 py-1.5 text-xs font-semibold ${company.certificateStored&&!pendingWindow(company)?"bg-emerald-50 text-emerald-700":"bg-amber-50 text-amber-800"}`}>{!company.certificateStored?"Certificado ausente":pendingWindow(company)?"Aguardando intervalo":"Pronto para consulta"}</span>
          </div></CardHeader>
          <CardContent>
            <div className="grid gap-4 sm:grid-cols-3">

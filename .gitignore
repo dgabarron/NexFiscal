@@ -19,3 +19,5 @@ secrets/
 **/.nexfiscal-keys/
 
 **/.nexfiscal-certificates/
+
+frontend/.nexfiscal-build.log

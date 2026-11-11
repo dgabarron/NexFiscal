@@ -50,9 +50,9 @@ public sealed class HanaSchemaInstaller
                         "VALUES (1,'initial_nfe_capture',CURRENT_UTCTIMESTAMP)", ct);
             }
 
-            var found = await CountTablesAsync(connection, ct);
-            return new HanaSetupResult(true, found == 5, found,
-                found == 5 ? "Estrutura BRAI_NEX pronta." : "Instalação incompleta. Confira as permissões e a estrutura do schema.");
+            // Após criar objetos ausentes, validar também todas as colunas.
+            // Tabelas preexistentes incompatíveis nunca são sobrescritas.
+            return await HanaSchemaVerifier.VerifyAsync(connection, ct);
         }
         finally { InstallationLock.Release(); }
     }

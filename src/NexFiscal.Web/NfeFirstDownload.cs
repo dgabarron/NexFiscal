@@ -10,16 +10,18 @@ using NexFiscal.Capture;
 /// Reserva 1h antes de acessar a SEFAZ para não repetir uma chamada ambígua.
 /// Não é um agendador e não oferece NSU editável.
 /// </summary>
-public sealed class NfeFirstDownload(HanaSetup hana, CompanyCertificateVault vault, NfeXmlArchive archive)
+public sealed class NfeFirstDownload(HanaSetup hana, CompanyCertificateVault vault, NfeXmlArchive archive, NfeIndividualXmlStore individualStore)
 {
     private static readonly SemaphoreSlim Gate = new(1, 1);
 
-    public async Task<object> ExecuteAsync(string companyId, bool previousConsumerStopped, CancellationToken ct)
+    public async Task<object> ExecuteAsync(string companyId, bool previousConsumerStopped, string? destinationDirectory, CancellationToken ct)
     {
         if (!Guid.TryParse(companyId, out var guid))
             throw new ArgumentException("Empresa inválida.");
         if (!previousConsumerStopped)
             throw new InvalidOperationException("Confirme que o sistema anterior não consulta mais a SEFAZ para este CNPJ.");
+        // Validar destino ANTES de reservar NSU ou fazer uma consulta fiscal.
+        var validatedDestination = NfeIndividualXmlStore.ValidateDirectory(destinationDirectory);
         if (!await Gate.WaitAsync(0, ct))
             throw new InvalidOperationException("Já existe uma consulta NF-e em andamento.");
         try
@@ -62,6 +64,13 @@ public sealed class NfeFirstDownload(HanaSetup hana, CompanyCertificateVault vau
                     schemas = saved.Schemas;
                 }
 
+                // Fluxo principal: um XML por arquivo na pasta X.
+                // O ZIP de recuperação foi criado antes para não perder os
+                // documentos caso a gravação da pasta selecionada falhe.
+                var individual = result.Status == 138
+                    ? await individualStore.SaveAsync(validatedDestination, result, ct)
+                    : new NfeIndividualSaveResult(validatedDestination, 0, 0, []);
+
                 var hanaSaved = false;
                 string? persistenceWarning = null;
                 try
@@ -85,6 +94,10 @@ public sealed class NfeFirstDownload(HanaSetup hana, CompanyCertificateVault vau
                     status = result.Status,
                     reason = result.Reason,
                     downloaded = result.Documents.Count,
+                    filesSaved = individual.Created,
+                    filesAlreadyPresent = individual.AlreadyPresent,
+                    destinationDirectory = validatedDestination,
+                    filenames = individual.Filenames,
                     archiveUrl = archiveId is null ? null :
                         "/api/capture/archive/" + guid.ToString("D") + "/" + archiveId,
                     schemas,

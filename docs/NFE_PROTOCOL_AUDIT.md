@@ -77,3 +77,10 @@ O HANA ainda é usado no serviço atual para identificar a empresa e reservar o 
 - Falha ao persistir envelopes no HANA: os XMLs individuais continuam preservados na pasta X; mensagem amarela alerta que o checkpoint requer reconciliação.
 
 **Observação:** arquivos `resNFe` são resumos XML, não NF-e processada completa. Esta etapa preserva exatamente o XML recebido e identifica o `schema` no ZIP interno. O NexFiscal só consegue gravar um documento completo `procNFe` quando este é efetivamente disponibilizado pela SEFAZ. A escolha da pasta não elimina o mecanismo de espera para evitar `656`.
+
+## Requisito obrigatório: somente XML completo procNFe (11/11/2026)
+- O arquivo operacional salvo na pasta X deve conter raiz `nfeProc` e elementos `NFe/infNFe` e `protNFe/infProt`. O atributo `schema` do `docZip` deve iniciar com `procNFe_v`.
+- `resNFe`, `procEventoNFe` e outros retornos são ignorados na pasta X; contados como não completos, nunca como XML fiscal baixado com sucesso.
+- O lote bruto permanece em ZIP de diagnóstico e no checkpoint fiscal para recuperação, mas não é entrega de `procNFe`.
+- Para destinatário, a distribuição pode liberar apenas `resNFe` antes da manifestação. Para receber `procNFe` será necessário um evento de manifestação apropriado, conforme a NT 2014.002. **Não enviar manifestação automaticamente** sem aprovação do responsável fiscal.
+- Se somente resumos vierem, o sistema deve informar `0 procNFe`, preservar o NSU e aguardar a condição de distribuição; repetir `distNSU` sem motivo pode gerar `656`.

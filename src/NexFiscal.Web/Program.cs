@@ -95,7 +95,15 @@ app.MapPost("/api/companies/register", async (HttpRequest req, CancellationToken
     {
         var (pfx, password) = await ReadCertificateAsync(req, ct);
         var store = new HanaCompanyRegistrationStore(HanaSetup.Factory, hanaSetup.ConnectionString!);
-        var registered = await new A1CompanyRegistration(store).RegisterAsync(pfx, password, ct);
+        var identity = A1CompanyCertificate.Inspect(pfx, password);
+        var existingId = await store.FindPausedCompanyIdAsync(identity.Cnpj, 1, ct);
+        if (existingId is not null && certificateVault.IsStored(existingId))
+            return Results.Conflict(new { error = "Empresa e certificado já cadastrados. Utilize a área de operação." });
+        // Não regravar empresa/cursor existente: apenas vincular A1 protegido.
+        var registered = existingId is null
+            ? await new A1CompanyRegistration(store).RegisterAsync(pfx, password, ct)
+            : new CompanyRegistration(existingId, identity.Cnpj, identity.LegalName, 1,
+                identity.Thumbprint, identity.ValidUntil, false, "AGUARDANDO_INICIALIZACAO");
         try
         {
             await certificateVault.SaveAsync(registered.CompanyId, registered.Cnpj, pfx, password, ct);

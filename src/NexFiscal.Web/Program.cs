@@ -194,12 +194,13 @@ app.MapPost("/api/capture/prepare-handoff", async (
 
 // Exporta o ZIP já recebido sem nova consulta fiscal e sem acesso ao HANA.
 app.MapGet("/api/capture/archive/{companyId}/{archiveId}", (
-    string companyId, string archiveId, NfeXmlArchive archive) =>
+    string companyId, string archiveId, string? kind, NfeXmlArchive archive) =>
 {
     var file = archive.Find(companyId, archiveId);
+    var type = kind == "CTe" ? "CTe" : "NFe";
     return file is null
         ? Results.NotFound()
-        : Results.File(file, "application/zip", "NexFiscal_NFe_" + archiveId + ".zip");
+        : Results.File(file, "application/zip", "NexFiscal_" + type + "_" + archiveId + ".zip");
 });
 
 // CT-e tem distribuição e cursor próprios, independentes do NSU de NF-e.

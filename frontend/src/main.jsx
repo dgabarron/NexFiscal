@@ -128,7 +128,8 @@ function App(){
   try{
     const result=await invoke("/api/capture/download",{companyId,previousConsumerStopped:true,destinationDirectory});
     setCaptureResult(result);
-    if(result.status===656)setError("SEFAZ 656 — consumo indevido. Aguarde pelo menos 1 hora antes de nova tentativa. "+result.reason);
+    if(result.saveSucceeded===false)setError(result.fileSaveError||"Falha ao salvar os arquivos XML.");
+    else if(result.status===656)setError("SEFAZ 656 — consumo indevido. Aguarde pelo menos 1 hora antes de nova tentativa. "+result.reason);
     else if(result.status===137)setMessage("");
     else setMessage(`SEFAZ 138 — ${result.filesSaved} arquivo(s) XML gravado(s) individualmente em ${result.destinationDirectory}; ${result.filesAlreadyPresent} já existente(s).`);
     await refreshCapture();
@@ -245,8 +246,9 @@ function App(){
            </CardContent>
          </Card>;
        })}
-       {captureResult&&<Notice type={captureResult.status===656?"error":captureResult.status===137?"warning":"success"}>
+       {captureResult&&<Notice type={captureResult.saveSucceeded===false||captureResult.status===656?"error":captureResult.status===137?"warning":"success"}>
          SEFAZ {captureResult.status}: {captureResult.reason} · XMLs recebidos: {captureResult.downloaded} · Arquivos novos: {captureResult.filesSaved??0}
+         {captureResult.fileSaveError&&<div className="mt-2 text-sm font-semibold">{captureResult.fileSaveError}</div>}
          {captureResult.archiveUrl&&<div className="mt-3"><a href={captureResult.archiveUrl} className="inline-flex items-center gap-2 rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-800"><CloudUpload size={17}/>Baixar cópia de segurança (.zip)</a></div>}
          {captureResult.persistenceWarning&&<div className="mt-3 text-sm text-amber-800">{captureResult.persistenceWarning}</div>}
        </Notice>}

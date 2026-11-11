@@ -135,6 +135,10 @@ public sealed class NfeDistributionClient
             MaxCharactersInDocument = 12_000_000
         });
         var xml = XDocument.Load(reader);
+        if (xml.Descendants().Any(x => x.Name.LocalName == "Fault" &&
+            (x.Name.NamespaceName == "http://www.w3.org/2003/05/soap-envelope" ||
+             x.Name.NamespaceName == "http://schemas.xmlsoap.org/soap/envelope/")))
+            throw new InvalidDataException("O serviço SEFAZ retornou SOAP Fault; verifique o contrato e os logs, sem repetir a consulta imediatamente.");
         var payload = xml.Descendants(NfeNs + "retDistDFeInt").FirstOrDefault()
             ?? throw new InvalidDataException("Resposta SEFAZ sem retDistDFeInt.");
         var statusText = (string?)payload.Element(NfeNs + "cStat");
@@ -154,16 +158,23 @@ public sealed class NfeDistributionClient
         if (last > max && status is 137 or 138)
             throw new InvalidDataException("ultNSU maior que maxNSU.");
         var documents = new List<NfeDistributedDocument>();
+        var docZips = payload.Descendants(NfeNs + "docZip").ToArray();
+        if (status != 138 && docZips.Length != 0)
+            throw new InvalidDataException("Resposta fiscal inconsistente: docZip sem cStat 138.");
+        if (status == 138 && docZips.Length > 50)
+            throw new InvalidDataException("Resposta fiscal excede o lote máximo de 50 documentos.");
         if (status == 138)
         {
-            foreach (var doc in payload.Descendants(NfeNs + "docZip"))
+            var seenNsus = new HashSet<long>();
+            foreach (var doc in docZips)
             {
                 var nsu = (string?)doc.Attribute("NSU");
                 var schema = (string?)doc.Attribute("schema");
                 if (string.IsNullOrWhiteSpace(nsu) ||
                     !long.TryParse(nsu, NumberStyles.None, CultureInfo.InvariantCulture, out var docNsu) ||
                     docNsu <= 0 || docNsu > last ||
-                    string.IsNullOrWhiteSpace(schema) || schema.Length > 200)
+                    string.IsNullOrWhiteSpace(schema) || schema.Length > 200 ||
+                    !seenNsus.Add(docNsu))
                     throw new InvalidDataException("docZip sem metadados válidos.");
                 byte[] zipped;
                 try { zipped = Convert.FromBase64String(doc.Value.Trim()); }

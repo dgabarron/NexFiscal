@@ -32,6 +32,8 @@ function App(){
  const [busy,setBusy]=useState(false),[error,setError]=useState(""),[message,setMessage]=useState("");
  const [captureState,setCaptureState]=useState(null),[captureBusy,setCaptureBusy]=useState(false);
  const [captureResult,setCaptureResult]=useState(null);
+ const [cteResults,setCteResults]=useState({});
+ const [cteStates,setCteStates]=useState({});
  const [destinationDirs,setDestinationDirs]=useState({});
  const [connectivity,setConnectivity]=useState({});
  const [clockNow,setClockNow]=useState(Date.now());
@@ -57,6 +59,7 @@ function App(){
       if(resp.ok){
         const state=await resp.json();
         setCaptureState(state);
+        for(const company of state.companies||[])fetch(`/api/cte/status/${company.companyId}`).then(r=>r.ok?r.json():null).then(data=>{if(data)setCteStates(prev=>({...prev,[company.companyId]:data}));}).catch(()=>{});
         if(state.companies?.length){setRegistered({companyId:state.companies[0].companyId});setStage(2);}
         else setStage(1);
       }else setStage(1);
@@ -107,7 +110,9 @@ function App(){
   try{
     const resp=await fetch("/api/capture/status");
     if(!resp.ok)throw new Error("Falha ao consultar HANA.");
-    setCaptureState(await resp.json());
+    const state=await resp.json();
+    setCaptureState(state);
+    for(const company of state.companies||[])fetch(`/api/cte/status/${company.companyId}`).then(r=>r.ok?r.json():null).then(data=>{if(data)setCteStates(prev=>({...prev,[company.companyId]:data}));}).catch(()=>{});
   }catch(e){setError(e.message);}
  }
  async function testConnectivity(companyId){
@@ -137,6 +142,24 @@ function App(){
     await refreshCapture();
   }catch(e){setError(e.message);await refreshCapture();}
   finally{setCaptureBusy(false);}
+ }
+ async function downloadCte(company){
+  const id=company.companyId;
+  const destinationDirectory=(destinationDirs[id]||"").trim();
+  if(!destinationDirectory){setError("Informe a pasta X para NF-e e CT-e.");return;}
+  const cooldown=pendingWindow(cteStates[id]||{});
+  if(cooldown){setError("");setMessage(`CT-e: próxima consulta após ${cooldown.time} (${cooldown.minutes} min).`);return;}
+  if(!window.confirm("Confirma que não existe outro capturador CT-e ativo para este CNPJ? A consulta será enviada à SEFAZ."))return;
+  setCaptureBusy(true);setError("");setMessage("");
+  try{
+    const result=await invoke("/api/cte/download",{companyId:id,previousConsumerStopped:true,destinationDirectory});
+    setCteResults(prev=>({...prev,[id]:result}));
+    if(result.saveSucceeded===false)setError(result.message||"Não foi possível concluir a captura CT-e.");
+    else if(result.status===137)setMessage("CT-e: nenhum documento disponível.");
+    else setMessage(`CT-e: ${result.filesSaved} XML(s) completos gravados na pasta X; ${result.skippedNonProcCTe} outros retornos ignorados.`);
+    const resp=await fetch(`/api/cte/status/${id}`);
+    if(resp.ok){const state=await resp.json();setCteStates(prev=>({...prev,[id]:state}));}
+  }catch(e){setError(e.message);}finally{setCaptureBusy(false);}
  }
  const current=steps[stage];
  return <div className="min-h-screen bg-[#f5f7fb] text-[#13223d]">
@@ -194,7 +217,7 @@ function App(){
       </CardContent></Card><div className="space-y-5"><Card><CardHeader><h2 className="font-bold">Infraestrutura conectada</h2></CardHeader><CardContent><div className="flex items-center gap-2 text-sm"><CheckCircle2 size={18} className="text-emerald-500"/>Banco SAP HANA configurado</div><div className="mt-4 flex items-center gap-2 text-sm text-slate-500"><ShieldCheck size={18}/>Controle interno de NSU</div><p className="mt-3 text-xs text-slate-500 leading-5">O NSU não é solicitado ao usuário. A captura começa somente após uma inicialização fiscal segura.</p></CardContent></Card></div></div>}
      {stage===2&&<div className="space-y-5">
        <div className="flex flex-wrap items-center justify-between gap-4">
-         <div><h2 className="text-lg font-bold">Captura de NF-e</h2><p className="mt-1 text-sm text-slate-500">Consulte a SEFAZ e salve somente XMLs completos (procNFe) na pasta escolhida.</p></div>
+         <div><h2 className="text-lg font-bold">Captura de NF-e e CT-e</h2><p className="mt-1 text-sm text-slate-500">Consulte a SEFAZ e salve somente XMLs completos de NF-e (procNFe) e CT-e (procCTe) na pasta escolhida.</p></div>
          <Button variant="outline" disabled={captureBusy} onClick={refreshCapture}><RefreshCw size={17}/>Atualizar dados</Button>
        </div>
        {!captureState&&<Notice>Não foi possível carregar os dados da operação. Clique em Atualizar dados.</Notice>}
@@ -236,15 +259,24 @@ function App(){
                <Label>Pasta de destino dos XMLs (no computador/servidor NexFiscal)</Label>
                <Input placeholder="Ex.: C:\\NexFiscal\\XML" value={destinationDirs[company.companyId]||""}
                  onChange={e=>setDestinationDirs(prev=>({...prev,[company.companyId]:e.target.value}))}/>
-               <p className="mt-1 text-xs text-slate-500">A pasta precisa existir e permitir gravação pelo NexFiscal. Somente procNFe completos serão gravados, cada um em seu arquivo. Resumos e eventos não serão considerados downloads concluídos.</p>
+               <p className="mt-1 text-xs text-slate-500">A pasta precisa existir e permitir gravação pelo NexFiscal. Somente XMLs completos são gravados: NF-e pelo NSU e CT-e como CTe_000000000000001.xml. Resumos e eventos não são considerados downloads.</p>
              </div>
              <div className="mt-5 flex flex-wrap gap-3">
                <Button disabled={!company.certificateStored||captureBusy} onClick={()=>downloadNfe(company)}>
                  {captureBusy?<RefreshCw size={17}/>:<CloudUpload size={17}/>}
                  {captureBusy?"Executando consulta...":cooldown?"Ver quando posso consultar":"Consultar SEFAZ e salvar XMLs"}
                </Button>
+               <Button variant="outline" disabled={!company.certificateStored||captureBusy} onClick={()=>downloadCte(company)}>
+                 {captureBusy?<RefreshCw size={17}/>:<CloudUpload size={17}/>}
+                 {pendingWindow(cteStates[company.companyId]||{})?"Ver horário CT-e":"Consultar CT-e e salvar XMLs"}
+               </Button>
                <Button variant="outline" disabled={!company.certificateStored||captureBusy} onClick={()=>testConnectivity(company.companyId)}><PlugZap size={17}/>Testar conexão</Button>
              </div>
+             {cteStates[company.companyId]&&<div className="mt-4 text-xs text-slate-600">CT-e · Último NSU: {cteStates[company.companyId].lastNsu} · Próxima consulta: {pendingWindow(cteStates[company.companyId])?.time||"disponível"}</div>}
+             {cteResults[company.companyId]&&<div className="mt-3"><Notice type={cteResults[company.companyId].saveSucceeded===false?"error":cteResults[company.companyId].status===137||(cteResults[company.companyId].filesSaved===0&&cteResults[company.companyId].filesAlreadyPresent===0)?"warning":"success"}>
+               CT-e {cteResults[company.companyId].status}: {cteResults[company.companyId].reason} · procCTe novos: {cteResults[company.companyId].filesSaved||0} · Outros: {cteResults[company.companyId].skippedNonProcCTe||0}
+               {cteResults[company.companyId].archiveUrl&&<div className="mt-2"><a href={cteResults[company.companyId].archiveUrl} className="underline">Baixar lote de recuperação CT-e</a></div>}
+             </Notice></div>}
            </CardContent>
          </Card>;
        })}

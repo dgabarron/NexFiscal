@@ -11,4 +11,29 @@
   <ItemGroup>
     <EmbeddedResource Include="../../sql/migrations/001_BRAI_NEX_initial.sql" LogicalName="NexFiscal.Web.sql.migrations.001_BRAI_NEX_initial.sql" />
   </ItemGroup>
+  <!-- F5 no Visual Studio prepara o frontend antes de compilar o ASP.NET. -->
+  <PropertyGroup>
+    <NexFiscalFrontendDir>$(MSBuildProjectDirectory)/../../frontend/</NexFiscalFrontendDir>
+    <NexFiscalNpm Condition="'$(OS)' == 'Windows_NT'">npm.cmd</NexFiscalNpm>
+    <NexFiscalNpm Condition="'$(OS)' != 'Windows_NT'">npm</NexFiscalNpm>
+  </PropertyGroup>
+  <Target Name="NexFiscalInstallFrontendDependencies"
+          Inputs="$(NexFiscalFrontendDir)package.json"
+          Outputs="$(NexFiscalFrontendDir)node_modules/.nexfiscal-dependencies.stamp"
+          Condition="'$(DesignTimeBuild)' != 'true' and '$(IsCrossTargetingBuild)' != 'true'">
+    <Message Importance="high" Text="NexFiscal: instalando dependências React/Tailwind (somente quando necessário)..." />
+    <Exec WorkingDirectory="$(NexFiscalFrontendDir)"
+          Command="$(NexFiscalNpm) install --no-audit --no-fund"
+          StandardOutputImportance="low" />
+    <Touch Files="$(NexFiscalFrontendDir)node_modules/.nexfiscal-dependencies.stamp" AlwaysCreate="true" />
+  </Target>
+  <Target Name="NexFiscalBuildFrontend"
+          BeforeTargets="BeforeBuild"
+          DependsOnTargets="NexFiscalInstallFrontendDependencies"
+          Condition="'$(DesignTimeBuild)' != 'true' and '$(IsCrossTargetingBuild)' != 'true'">
+    <Message Importance="high" Text="NexFiscal: compilando frontend automaticamente para wwwroot..." />
+    <Exec WorkingDirectory="$(NexFiscalFrontendDir)"
+          Command="$(NexFiscalNpm) run build"
+          StandardOutputImportance="low" />
+  </Target>
 </Project>

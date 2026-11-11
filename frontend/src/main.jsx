@@ -32,6 +32,7 @@ function App(){
  const [busy,setBusy]=useState(false),[error,setError]=useState(""),[message,setMessage]=useState("");
  const [captureState,setCaptureState]=useState(null),[captureBusy,setCaptureBusy]=useState(false);
  const [captureResult,setCaptureResult]=useState(null);
+ const [connectivity,setConnectivity]=useState({});
  useEffect(()=>{fetch("/api/health").then(r=>r.json()).then(async x=>{
     if(!x.hanaConfigured)return;
     setHanaReady(true);
@@ -92,6 +93,13 @@ function App(){
     if(!resp.ok)throw new Error("Falha ao consultar HANA.");
     setCaptureState(await resp.json());
   }catch(e){setError(e.message);}
+ }
+ async function testConnectivity(companyId){
+  setCaptureBusy(true);setError("");setMessage("");
+  try{
+    const result=await invoke("/api/capture/test-connectivity",{companyId});
+    setConnectivity(x=>({...x,[companyId]:result}));
+  }catch(e){setError(e.message);}finally{setCaptureBusy(false);}
  }
  async function testCapture(companyId){
   setCaptureBusy(true);setError("");setMessage("");setCaptureResult(null);
@@ -179,7 +187,9 @@ function App(){
              <div className="flex gap-2 items-center">{company.enabled?<CheckCircle2 className="text-emerald-600" size={18}/>:<CircleDot className="text-amber-600" size={18}/>} Empresa {company.enabled?"habilitada":"pausada"}</div>
            </div>
            <div className="mt-5"><Notice>{company.reason}</Notice></div>
+           {connectivity[company.companyId]&&<div className="mt-5"><Notice type={connectivity[company.companyId].reachable?"success":"info"}>{connectivity[company.companyId].message}{connectivity[company.companyId].httpStatus?` (HTTP ${connectivity[company.companyId].httpStatus})`:""}</Notice></div>}
            <div className="mt-5 flex flex-wrap items-center gap-3">
+             <Button variant="outline" disabled={!company.certificateStored||captureBusy} onClick={()=>testConnectivity(company.companyId)}><PlugZap size={17}/>Testar conexão SEFAZ</Button>
              <Button disabled={!company.ready||captureBusy} onClick={()=>testCapture(company.companyId)}>
                {captureBusy?<RefreshCw size={17}/>:<PlugZap size={17}/>}
                {captureBusy?"Consultando...":"Testar consulta real"}

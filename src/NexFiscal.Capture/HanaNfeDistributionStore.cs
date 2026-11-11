@@ -46,8 +46,8 @@ public sealed class HanaNfeDistributionStore(DbProviderFactory factory, string c
 
             if (storedNsu != requestedNsu)
                 throw new DBConcurrencyException("NSU alterado por outro processo: lote descartado.");
-            if (nextAllowed > DateTime.UtcNow)
-                throw new InvalidOperationException("Aguardando intervalo autorizado para consulta.");
+            // A janela de execução foi validada antes da chamada SOAP e reservada
+            // no HANA por 1h. O commit da resposta não deve rejeitar essa reserva.
 
             var added = 0;
             if (result.Status == 138)
@@ -81,8 +81,11 @@ public sealed class HanaNfeDistributionStore(DbProviderFactory factory, string c
 
             // 137/656 mantêm NSU e aplicam cooldown. No 138, avança somente
             // depois de gravar todos os XMLs, na mesma transação.
-            var lastNsu = result.Status == 138 ? result.LastNsu : storedNsu;
-            var cooldown = result.Status is 137 or 656
+            var lastNsu = result.Status == 138 ? result.LastNsu
+                : result.Status == 137 && result.LastNsu >= storedNsu ? result.LastNsu
+                : storedNsu;
+            var cooldown = result.Status is 137 or 656 ||
+                           (result.Status == 138 && result.LastNsu == result.MaxNsu)
                 ? DateTime.UtcNow.AddHours(1)
                 : DateTime.UtcNow;
             await using var update = Command(connection, tx,

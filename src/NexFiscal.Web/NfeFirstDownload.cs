@@ -10,7 +10,7 @@ using NexFiscal.Capture;
 /// Reserva 1h antes de acessar a SEFAZ para não repetir uma chamada ambígua.
 /// Não é um agendador e não oferece NSU editável.
 /// </summary>
-public sealed class NfeFirstDownload(HanaSetup hana, CompanyCertificateVault vault)
+public sealed class NfeFirstDownload(HanaSetup hana, CompanyCertificateVault vault, NfeXmlArchive archive)
 {
     private static readonly SemaphoreSlim Gate = new(1, 1);
 

@@ -20,15 +20,18 @@
     <NexFiscalNpm Condition="'$(OS)' == 'Windows_NT' and '$(NexFiscalNpm)' == ''">npm.cmd</NexFiscalNpm>
     <NexFiscalNpm Condition="'$(OS)' != 'Windows_NT'">npm</NexFiscalNpm>
   </PropertyGroup>
+  <!-- npm install só quando não há dependências instaladas.
+       Não executar npm install em cada F5: no Windows isso causa EPERM
+       quando outro processo mantém node_modules em uso. -->
   <Target Name="NexFiscalInstallFrontendDependencies"
-          Inputs="$(NexFiscalFrontendDir)package.json"
-          Outputs="$(NexFiscalFrontendDir)node_modules/.nexfiscal-dependencies.stamp"
-          Condition="'$(DesignTimeBuild)' != 'true' and '$(IsCrossTargetingBuild)' != 'true'">
-    <Message Importance="high" Text="NexFiscal: instalando dependências React/Tailwind sem modificar package-lock.json..." />
+          Condition="'$(DesignTimeBuild)' != 'true' and '$(IsCrossTargetingBuild)' != 'true'
+                     and (!Exists('$(NexFiscalFrontendDir)node_modules/vite/package.json')
+                       or !Exists('$(NexFiscalFrontendDir)node_modules/react-dom/package.json')
+                       or !Exists('$(NexFiscalFrontendDir)node_modules/tailwindcss/package.json'))">
+    <Message Importance="high" Text="NexFiscal: dependências ausentes; instalando frontend uma única vez..." />
     <Exec WorkingDirectory="$(NexFiscalFrontendDir)"
           Command="$(NexFiscalNpm) install --package-lock=false --no-audit --no-fund"
           StandardOutputImportance="low" />
-    <Touch Files="$(NexFiscalFrontendDir)node_modules/.nexfiscal-dependencies.stamp" AlwaysCreate="true" />
   </Target>
   <Target Name="NexFiscalBuildFrontend"
           BeforeTargets="BeforeBuild"

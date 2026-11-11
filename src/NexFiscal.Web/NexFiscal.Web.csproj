@@ -31,15 +31,17 @@
     <Message Importance="high" Text="NexFiscal: dependências ausentes; instalando frontend uma única vez..." />
     <Exec WorkingDirectory="$(NexFiscalFrontendDir)"
           Command="$(NexFiscalNpm) install --package-lock=false --no-audit --no-fund"
-          StandardOutputImportance="low" />
+          StandardOutputImportance="high"
+          StandardErrorImportance="high" />
   </Target>
   <Target Name="NexFiscalBuildFrontend"
           BeforeTargets="BeforeBuild"
           DependsOnTargets="NexFiscalInstallFrontendDependencies"
           Condition="'$(DesignTimeBuild)' != 'true' and '$(IsCrossTargetingBuild)' != 'true'">
-    <Message Importance="high" Text="NexFiscal: compilando frontend automaticamente para wwwroot..." />
+    <Message Importance="high" Text="NexFiscal: compilando frontend automaticamente para wwwroot (erros do Vite exibidos abaixo)..." />
     <Exec WorkingDirectory="$(NexFiscalFrontendDir)"
           Command="$(NexFiscalNpm) run build"
-          StandardOutputImportance="low" />
+          StandardOutputImportance="high"
+          StandardErrorImportance="high" />
   </Target>
 </Project>

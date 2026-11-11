@@ -131,7 +131,9 @@ function App(){
     if(result.saveSucceeded===false)setError(result.fileSaveError||"Falha ao salvar os arquivos XML.");
     else if(result.status===656)setError("SEFAZ 656 — consumo indevido. Aguarde pelo menos 1 hora antes de nova tentativa. "+result.reason);
     else if(result.status===137)setMessage("");
-    else setMessage(`SEFAZ 138 — ${result.filesSaved} arquivo(s) XML gravado(s) individualmente em ${result.destinationDirectory}; ${result.filesAlreadyPresent} já existente(s).`);
+    else if(result.status===138&&result.filesSaved===0&&result.filesAlreadyPresent===0)
+      setMessage("A SEFAZ retornou documentos, mas nenhum procNFe completo. Resumos e eventos não foram gravados na pasta. A NF-e completa pode depender da manifestação do destinatário.");
+    else setMessage(`SEFAZ 138 — ${result.filesSaved} procNFe gravado(s) em ${result.destinationDirectory}; ${result.filesAlreadyPresent} já existente(s). ${result.skippedNonProcNFe||0} resumo(s)/evento(s) ignorado(s).`);
     await refreshCapture();
   }catch(e){setError(e.message);await refreshCapture();}
   finally{setCaptureBusy(false);}
@@ -192,7 +194,7 @@ function App(){
       </CardContent></Card><div className="space-y-5"><Card><CardHeader><h2 className="font-bold">Infraestrutura conectada</h2></CardHeader><CardContent><div className="flex items-center gap-2 text-sm"><CheckCircle2 size={18} className="text-emerald-500"/>Banco SAP HANA configurado</div><div className="mt-4 flex items-center gap-2 text-sm text-slate-500"><ShieldCheck size={18}/>Controle interno de NSU</div><p className="mt-3 text-xs text-slate-500 leading-5">O NSU não é solicitado ao usuário. A captura começa somente após uma inicialização fiscal segura.</p></CardContent></Card></div></div>}
      {stage===2&&<div className="space-y-5">
        <div className="flex flex-wrap items-center justify-between gap-4">
-         <div><h2 className="text-lg font-bold">Captura de NF-e</h2><p className="mt-1 text-sm text-slate-500">Consulte a SEFAZ e salve cada XML individualmente na pasta escolhida.</p></div>
+         <div><h2 className="text-lg font-bold">Captura de NF-e</h2><p className="mt-1 text-sm text-slate-500">Consulte a SEFAZ e salve somente XMLs completos (procNFe) na pasta escolhida.</p></div>
          <Button variant="outline" disabled={captureBusy} onClick={refreshCapture}><RefreshCw size={17}/>Atualizar dados</Button>
        </div>
        {!captureState&&<Notice>Não foi possível carregar os dados da operação. Clique em Atualizar dados.</Notice>}
@@ -234,7 +236,7 @@ function App(){
                <Label>Pasta de destino dos XMLs (no computador/servidor NexFiscal)</Label>
                <Input placeholder="Ex.: C:\\NexFiscal\\XML" value={destinationDirs[company.companyId]||""}
                  onChange={e=>setDestinationDirs(prev=>({...prev,[company.companyId]:e.target.value}))}/>
-               <p className="mt-1 text-xs text-slate-500">A pasta precisa existir e permitir gravação pelo NexFiscal. Cada documento será salvo separadamente como 000000000000001.xml, conforme seu NSU.</p>
+               <p className="mt-1 text-xs text-slate-500">A pasta precisa existir e permitir gravação pelo NexFiscal. Somente procNFe completos serão gravados, cada um em seu arquivo. Resumos e eventos não serão considerados downloads concluídos.</p>
              </div>
              <div className="mt-5 flex flex-wrap gap-3">
                <Button disabled={!company.certificateStored||captureBusy} onClick={()=>downloadNfe(company)}>
@@ -247,9 +249,10 @@ function App(){
          </Card>;
        })}
        {captureResult&&<Notice type={captureResult.saveSucceeded===false||captureResult.status===656?"error":captureResult.status===137?"warning":"success"}>
-         SEFAZ {captureResult.status}: {captureResult.reason} · XMLs recebidos: {captureResult.downloaded} · Arquivos novos: {captureResult.filesSaved??0}
+         SEFAZ {captureResult.status}: {captureResult.reason} · procNFe novos: {captureResult.filesSaved??0} · Outros retornos: {captureResult.skippedNonProcNFe??0}
          {captureResult.fileSaveError&&<div className="mt-2 text-sm font-semibold">{captureResult.fileSaveError}</div>}
-         {captureResult.archiveUrl&&<div className="mt-3"><a href={captureResult.archiveUrl} className="inline-flex items-center gap-2 rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-800"><CloudUpload size={17}/>Baixar cópia de segurança (.zip)</a></div>}
+         {captureResult.skippedNonProcNFe>0&&<div className="mt-2 text-sm">A SEFAZ retornou resumos ou eventos, que não são XMLs completos. Pode ser necessária a manifestação do destinatário para receber procNFe.</div>}
+         {captureResult.archiveUrl&&<div className="mt-3"><a href={captureResult.archiveUrl} className="inline-flex items-center gap-2 rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-800"><CloudUpload size={17}/>Baixar lote bruto para diagnóstico (.zip)</a></div>}
          {captureResult.persistenceWarning&&<div className="mt-3 text-sm text-amber-800">{captureResult.persistenceWarning}</div>}
        </Notice>}
      </div>}

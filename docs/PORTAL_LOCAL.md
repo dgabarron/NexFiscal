@@ -82,3 +82,11 @@ A classe `HanaNfeDistributionStore` recebe a resposta já validada e executa uma
 ### Diagnóstico corrigido — Schannel Windows `0x8009030E`
 
 Em 11/11/2026, a comunicação HTTPS com A1 retornou `HttpRequestException → IOException → AuthenticationException → Win32Exception 0x8009030E` (SEC_E_NO_CREDENTIALS). A Microsoft documenta falha conhecida do Schannel com `X509KeyStorageFlags.EphemeralKeySet` na autenticação TLS cliente: https://learn.microsoft.com/en-us/dotnet/core/extensions/sslstream-troubleshooting#handshake-failed-with-ephemeral-keys . O `NfeCaptureCoordinator` foi atualizado para importar o A1 com `UserKeySet` no Windows, sem `PersistKeySet`, e mantê-lo disponível durante a negociação mTLS; Linux continua usando `EphemeralKeySet`. O cofre protegido original não foi alterado; a chave privada pode ter materialização temporária no perfil do usuário Windows durante a chamada, removida na liberação do certificado em .NET 8, por isso a conta que executa o serviço precisa ter perfil e permissões adequados. Não ativar consulta `distNSU` antes da migração segura do checkpoint.
+
+### Preparação do checkpoint NF-e pela Central de operação
+
+- Após validar HTTPS e confirmar que o fornecedor anterior deixou de consultar o mesmo CNPJ, o operador pode abrir **Preparar transferência do NSU**.
+- O formulário solicita origem do último NSU, valor de 15 dígitos conferido no sistema anterior, data/hora da última consulta, CNPJ e duas confirmações explícitas. Esses dados **não são inferidos** a partir do HTTP 200. Não inserir NSU zero, aleatório ou de outra empresa.
+- O endpoint local `POST /api/capture/prepare-handoff` cria uma única vez `BRAI_NEX_CaptureCursor` e grava `HANDOFF_PREPARED` na tabela `BRAI_NEX_CaptureLog` na mesma transação. Se já existe checkpoint, recusa sobrescrever. Se a empresa não está pausada ou o CNPJ não confere, recusa.
+- O cadastro continua com `Enabled=0`, as flags de consulta real permanecem desligadas e **não há requisição à SEFAZ**. A confirmação feita no formulário é uma declaração, não uma verificação automática da parada do fornecedor.
+- Uma autorização operacional futura ainda deve verificar a posse exclusiva do consumidor, a autenticidade do checkpoint e o intervalo desde a última consulta antes da primeira tentativa `distNSU`.

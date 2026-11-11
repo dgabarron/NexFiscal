@@ -47,6 +47,56 @@ public sealed class NfeCaptureCoordinator(
         return new { companies = result, automaticCaptureEnabled = false };
     }
 
+    /// <summary>
+    /// Diagnóstico não fiscal: testa cadeia A1 e handshake HTTPS do serviço,
+    /// sem SOAP e sem consultar/alterar NSU.
+    /// </summary>
+    public async Task<object> TestConnectivityAsync(string companyId, CancellationToken ct)
+    {
+        if (!Guid.TryParse(companyId, out _))
+            throw new ArgumentException("Empresa inválida.");
+        var company = (await ReadCompaniesAsync(ct)).SingleOrDefault(x => x.Id == companyId)
+            ?? throw new InvalidOperationException("Empresa não localizada.");
+        if (!vault.IsStored(companyId))
+            throw new InvalidOperationException("Certificado A1 não encontrado.");
+
+        var (pfx, password) = await vault.ReadAsync(companyId, ct);
+        try
+        {
+            using var certificate = new X509Certificate2(pfx, password, X509KeyStorageFlags.EphemeralKeySet);
+            using var chain = new X509Chain();
+            chain.ChainPolicy.RevocationMode = X509RevocationMode.Online;
+            chain.ChainPolicy.RevocationFlag = X509RevocationFlag.ExcludeRoot;
+            chain.ChainPolicy.UrlRetrievalTimeout = TimeSpan.FromSeconds(15);
+            var chainOk = chain.Build(certificate);
+            if (!chainOk)
+                return new { reachable = false, certificateValid = false,
+                    message = "Não foi possível validar a cadeia ou revogação do certificado A1. Confira os certificados ICP-Brasil no Windows." };
+
+            using var handler = new HttpClientHandler
+            {
+                ClientCertificateOptions = ClientCertificateOption.Manual,
+                CheckCertificateRevocationList = true,
+                AllowAutoRedirect = false
+            };
+            handler.ClientCertificates.Add(certificate);
+            using var http = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(25) };
+            using var request = new HttpRequestMessage(HttpMethod.Get,
+                new Uri(NfeDistributionClient.ProductionUrl + "?WSDL"));
+            using var response = await http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct);
+            return new
+            {
+                reachable = response.IsSuccessStatusCode,
+                certificateValid = true,
+                httpStatus = (int)response.StatusCode,
+                message = response.IsSuccessStatusCode
+                    ? "Conectividade HTTPS com a SEFAZ validada. A autorização para distribuir NF-e ainda não foi confirmada."
+                    : "Servidor respondeu ao teste HTTPS, mas não confirmou o WSDL. Verifique o acesso à SEFAZ."
+            };
+        }
+        finally { CryptographicOperations.ZeroMemory(pfx); }
+    }
+
     public async Task<object> TestOnceAsync(string companyId, CancellationToken ct)
     {
         if (!Guid.TryParse(companyId, out _))

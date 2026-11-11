@@ -72,3 +72,9 @@ A classe `HanaNfeDistributionStore` recebe a resposta já validada e executa uma
 - Para status 138, arquivos XML são armazenados por NSU e hash na transação que avança o cursor. Status 137/656 não avançam NSU, aplicam espera. Status de consulta são persistidos em `BRAI_NEX_CaptureLog` na mesma transação.
 - Limitação deliberada: o controle de concorrência de execução é local ao processo; para agendamento multi-instância, ainda será necessário lease distribuído. Não executar várias instâncias para o mesmo CNPJ.
 - Não existe processo administrativo completo de transferência de NSU entre fornecedores: esse procedimento e a validação de ambiente/credenciais devem ser concluídos antes do primeiro teste real.
+
+### Teste imediato na Central de operação (sem consumir NSU)
+
+- Após atualizar o frontend via PowerShell com `npm run build` e executar `NexFiscal.Web` pelo Visual Studio, a Central de operação recupera empresas do HANA.
+- **Testar conexão SEFAZ** chama `POST /api/capture/test-connectivity`, usa o A1 cifrado, valida sua cadeia e consulta o WSDL por HTTPS. **Não envia uma consulta distNSU e não consome NSU.** Um HTTP 200 não garante autorização da SEFAZ para distribuir documentos.
+- **Testar consulta real** só fica habilitado depois de um handoff formal com confirmação de exclusividade, empresa habilitada e checkpoint previamente autorizado. Não habilitar apenas para forçar o teste: o NexFiscal não conhece o NSU do consumidor anterior.

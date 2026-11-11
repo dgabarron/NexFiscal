@@ -13,10 +13,9 @@ public sealed class HanaCompanyRegistrationStore(DbProviderFactory factory, stri
     private const string S = "\"BRAI_NEX\".";
 
     public async Task<CompanyRegistration> RegisterPausedAsync(
-        A1CompanyIdentity identity, int environment, long initialNsu, CancellationToken ct)
+        A1CompanyIdentity identity, int environment, CancellationToken ct
     {
-        if (identity.Cnpj.Length != 14 || environment is not (1 or 2) ||
-            initialNsu < 0 || initialNsu > NfeDistribution.MaxNsu)
+        if (identity.Cnpj.Length != 14 || environment != 1)
             throw new ArgumentException("Dados de cadastro inválidos.");
 
         await using var connection = factory.CreateConnection()
@@ -48,20 +47,14 @@ public sealed class HanaCompanyRegistrationStore(DbProviderFactory factory, stri
                     throw new DataException("Cadastro da empresa não foi gravado.");
             }
 
-            await using (var cursor = Command(connection, tx,
-                "INSERT INTO " + S + "\"BRAI_NEX_CaptureCursor\" " +
-                "(\"CompanyId\",\"DocumentType\",\"LastNsu\",\"NextAllowedAtUtc\",\"Version\",\"UpdatedAtUtc\") " +
-                "VALUES (?,'NFE',?,CURRENT_UTCTIMESTAMP,0,CURRENT_UTCTIMESTAMP)",
-                id, initialNsu))
-            {
-                if (await cursor.ExecuteNonQueryAsync(ct) != 1)
-                    throw new DataException("Cursor inicial não foi gravado.");
-            }
+            // Não criar checkpoint fictício (NSU 0). A ausência de cursor
+            // significa que a inicialização fiscal ainda não foi comprovada.
+            // A empresa permanece Enabled=0; nenhuma consulta é autorizada.
 
             await tx.CommitAsync(ct);
             return new CompanyRegistration(
                 id, identity.Cnpj, identity.LegalName, environment,
-                identity.Thumbprint, identity.ValidUntil, false);
+                identity.Thumbprint, identity.ValidUntil, false, "AGUARDANDO_INICIALIZACAO");
         }
         catch
         {

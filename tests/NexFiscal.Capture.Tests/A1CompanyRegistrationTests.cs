@@ -9,10 +9,10 @@ namespace NexFiscal.Capture.Tests;
 public sealed class A1CompanyRegistrationTests
 {
     private const string Cnpj = "11222333000181";
-    private static byte[] FakePfx()
+    private static byte[] FakePfx(bool withUf = false)
     {
         using var key = RSA.Create(2048);
-        var req = new CertificateRequest("CN=EMPRESA TESTE LTDA", key, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+        var req = new CertificateRequest(withUf ? "CN=EMPRESA TESTE LTDA, S=SP, C=BR" : "CN=EMPRESA TESTE LTDA", key, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
         var writer = new AsnWriter(AsnEncodingRules.DER);
         writer.PushSequence();
         var tag = new Asn1Tag(TagClass.ContextSpecific, 0);
@@ -51,6 +51,13 @@ public sealed class A1CompanyRegistrationTests
         Assert.False(company.Enabled);
         Assert.Equal(Cnpj, company.Cnpj);
         Assert.Equal(1, store.Calls);
+    }
+
+    [Fact]
+    public void Extracts_Uf_From_Subject_State()
+    {
+        var identity = A1CompanyCertificate.Inspect(FakePfx(withUf: true), "senha-teste");
+        Assert.Equal("SP", identity.State);
     }
 
     [Fact]

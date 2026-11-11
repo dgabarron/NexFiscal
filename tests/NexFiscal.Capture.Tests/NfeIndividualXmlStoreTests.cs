@@ -14,8 +14,8 @@ public sealed class NfeIndividualXmlStoreTests
         Directory.CreateDirectory(folder);
         try
         {
-            var first = Encoding.UTF8.GetBytes("<nfeProc xmlns=\\"http://www.portalfiscal.inf.br/nfe\\"><NFe><infNFe Id=\\"NFe1\\"/></NFe><protNFe><infProt/></protNFe></nfeProc>");
-            var second = Encoding.UTF8.GetBytes("<nfeProc xmlns=\\"http://www.portalfiscal.inf.br/nfe\\"><NFe><infNFe Id=\\"NFe2\\"/></NFe><protNFe><infProt/></protNFe></nfeProc>");
+            var first = Encoding.UTF8.GetBytes("<nfeProc xmlns=\"http://www.portalfiscal.inf.br/nfe\"><NFe><infNFe Id=\"NFe1\"/></NFe><protNFe><infProt/></protNFe></nfeProc>");
+            var second = Encoding.UTF8.GetBytes("<nfeProc xmlns=\"http://www.portalfiscal.inf.br/nfe\"><NFe><infNFe Id=\"NFe2\"/></NFe><protNFe><infProt/></protNFe></nfeProc>");
             NfeDistributedDocument Doc(long nsu, byte[] bytes) => new(
                 nsu, "procNFe_v4.00.xsd", bytes,
                 Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant());
@@ -46,8 +46,8 @@ public sealed class NfeIndividualXmlStoreTests
         Directory.CreateDirectory(folder);
         try
         {
-            var summary = Encoding.UTF8.GetBytes("<resNFe xmlns=\\\"http://www.portalfiscal.inf.br/nfe\\\"/>");
-            var complete = Encoding.UTF8.GetBytes("<nfeProc xmlns=\\\"http://www.portalfiscal.inf.br/nfe\\\"><NFe><infNFe/></NFe><protNFe><infProt/></protNFe></nfeProc>");
+            var summary = Encoding.UTF8.GetBytes("<resNFe xmlns=\\"http://www.portalfiscal.inf.br/nfe\\"/>");
+            var complete = Encoding.UTF8.GetBytes("<nfeProc xmlns=\\"http://www.portalfiscal.inf.br/nfe\\"><NFe><infNFe/></NFe><protNFe><infProt/></protNFe></nfeProc>");
             var response = new NfeDistributionResult(138, "OK", 2, 2, [
                 new NfeDistributedDocument(1, "resNFe_v1.01.xsd", summary,
                     Convert.ToHexString(SHA256.HashData(summary)).ToLowerInvariant()),

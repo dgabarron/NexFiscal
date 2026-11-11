@@ -14,6 +14,7 @@ if (OperatingSystem.IsWindows())
 builder.Services.AddSingleton<HanaSetup>();
 builder.Services.AddSingleton<CompanyCertificateVault>();
 builder.Services.AddSingleton<NfeCaptureCoordinator>();
+builder.Services.AddSingleton<NfeHandoffPreparation>();
 var app = builder.Build();
 var hanaSetup = app.Services.GetRequiredService<HanaSetup>();
 var certificateVault = app.Services.GetRequiredService<CompanyCertificateVault>();
@@ -169,6 +170,21 @@ app.MapPost("/api/capture/test-connectivity", async (CaptureTestRequest request,
     {
         app.Logger.LogError("Teste HTTPS SEFAZ falhou: {Type}", ex.GetType().Name);
         return Results.Problem("Não foi possível concluir o teste HTTPS com a SEFAZ. Verifique firewall, TLS e certificado A1.", statusCode: 503);
+    }
+});
+
+// Preparação transacional do checkpoint, com evidência do sistema anterior.
+// Nunca habilita a empresa, nunca executa distNSU e nunca sobrescreve NSU existente.
+app.MapPost("/api/capture/prepare-handoff", async (
+    NfeHandoffPreparation.Request request, NfeHandoffPreparation handoff, CancellationToken ct) =>
+{
+    try { return Results.Ok(await handoff.PrepareAsync(request, ct)); }
+    catch (ArgumentException ex) { return Results.BadRequest(new { error = ex.Message }); }
+    catch (InvalidOperationException ex) { return Results.Conflict(new { error = ex.Message }); }
+    catch (Exception ex)
+    {
+        app.Logger.LogError("Preparação NSU falhou. Categoria={Category}", ex.GetType().Name);
+        return Results.Problem("Não foi possível preparar o checkpoint no SAP HANA. Nenhuma consulta foi executada.", statusCode: 503);
     }
 });
 

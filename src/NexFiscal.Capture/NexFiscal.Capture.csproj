@@ -5,4 +5,8 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
   </PropertyGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Schemas/distDFeInt_v1.01.xsd" />
+    <EmbeddedResource Include="Schemas/tiposDistDFe_v1.01.xsd" />
+  </ItemGroup>
 </Project>

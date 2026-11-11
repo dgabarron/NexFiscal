@@ -56,3 +56,24 @@ Correções efetivas:
 O HANA ainda é usado no serviço atual para identificar a empresa e reservar o NSU (intervalo de segurança), mas **a entrega do ZIP não depende do sucesso da gravação de envelopes no HANA**. Não reiniciar ou retroceder o NSU por falha de persistência; reconciliar a tentativa antes de novo clique.
 
 **Limites não afirmados como resolvidos**: não houve requisição real à SEFAZ ou validação do ZIP oficial v1.04 nesta revisão. CI valida montagem de XML, parsing e exportação ZIP offline. A autorização de distribuição do CNPJ e a disponibilidade de `procNFe` dependem da SEFAZ e da condição fiscal do documento.
+
+## Fluxo positivo/negativo acordado — arquivos individuais na pasta X
+
+**Fluxo positivo (arquivo por XML):**
+1. Operador informa a pasta X existente no computador ou servidor onde o NexFiscal executa; exemplo `C:\\NexFiscal\\XML`.
+2. O backend valida a pasta antes de reservar a consulta fiscal.
+3. NexFiscal consulta `NFeDistribuicaoDFe` com certificado A1 e NSU controlado (não é acesso SQL direto ao banco da SEFAZ).
+4. Com `cStat 138`, descompacta `docZip` e grava **cada XML individualmente** como `<NSU de 15 dígitos>.xml` na pasta X. Conteúdo e SHA-256 são preservados; já existente com mesmo hash é mantido, com conteúdo diferente é erro.
+5. Antes da cópia individual, mantém um ZIP de recuperação interno para evitar perder os XMLs se houver uma falha de disco. A gravação de envelopes no HANA é secundária; apenas o controle de NSU/empresa ainda depende de HANA nesta etapa.
+6. A interface informa quantidade recebida, arquivos novos, arquivos preexistentes e pasta utilizada.
+
+**Fluxos negativos:**
+- Pasta ausente/inválida: bloquear **antes** de acessar a SEFAZ; não consumir NSU.
+- `137`: nenhum XML recebido; nenhum arquivo é criado, registrar status e respeitar intervalo.
+- `656`: consumo indevido; não gravar arquivo, respeitar intervalo de segurança; sinalizar erro em vermelho.
+- Outro `cStat`, como `215`: rejeição, capturar `xMotivo`, não gravar XML nem avançar NSU.
+- Falha ao gravar na pasta X depois da resposta `138`: não avançar NSU, manter ZIP interno disponível, sinalizar erro em vermelho e exigir reconciliação antes de consultar novamente.
+- Arquivo com NSU existente e conteúdo diferente: não sobrescrever; preservar recuperação.
+- Falha ao persistir envelopes no HANA: os XMLs individuais continuam preservados na pasta X; mensagem amarela alerta que o checkpoint requer reconciliação.
+
+**Observação:** arquivos `resNFe` são resumos XML, não NF-e processada completa. Esta etapa preserva exatamente o XML recebido e identifica o `schema` no ZIP interno. O NexFiscal só consegue gravar um documento completo `procNFe` quando este é efetivamente disponibilizado pela SEFAZ. A escolha da pasta não elimina o mecanismo de espera para evitar `656`.

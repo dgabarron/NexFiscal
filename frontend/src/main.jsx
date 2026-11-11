@@ -17,7 +17,7 @@ const steps=[
 const details=(label,value)=><div className="flex items-start justify-between gap-5 border-b border-slate-100 py-3.5 last:border-0">
   <span className="text-sm text-slate-500">{label}</span><span className="text-right text-sm font-medium text-slate-800 break-words max-w-[65%]">{value||"Não identificado"}</span>
 </div>;
-function Notice({type="info",children}){return <div className={`flex items-start gap-3 rounded-xl border p-3.5 text-sm leading-relaxed ${type==="error"?"bg-red-50 border-red-200 text-red-800":type==="success"?"bg-emerald-50 border-emerald-200 text-emerald-800":"bg-blue-50 border-blue-100 text-blue-800"}`}><span className="mt-0.5">{type==="success"?<CheckCircle2 size={17}/>:<AlertCircle size={17}/>}</span><div>{children}</div></div>}
+function Notice({type="warning",children}){return <div className={`flex items-start gap-3 rounded-xl border p-3.5 text-sm leading-relaxed ${type==="error"?"bg-red-50 border-red-200 text-red-800":type==="success"?"bg-emerald-50 border-emerald-200 text-emerald-800":"bg-amber-50 border-amber-200 text-amber-900"}`}><span className="mt-0.5">{type==="success"?<CheckCircle2 size={17}/>:<AlertCircle size={17}/>}</span><div>{children}</div></div>}
 function Label({children}){return <label className="mb-2 block text-sm font-semibold text-slate-700">{children}</label>}
 
 function App(){
@@ -61,7 +61,7 @@ function App(){
      {server:hana.server,port:Number(hana.port),username:hana.username,password:hana.password});
    setHanaChecked(result.schemaReady);
    setHanaTablesFound(result.tablesFound);
-   if(!result.schemaReady)throw new Error(`Conexão estabelecida. Encontradas ${result.tablesFound} de 5 tabelas BRAI_NEX. Clique em "Preparar estrutura" para criar automaticamente as tabelas ausentes.`);
+   if(!result.schemaReady)throw new Error(`Faltam tabelas no HANA: encontradas ${result.tablesFound} de 5 tabelas BRAI_NEX. Clique em "Preparar estrutura" para criar as tabelas ausentes.`);
    if(save){setHanaReady(true);setHana(x=>({...x,password:""}));setStage(1);setMessage("Conexão HANA validada e salva de forma protegida no servidor.");}
    else setMessage("Conexão estabelecida. Schema BRAI_NEX e cinco tabelas verificados.");
   }catch(e){setError(e.message);}
@@ -106,7 +106,7 @@ function App(){
   try{
     const result=await invoke("/api/capture/test-once",{companyId});
     setCaptureResult(result);
-    setMessage(`Consulta finalizada: SEFAZ ${result.status}. ${result.documentsStored} documento(s) gravado(s).`);
+    if(result.status===656)setError(`SEFAZ ${result.status}: ${result.reason}. Consumo indevido; consulta bloqueada temporariamente.`);else setMessage(`Consulta finalizada: SEFAZ ${result.status}. ${result.documentsStored} documento(s) gravado(s).`);
     await refreshCapture();
   }catch(e){setError(e.message);}finally{setCaptureBusy(false);}
  }
@@ -180,14 +180,14 @@ function App(){
            <div className="grid gap-4 sm:grid-cols-3">
              <div className="rounded-lg bg-slate-50 p-4"><p className="text-xs text-slate-500">XMLs gravados no HANA</p><p className="mt-2 text-2xl font-bold">{company.documentsStored}</p></div>
              <div className="rounded-lg bg-slate-50 p-4"><p className="text-xs text-slate-500">Última tentativa registrada</p><p className="mt-2 text-sm font-semibold">{company.lastConsultationUtc?new Date(company.lastConsultationUtc).toLocaleString("pt-BR"):"Nenhuma"}</p></div>
-             <div className="rounded-lg bg-slate-50 p-4"><p className="text-xs text-slate-500">Certificado A1</p><p className="mt-2 text-sm font-semibold">{company.certificateStored?"Protegido no servidor":"Não encontrado"}</p></div>
+             <div className="rounded-lg bg-slate-50 p-4"><p className="text-xs text-slate-500">Certificado A1</p><p className="mt-2 text-sm font-semibold"><span className={company.certificateStored?"text-emerald-700":"text-amber-800"}>{company.certificateStored?"Protegido no servidor":"Não encontrado"}</span></p></div>
            </div>
            <div className="mt-5 space-y-3 text-sm">
              <div className="flex gap-2 items-center">{company.cursorConfigured?<CheckCircle2 className="text-emerald-600" size={18}/>:<CircleDot className="text-amber-600" size={18}/>} Checkpoint interno de NSU {company.cursorConfigured?"encontrado":"aguardando inicialização segura"}</div>
              <div className="flex gap-2 items-center">{company.enabled?<CheckCircle2 className="text-emerald-600" size={18}/>:<CircleDot className="text-amber-600" size={18}/>} Empresa {company.enabled?"habilitada":"pausada"}</div>
            </div>
            <div className="mt-5"><Notice>{company.reason}</Notice></div>
-           {connectivity[company.companyId]&&<div className="mt-5"><Notice type={connectivity[company.companyId].reachable?"success":"info"}>{connectivity[company.companyId].message}<div className="mt-1 text-xs font-medium">Etapa: {connectivity[company.companyId].stage || "desconhecida"} · Código: {connectivity[company.companyId].code || "indisponível"}{connectivity[company.companyId].httpStatus ? ` · HTTP ${connectivity[company.companyId].httpStatus}` : ""}{connectivity[company.companyId].hresult ? ` · ${connectivity[company.companyId].hresult}` : ""}</div>{connectivity[company.companyId].chainErrors?.length > 0 && <div className="mt-1 text-xs">Cadeia ICP-Brasil: {connectivity[company.companyId].chainErrors.join(", ")}</div>}</Notice></div>}
+           {connectivity[company.companyId]&&<div className="mt-5"><Notice type={connectivity[company.companyId].reachable?"success":"error"}>{connectivity[company.companyId].message}<div className="mt-1 text-xs font-medium">Etapa: {connectivity[company.companyId].stage || "desconhecida"} · Código: {connectivity[company.companyId].code || "indisponível"}{connectivity[company.companyId].httpStatus ? ` · HTTP ${connectivity[company.companyId].httpStatus}` : ""}{connectivity[company.companyId].hresult ? ` · ${connectivity[company.companyId].hresult}` : ""}</div>{connectivity[company.companyId].chainErrors?.length > 0 && <div className="mt-1 text-xs">Cadeia ICP-Brasil: {connectivity[company.companyId].chainErrors.join(", ")}</div>}</Notice></div>}
            <div className="mt-5 flex flex-wrap items-center gap-3">
              <Button variant="outline" disabled={!company.certificateStored||captureBusy} onClick={()=>testConnectivity(company.companyId)}><PlugZap size={17}/>Testar conexão SEFAZ</Button>
              <Button disabled={!company.ready||captureBusy} onClick={()=>testCapture(company.companyId)}>
@@ -198,7 +198,7 @@ function App(){
            </div>
          </CardContent>
        </Card>)}
-       {captureResult&&<Notice type="success">SEFAZ: {captureResult.status} · {captureResult.reason} · XMLs novos: {captureResult.documentsStored}</Notice>}
+       {captureResult&&<Notice type={captureResult.status===656?"error":captureResult.status===137?"warning":"success"}>SEFAZ: {captureResult.status} · {captureResult.reason} · XMLs novos: {captureResult.documentsStored}</Notice>}
        <Notice>O NexFiscal não inicia consultas sem checkpoint autorizado e confirmação de exclusividade do consumidor. Isso evita interferência na captura do sistema fiscal atual e bloqueios por consumo indevido.</Notice>
      </div>}
      <div className="mt-10 text-xs text-slate-400">NexFiscal · Microsoft .NET 8 + React + Tailwind CSS · Configuração local</div>

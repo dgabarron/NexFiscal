@@ -25,13 +25,14 @@ function App(){
  const [hanaReady,setHanaReady]=useState(false);
  const [hana,setHana]=useState({server:"",port:"30015",username:"",password:""});
  const [hanaChecked,setHanaChecked]=useState(false);
+ const [hanaTablesFound,setHanaTablesFound]=useState(null);
  const [showPassword,setShowPassword]=useState(false);
  const [file,setFile]=useState(null),[password,setPassword]=useState("");
  const [identity,setIdentity]=useState(null),[registered,setRegistered]=useState(null);
  const [busy,setBusy]=useState(false),[error,setError]=useState(""),[message,setMessage]=useState("");
  useEffect(()=>{fetch("/api/health").then(r=>r.json()).then(x=>{if(x.hanaConfigured){setHanaReady(true);setStage(1)}}).catch(()=>{});},[]);
  function navigate(n){if(n===0||n===1&&hanaReady||n===2&&registered){setStage(n);setError("");setMessage("");}}
- function setH(field,value){setHana(x=>({...x,[field]:value}));setHanaChecked(false);setMessage("");setError("");}
+ function setH(field,value){setHana(x=>({...x,[field]:value}));setHanaChecked(false);setHanaTablesFound(null);setMessage("");setError("");}
  async function invoke(path,data){
    const resp=await fetch(path,{method:"POST",headers:data instanceof FormData?undefined:{"Content-Type":"application/json"},body:data instanceof FormData?data:JSON.stringify(data)});
    const result=await resp.json().catch(()=>({}));
@@ -44,18 +45,30 @@ function App(){
    const result=await invoke(save?"/api/setup/hana/save":"/api/setup/hana/test",
      {server:hana.server,port:Number(hana.port),username:hana.username,password:hana.password});
    setHanaChecked(result.schemaReady);
-   if(!result.schemaReady)throw new Error(`HANA conectado, mas foram encontradas apenas ${result.tablesFound} de 5 tabelas BRAI_NEX. Execute a migração antes de continuar.`);
+   setHanaTablesFound(result.tablesFound);
+   if(!result.schemaReady)throw new Error(`Conexão estabelecida. Encontradas ${result.tablesFound} de 5 tabelas BRAI_NEX. Clique em "Preparar estrutura" para criar automaticamente as tabelas ausentes.`);
    if(save){setHanaReady(true);setHana(x=>({...x,password:""}));setStage(1);setMessage("Conexão HANA validada e salva de forma protegida no servidor.");}
    else setMessage("Conexão estabelecida. Schema BRAI_NEX e cinco tabelas verificados.");
   }catch(e){setError(e.message);}
   finally{setBusy(false);}
+ }
+ async function provisionHana(){
+   setBusy(true);setError("");setMessage("");
+   try{
+     const result=await invoke("/api/setup/hana/provision",
+       {server:hana.server,port:Number(hana.port),username:hana.username,password:hana.password});
+     setHanaTablesFound(result.tablesFound);
+     setHanaChecked(result.schemaReady);
+     if(!result.schemaReady)throw new Error("Instalação incompleta. Consulte o administrador do HANA.");
+     setMessage("Estrutura BRAI_NEX preparada e validada. Clique em Salvar e continuar.");
+   }catch(e){setError(e.message);}finally{setBusy(false);}
  }
  function certPayload(){const d=new FormData();d.append("certificate",file);d.append("password",password);return d;}
  async function inspect(register=false){
   setBusy(true);setError("");setMessage("");
   try{
    const result=await invoke(register?"/api/companies/register":"/api/certificates/inspect",certPayload());
-   if(register){setRegistered(result);setStage(2);setMessage("Empresa cadastrada. A captura fiscal permanece pausada até a inicialização segura da SEFAZ.");}
+   if(register){setRegistered(result);setPassword("");setFile(null);setStage(2);setMessage("Empresa cadastrada e certificado A1 armazenado de forma protegida. A captura permanece pausada até a inicialização segura da SEFAZ.");}
    else setIdentity(result);
   }catch(e){setError(e.message);}finally{setBusy(false);}
  }
@@ -97,14 +110,15 @@ function App(){
          <div><Label>Senha do usuário</Label><div className="relative"><Input type={showPassword?"text":"password"} autoComplete="new-password" value={hana.password} onChange={e=>setH("password",e.target.value)} className="pr-12"/><button type="button" onClick={()=>setShowPassword(!showPassword)} className="absolute right-3 top-3 text-slate-400" aria-label="Mostrar senha">{showPassword?<EyeOff size={18}/>:<Eye size={18}/>}</button></div></div></div>
         <div className="mt-7 flex flex-wrap gap-3 border-t border-slate-100 pt-6">
          <Button disabled={busy||!hana.server||!hana.username||!hana.password} variant="outline" onClick={()=>checkHana(false)}><PlugZap size={17}/>{busy?"Conectando...":"Testar conexão"}</Button>
+         {hanaTablesFound!==null&&!hanaChecked&&<Button disabled={busy} variant="outline" onClick={provisionHana}><Database size={17}/>Preparar estrutura automaticamente</Button>}
          <Button disabled={busy||!hanaChecked} onClick={()=>checkHana(true)}><ShieldCheck size={17}/>Salvar e continuar<ArrowRight size={17}/></Button>
         </div></CardContent>
        </Card>
-       <div className="space-y-5"><Card><CardHeader><h2 className="font-bold text-[16px]">Validação da estrutura</h2></CardHeader><CardContent><div className="flex gap-3 rounded-xl bg-slate-50 p-4"><Database className="shrink-0 text-blue-600" size={20}/><div><p className="font-semibold text-sm">Schema BRAI_NEX</p><p className="text-xs text-slate-500 mt-1 leading-5">A aplicação verificará as cinco tabelas necessárias antes de permitir o cadastro.</p></div></div><div className="mt-5 flex items-center gap-2 text-sm font-medium">{hanaChecked?<CheckCircle2 size={17} className="text-emerald-500"/>:<CircleDot size={17} className="text-slate-400"/>}{hanaChecked?"Estrutura validada":"Aguardando teste da conexão"}</div></CardContent></Card>
+       <div className="space-y-5"><Card><CardHeader><h2 className="font-bold text-[16px]">Validação da estrutura</h2></CardHeader><CardContent><div className="flex gap-3 rounded-xl bg-slate-50 p-4"><Database className="shrink-0 text-blue-600" size={20}/><div><p className="font-semibold text-sm">Schema BRAI_NEX</p><p className="text-xs text-slate-500 mt-1 leading-5">O instalador verifica as cinco tabelas, cria as ausentes quando autorizado e preserva os dados existentes.</p></div></div><div className="mt-5 flex items-center gap-2 text-sm font-medium">{hanaChecked?<CheckCircle2 size={17} className="text-emerald-500"/>:<CircleDot size={17} className="text-slate-400"/>}{hanaChecked?"Estrutura validada":hanaTablesFound!==null?`${hanaTablesFound} de 5 tabelas encontradas`:"Aguardando teste da conexão"}</div></CardContent></Card>
         <Notice>As credenciais serão guardadas protegidas no servidor, não no navegador. Mantenha o diretório da aplicação e suas chaves com acesso restrito.</Notice></div>
       </div>}
      {stage===1&&<div className="grid gap-6 xl:grid-cols-[minmax(0,1.6fr)_minmax(280px,0.85fr)]"><Card><CardHeader><div className="flex items-center gap-3"><div className="p-3 bg-blue-50 rounded-xl text-blue-600"><ShieldCheck size={24}/></div><div><h2 className="text-lg font-bold">Certificado digital A1</h2><p className="text-sm text-slate-500 mt-1">Identificação automática da empresa</p></div></div></CardHeader><CardContent>
-       <div className="rounded-xl border-2 border-dashed border-slate-200 bg-slate-50 p-6 text-center"><CloudUpload className="mx-auto text-blue-500" size={30}/><p className="mt-3 font-semibold text-sm">{file?file.name:"Selecione um arquivo .pfx ou .p12"}</p><p className="text-xs text-slate-400 mt-1">O arquivo é processado localmente pelo serviço.</p><label className="inline-flex mt-4 cursor-pointer items-center rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"><input type="file" accept=".pfx,.p12" className="sr-only" onChange={e=>{setFile(e.target.files?.[0]||null);setIdentity(null);setRegistered(null)}}/>Selecionar certificado</label></div>
+       <div className="rounded-xl border-2 border-dashed border-slate-200 bg-slate-50 p-6 text-center"><CloudUpload className="mx-auto text-blue-500" size={30}/><p className="mt-3 font-semibold text-sm">{file?file.name:"Selecione um arquivo .pfx ou .p12"}</p><p className="text-xs text-slate-400 mt-1">O certificado será criptografado e armazenado no servidor após o cadastro.</p><label className="inline-flex mt-4 cursor-pointer items-center rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"><input type="file" accept=".pfx,.p12" className="sr-only" onChange={e=>{setFile(e.target.files?.[0]||null);setIdentity(null);setRegistered(null)}}/>Selecionar certificado</label></div>
        <div className="mt-5"><Label>Senha do certificado</Label><Input type="password" autoComplete="off" value={password} onChange={e=>{setPassword(e.target.value);setIdentity(null);setRegistered(null)}} placeholder="Digite a senha do A1"/></div>
        <div className="flex gap-3 mt-6"><Button disabled={busy||!file||!password} onClick={()=>inspect(false)}>{busy?<RefreshCw size={17}/>:<BadgeCheck size={17}/>}Validar certificado</Button></div>
        {identity&&<div className="mt-7 border-t border-slate-100 pt-6"><h3 className="flex gap-2 font-bold text-slate-800"><CheckCircle2 size={19} className="text-emerald-500"/>Dados identificados</h3><div className="mt-4">{details("Razão social",identity.legalName)}{details("CNPJ",formatCnpj(identity.cnpj))}{details("UF",identity.state||"Não informada no Subject")}{details("Validade",new Date(identity.validUntil).toLocaleDateString("pt-BR"))}{details("Autoridade certificadora",issuerDisplayName(identity.issuer))}</div>
@@ -112,7 +126,7 @@ function App(){
         <Button className="mt-6" disabled={busy||!hanaReady} onClick={()=>inspect(true)}>Cadastrar empresa<ArrowRight size={17}/></Button>
        </div>}
       </CardContent></Card><div className="space-y-5"><Card><CardHeader><h2 className="font-bold">Infraestrutura conectada</h2></CardHeader><CardContent><div className="flex items-center gap-2 text-sm"><CheckCircle2 size={18} className="text-emerald-500"/>Banco SAP HANA configurado</div><div className="mt-4 flex items-center gap-2 text-sm text-slate-500"><ShieldCheck size={18}/>Controle interno de NSU</div><p className="mt-3 text-xs text-slate-500 leading-5">O NSU não é solicitado ao usuário. A captura começa somente após uma inicialização fiscal segura.</p></CardContent></Card></div></div>}
-     {stage===2&&<div className="grid gap-6 lg:grid-cols-3"><Card className="lg:col-span-2"><CardHeader><h2 className="text-lg font-bold">Situação da operação</h2><p className="mt-1 text-sm text-slate-500">Acompanhamento da preparação do motor fiscal</p></CardHeader><CardContent><div className="rounded-xl border border-amber-200 bg-amber-50 px-5 py-6"><div className="flex items-center gap-3 font-bold text-amber-900"><Activity size={22}/>Captura aguardando habilitação</div><p className="mt-3 text-sm leading-6 text-amber-800">Cadastro concluído no HANA. A consulta real à SEFAZ e a gestão protegida do certificado ainda serão implementadas. Nenhum documento está sendo capturado neste momento.</p></div></CardContent></Card>
+     {stage===2&&<div className="grid gap-6 lg:grid-cols-3"><Card className="lg:col-span-2"><CardHeader><h2 className="text-lg font-bold">Situação da operação</h2><p className="mt-1 text-sm text-slate-500">Acompanhamento da preparação do motor fiscal</p></CardHeader><CardContent><div className="rounded-xl border border-amber-200 bg-amber-50 px-5 py-6"><div className="flex items-center gap-3 font-bold text-amber-900"><Activity size={22}/>Captura aguardando habilitação</div><p className="mt-3 text-sm leading-6 text-amber-800">Cadastro concluído no HANA e certificado A1 armazenado de forma protegida. A consulta real à SEFAZ ainda será implementada. Nenhum documento está sendo capturado neste momento.</p></div></CardContent></Card>
        <Card><CardHeader><h2 className="font-bold">Preparação</h2></CardHeader><CardContent><div className="space-y-5 text-sm"><div className="flex gap-2"><CheckCircle2 className="text-emerald-500" size={18}/>Conexão SAP HANA</div><div className="flex gap-2"><CheckCircle2 className="text-emerald-500" size={18}/>Cadastro da empresa</div><div className="flex gap-2 text-slate-500"><CircleDot size={18}/>Distribuição SEFAZ</div><div className="flex gap-2 text-slate-500"><CircleDot size={18}/>Monitoramento de XML</div></div></CardContent></Card>
       </div>}
      <div className="mt-10 text-xs text-slate-400">NexFiscal · Microsoft .NET 8 + React + Tailwind CSS · Configuração local</div>

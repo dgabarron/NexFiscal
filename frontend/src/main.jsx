@@ -249,6 +249,22 @@ function App(){
                  <p className={`mt-2 text-sm font-semibold ${cooldown?"text-amber-800":"text-emerald-800"}`}>{cooldown?`Após ${cooldown.time} (${cooldown.minutes} min)`:company.certificateStored?"Disponível agora":"Aguardando certificado"}</p>
                </div>
              </div>
+             <div className="mt-4 rounded-lg border border-slate-200 p-4">
+               <h4 className="font-semibold text-sm text-slate-800">Controle de NSU (consulta local, sem acessar a SEFAZ)</h4>
+               <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                 <div>
+                   <p className="text-xs text-slate-500">NF-e · Último NSU persistido</p>
+                   <p className="font-mono text-sm font-semibold">{company.lastNsu||"Não inicializado"}</p>
+                   <p className="mt-1 text-xs text-slate-500">Maior NSU informado: {company.maxNsu||"Ainda não armazenado"}</p>
+                 </div>
+                 <div>
+                   <p className="text-xs text-slate-500">CT-e · Último NSU persistido</p>
+                   <p className="font-mono text-sm font-semibold">{cteStates[company.companyId]?.lastNsu||"Não inicializado"}</p>
+                   <p className="mt-1 text-xs text-slate-500">Maior NSU informado: {cteStates[company.companyId]?.maxNsu||"Ainda não informado"}</p>
+                 </div>
+               </div>
+               <p className="mt-3 text-xs text-slate-500">Estes valores não consultam a SEFAZ. O NSU da NF-e e o do CT-e são sequências independentes. Não altere os valores manualmente.</p>
+             </div>
              {!company.certificateStored&&<div className="mt-4"><Notice>O certificado digital A1 não está disponível no servidor.</Notice></div>}
              {cooldown&&<div className="mt-4"><Notice>A última tentativa foi registrada. O sistema aguardará o horário permitido antes de enviar outra consulta à SEFAZ. Não é necessário alterar NSU ou banco.</Notice></div>}
              {connected&&<div className="mt-4"><Notice type={connected.reachable?"success":"error"}>

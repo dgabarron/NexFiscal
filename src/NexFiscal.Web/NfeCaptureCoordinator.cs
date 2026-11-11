@@ -55,46 +55,102 @@ public sealed class NfeCaptureCoordinator(
     {
         if (!Guid.TryParse(companyId, out _))
             throw new ArgumentException("Empresa inválida.");
-        var company = (await ReadCompaniesAsync(ct)).SingleOrDefault(x => x.Id == companyId)
-            ?? throw new InvalidOperationException("Empresa não localizada.");
-        if (!vault.IsStored(companyId))
-            throw new InvalidOperationException("Certificado A1 não encontrado.");
 
-        var (pfx, password) = await vault.ReadAsync(companyId, ct);
+        // Retornar etapa e categoria, nunca mensagens técnicas que possam
+        // conter nomes de arquivos, dados do certificado ou credenciais.
+        string stage = "consulta_empresa_hana";
         try
         {
-            using var certificate = new X509Certificate2(pfx, password, X509KeyStorageFlags.EphemeralKeySet);
-            using var chain = new X509Chain();
-            chain.ChainPolicy.RevocationMode = X509RevocationMode.Online;
-            chain.ChainPolicy.RevocationFlag = X509RevocationFlag.ExcludeRoot;
-            chain.ChainPolicy.UrlRetrievalTimeout = TimeSpan.FromSeconds(15);
-            var chainOk = chain.Build(certificate);
-            if (!chainOk)
+            var company = (await ReadCompaniesAsync(ct)).SingleOrDefault(x => x.Id == companyId)
+                ?? throw new InvalidOperationException("Empresa não localizada.");
+            stage = "cofre_a1";
+            if (!vault.IsStored(companyId))
                 return new { reachable = false, certificateValid = false,
-                    message = "Não foi possível validar a cadeia ou revogação do certificado A1. Confira os certificados ICP-Brasil no Windows." };
+                    stage, code = "A1_NOT_FOUND", message = "Certificado A1 não encontrado no cofre." };
 
-            using var handler = new HttpClientHandler
+            var (pfx, password) = await vault.ReadAsync(companyId, ct);
+            try
             {
-                ClientCertificateOptions = ClientCertificateOption.Manual,
-                CheckCertificateRevocationList = true,
-                AllowAutoRedirect = false
+                stage = "abertura_a1";
+                using var certificate = new X509Certificate2(pfx, password, X509KeyStorageFlags.EphemeralKeySet);
+                if (!certificate.HasPrivateKey)
+                    return new { reachable = false, certificateValid = false, stage,
+                        code = "A1_NO_PRIVATE_KEY", message = "Certificado A1 sem chave privada." };
+                var now = DateTime.UtcNow;
+                if (now < certificate.NotBefore.ToUniversalTime() || now >= certificate.NotAfter.ToUniversalTime())
+                    return new { reachable = false, certificateValid = false, stage,
+                        code = "A1_EXPIRED", message = "Certificado A1 fora do prazo de validade." };
+
+                stage = "validacao_cadeia_a1";
+                using var chain = new X509Chain();
+                chain.ChainPolicy.RevocationMode = X509RevocationMode.Online;
+                chain.ChainPolicy.RevocationFlag = X509RevocationFlag.ExcludeRoot;
+                chain.ChainPolicy.VerificationFlags = X509VerificationFlags.NoFlag;
+                chain.ChainPolicy.UrlRetrievalTimeout = TimeSpan.FromSeconds(15);
+                if (!chain.Build(certificate))
+                    return new
+                    {
+                        reachable = false, certificateValid = false, stage,
+                        code = "A1_CHAIN_REJECTED",
+                        chainErrors = chain.ChainStatus.Select(s => s.Status.ToString()).Distinct().ToArray(),
+                        message = "Falha na validação ICP-Brasil. Confira a cadeia de confiança, CRL/OCSP e acesso à Internet no servidor."
+                    };
+
+                stage = "https_sefaz";
+                using var handler = new HttpClientHandler
+                {
+                    ClientCertificateOptions = ClientCertificateOption.Manual,
+                    CheckCertificateRevocationList = true,
+                    AllowAutoRedirect = false
+                };
+                handler.ClientCertificates.Add(certificate);
+                using var http = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(25) };
+                using var request = new HttpRequestMessage(HttpMethod.Get,
+                    new Uri(NfeDistributionClient.ProductionUrl + "?WSDL"));
+                using var response = await http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct);
+                return new
+                {
+                    reachable = response.IsSuccessStatusCode,
+                    certificateValid = true, stage,
+                    code = response.IsSuccessStatusCode ? "HTTPS_OK" : "HTTP_NON_SUCCESS",
+                    httpStatus = (int)response.StatusCode,
+                    message = response.IsSuccessStatusCode
+                        ? "Conexão HTTPS SEFAZ estabelecida. Isso não confirma autorização para distribuição NF-e."
+                        : "A SEFAZ respondeu ao HTTPS, mas não retornou sucesso para o WSDL."
+                };
+            }
+            finally { CryptographicOperations.ZeroMemory(pfx); }
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+        catch (Exception ex)
+        {
+            // HResult e tipo são limitados a metadados de diagnóstico.
+            // Nunca enviar ex.Message/StackTrace ao navegador.
+            var code = ex switch
+            {
+                System.Security.Cryptography.CryptographicException => "CRYPTO_ERROR",
+                HttpRequestException => "HTTP_TRANSPORT_ERROR",
+                TaskCanceledException => "HTTP_TIMEOUT",
+                IOException => "IO_ERROR",
+                InvalidOperationException => "INVALID_OPERATION",
+                _ => "UNEXPECTED_ERROR"
             };
-            handler.ClientCertificates.Add(certificate);
-            using var http = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(25) };
-            using var request = new HttpRequestMessage(HttpMethod.Get,
-                new Uri(NfeDistributionClient.ProductionUrl + "?WSDL"));
-            using var response = await http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct);
             return new
             {
-                reachable = response.IsSuccessStatusCode,
-                certificateValid = true,
-                httpStatus = (int)response.StatusCode,
-                message = response.IsSuccessStatusCode
-                    ? "Conectividade HTTPS com a SEFAZ validada. A autorização para distribuir NF-e ainda não foi confirmada."
-                    : "Servidor respondeu ao teste HTTPS, mas não confirmou o WSDL. Verifique o acesso à SEFAZ."
+                reachable = false, certificateValid = false, stage, code,
+                exceptionType = ex.GetType().Name,
+                hresult = $"0x{ex.HResult:X8}",
+                message = stage switch
+                {
+                    "consulta_empresa_hana" => "Erro ao consultar o cadastro no HANA.",
+                    "cofre_a1" => "Não foi possível ler ou descriptografar o certificado A1 armazenado.",
+                    "abertura_a1" => "Não foi possível abrir o certificado A1 protegido.",
+                    "validacao_cadeia_a1" => "Erro durante a validação da cadeia do certificado.",
+                    "https_sefaz" => "Não foi possível completar a comunicação HTTPS com a SEFAZ.",
+                    _ => "Falha no diagnóstico de conectividade."
+                }
             };
         }
-        finally { CryptographicOperations.ZeroMemory(pfx); }
     }
 
     public async Task<object> TestOnceAsync(string companyId, CancellationToken ct)

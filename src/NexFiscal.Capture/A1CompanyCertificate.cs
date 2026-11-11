@@ -61,6 +61,11 @@ public static class A1CompanyCertificate
             cert.Issuer, cert.Thumbprint, true);
     }
 
+    /// <summary>
+    /// Lê exclusivamente o estado do titular (OID 2.5.4.8), sem inferir pelo CNPJ.
+    /// </summary>
+    public static string? GetSubjectState(X509Certificate2 certificate) => ReadSubjectState(certificate);
+
     private static string? ReadSubjectState(X509Certificate2 cert)
     {
         // Em X500Name formatado pelo Windows, o atributo 2.5.4.8 pode

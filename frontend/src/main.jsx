@@ -30,7 +30,21 @@ function App(){
  const [file,setFile]=useState(null),[password,setPassword]=useState("");
  const [identity,setIdentity]=useState(null),[registered,setRegistered]=useState(null);
  const [busy,setBusy]=useState(false),[error,setError]=useState(""),[message,setMessage]=useState("");
- useEffect(()=>{fetch("/api/health").then(r=>r.json()).then(x=>{if(x.hanaConfigured){setHanaReady(true);setStage(1)}}).catch(()=>{});},[]);
+ const [captureState,setCaptureState]=useState(null),[captureBusy,setCaptureBusy]=useState(false);
+ const [captureResult,setCaptureResult]=useState(null);
+ useEffect(()=>{fetch("/api/health").then(r=>r.json()).then(async x=>{
+    if(!x.hanaConfigured)return;
+    setHanaReady(true);
+    try{
+      const resp=await fetch("/api/capture/status");
+      if(resp.ok){
+        const state=await resp.json();
+        setCaptureState(state);
+        if(state.companies?.length){setRegistered({companyId:state.companies[0].companyId});setStage(2);}
+        else setStage(1);
+      }else setStage(1);
+    }catch{setStage(1);}
+  }).catch(()=>{});},[]);
  function navigate(n){if(n===0||n===1&&hanaReady||n===2&&registered){setStage(n);setError("");setMessage("");}}
  function setH(field,value){setHana(x=>({...x,[field]:value}));setHanaChecked(false);setHanaTablesFound(null);setMessage("");setError("");}
  async function invoke(path,data){
@@ -68,9 +82,25 @@ function App(){
   setBusy(true);setError("");setMessage("");
   try{
    const result=await invoke(register?"/api/companies/register":"/api/certificates/inspect",certPayload());
-   if(register){setRegistered(result);setPassword("");setFile(null);setStage(2);setMessage("Empresa cadastrada e certificado A1 armazenado de forma protegida. A captura permanece pausada até a inicialização segura da SEFAZ.");}
+   if(register){setRegistered(result);setPassword("");setFile(null);setStage(2);await refreshCapture();setMessage("Empresa cadastrada e certificado A1 armazenado de forma protegida. A captura permanece pausada até a inicialização segura da SEFAZ.");}
    else setIdentity(result);
   }catch(e){setError(e.message);}finally{setBusy(false);}
+ }
+ async function refreshCapture(){
+  try{
+    const resp=await fetch("/api/capture/status");
+    if(!resp.ok)throw new Error("Falha ao consultar HANA.");
+    setCaptureState(await resp.json());
+  }catch(e){setError(e.message);}
+ }
+ async function testCapture(companyId){
+  setCaptureBusy(true);setError("");setMessage("");setCaptureResult(null);
+  try{
+    const result=await invoke("/api/capture/test-once",{companyId});
+    setCaptureResult(result);
+    setMessage(`Consulta finalizada: SEFAZ ${result.status}. ${result.documentsStored} documento(s) gravado(s).`);
+    await refreshCapture();
+  }catch(e){setError(e.message);}finally{setCaptureBusy(false);}
  }
  const current=steps[stage];
  return <div className="min-h-screen bg-[#f5f7fb] text-[#13223d]">
@@ -126,9 +156,41 @@ function App(){
         <Button className="mt-6" disabled={busy||!hanaReady} onClick={()=>inspect(true)}>Cadastrar empresa<ArrowRight size={17}/></Button>
        </div>}
       </CardContent></Card><div className="space-y-5"><Card><CardHeader><h2 className="font-bold">Infraestrutura conectada</h2></CardHeader><CardContent><div className="flex items-center gap-2 text-sm"><CheckCircle2 size={18} className="text-emerald-500"/>Banco SAP HANA configurado</div><div className="mt-4 flex items-center gap-2 text-sm text-slate-500"><ShieldCheck size={18}/>Controle interno de NSU</div><p className="mt-3 text-xs text-slate-500 leading-5">O NSU não é solicitado ao usuário. A captura começa somente após uma inicialização fiscal segura.</p></CardContent></Card></div></div>}
-     {stage===2&&<div className="grid gap-6 lg:grid-cols-3"><Card className="lg:col-span-2"><CardHeader><h2 className="text-lg font-bold">Situação da operação</h2><p className="mt-1 text-sm text-slate-500">Acompanhamento da preparação do motor fiscal</p></CardHeader><CardContent><div className="rounded-xl border border-amber-200 bg-amber-50 px-5 py-6"><div className="flex items-center gap-3 font-bold text-amber-900"><Activity size={22}/>Captura aguardando habilitação</div><p className="mt-3 text-sm leading-6 text-amber-800">Cadastro concluído no HANA e certificado A1 armazenado de forma protegida. A consulta real à SEFAZ ainda será implementada. Nenhum documento está sendo capturado neste momento.</p></div></CardContent></Card>
-       <Card><CardHeader><h2 className="font-bold">Preparação</h2></CardHeader><CardContent><div className="space-y-5 text-sm"><div className="flex gap-2"><CheckCircle2 className="text-emerald-500" size={18}/>Conexão SAP HANA</div><div className="flex gap-2"><CheckCircle2 className="text-emerald-500" size={18}/>Cadastro da empresa</div><div className="flex gap-2 text-slate-500"><CircleDot size={18}/>Distribuição SEFAZ</div><div className="flex gap-2 text-slate-500"><CircleDot size={18}/>Monitoramento de XML</div></div></CardContent></Card>
-      </div>}
+     {stage===2&&<div className="space-y-6">
+       <div className="flex flex-wrap items-center justify-between gap-4">
+         <div><h2 className="text-lg font-bold">Distribuição de NF-e</h2><p className="mt-1 text-sm text-slate-500">Verificação do ambiente antes da primeira consulta real à SEFAZ Nacional.</p></div>
+         <Button variant="outline" onClick={refreshCapture} disabled={captureBusy}><RefreshCw size={17}/>Atualizar situação</Button>
+       </div>
+       {!captureState&&<Notice>Consulte a situação do HANA para verificar as empresas cadastradas.</Notice>}
+       {captureState?.companies?.length===0&&<Notice>Não há empresa cadastrada. Volte à etapa de certificado para iniciar o cadastro.</Notice>}
+       {captureState?.companies?.map(company=><Card key={company.companyId}>
+         <CardHeader><div className="flex flex-wrap justify-between gap-3">
+           <div><h3 className="font-bold text-lg">{company.legalName}</h3><p className="text-sm text-slate-500 mt-1">CNPJ {formatCnpj(company.cnpj)}</p></div>
+           <span className={`rounded-full px-3 py-1.5 text-xs font-semibold ${company.ready?"bg-emerald-50 text-emerald-700":"bg-amber-50 text-amber-800"}`}>{company.ready?"Apto para teste controlado":"Consulta bloqueada"}</span>
+         </div></CardHeader>
+         <CardContent>
+           <div className="grid gap-4 sm:grid-cols-3">
+             <div className="rounded-lg bg-slate-50 p-4"><p className="text-xs text-slate-500">XMLs gravados no HANA</p><p className="mt-2 text-2xl font-bold">{company.documentsStored}</p></div>
+             <div className="rounded-lg bg-slate-50 p-4"><p className="text-xs text-slate-500">Última tentativa registrada</p><p className="mt-2 text-sm font-semibold">{company.lastConsultationUtc?new Date(company.lastConsultationUtc).toLocaleString("pt-BR"):"Nenhuma"}</p></div>
+             <div className="rounded-lg bg-slate-50 p-4"><p className="text-xs text-slate-500">Certificado A1</p><p className="mt-2 text-sm font-semibold">{company.certificateStored?"Protegido no servidor":"Não encontrado"}</p></div>
+           </div>
+           <div className="mt-5 space-y-3 text-sm">
+             <div className="flex gap-2 items-center">{company.cursorConfigured?<CheckCircle2 className="text-emerald-600" size={18}/>:<CircleDot className="text-amber-600" size={18}/>} Checkpoint interno de NSU {company.cursorConfigured?"encontrado":"aguardando inicialização segura"}</div>
+             <div className="flex gap-2 items-center">{company.enabled?<CheckCircle2 className="text-emerald-600" size={18}/>:<CircleDot className="text-amber-600" size={18}/>} Empresa {company.enabled?"habilitada":"pausada"}</div>
+           </div>
+           <div className="mt-5"><Notice>{company.reason}</Notice></div>
+           <div className="mt-5 flex flex-wrap items-center gap-3">
+             <Button disabled={!company.ready||captureBusy} onClick={()=>testCapture(company.companyId)}>
+               {captureBusy?<RefreshCw size={17}/>:<PlugZap size={17}/>}
+               {captureBusy?"Consultando...":"Testar consulta real"}
+             </Button>
+             <span className="text-xs text-slate-500">Consulta única, sem agendamento automático</span>
+           </div>
+         </CardContent>
+       </Card>)}
+       {captureResult&&<Notice type="success">SEFAZ: {captureResult.status} · {captureResult.reason} · XMLs novos: {captureResult.documentsStored}</Notice>}
+       <Notice>O NexFiscal não inicia consultas sem checkpoint autorizado e confirmação de exclusividade do consumidor. Isso evita interferência na captura do sistema fiscal atual e bloqueios por consumo indevido.</Notice>
+     </div>}
      <div className="mt-10 text-xs text-slate-400">NexFiscal · Microsoft .NET 8 + React + Tailwind CSS · Configuração local</div>
     </main>
    </div>

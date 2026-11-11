@@ -18,6 +18,24 @@ public sealed class NfeDistributionClientTests
     }
 
     [Fact]
+    public void Request_UfCode91_IsRejectedBeforeSendingToSefaz()
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            NfeDistributionClient.BuildRequest("11222333000181", 0, 1, 91));
+    }
+
+    [Fact]
+    public void Request_ValidStateUfAndOptionalUf_AreSchemaCompatible()
+    {
+        var withUf = NfeDistributionClient.BuildRequest("11222333000181", 0, 1, 35);
+        var withoutUf = NfeDistributionClient.BuildRequest("11222333000181", 0, 1);
+        Assert.Contains("cUFAutor", withUf);
+        Assert.Contains(">35</", withUf);
+        Assert.DoesNotContain("cUFAutor", withoutUf);
+        Assert.Contains("000000000000000", withoutUf);
+    }
+
+    [Fact]
     public void Response_137_ReturnsNoDocuments()
     {
         var response = Wrap("<cStat>137</cStat><xMotivo>Nenhum documento localizado</xMotivo><ultNSU>000000000183248</ultNSU><maxNSU>000000000183248</maxNSU>");

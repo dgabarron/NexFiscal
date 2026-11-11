@@ -6,7 +6,7 @@ using System.Xml.Linq;
 
 namespace NexFiscal.Capture;
 
-public sealed record NfeEnvelope(long Nsu, string Schema, string Xml, string Sha256);
+public sealed record NfeEnvelope(long Nsu, string Schema, string Xml, string Sha256, byte[] RawXml);
 public sealed record NfeBatch(int Status, long LastNsu, long MaxNsu, IReadOnlyList<NfeEnvelope> Documents, string? Reason);
 public sealed record NfeCheckpoint(string Cnpj, int Environment, long LastNsu, DateTimeOffset NextAllowedAt);
 
@@ -62,7 +62,7 @@ public static class NfeDistribution
             var content = new UTF8Encoding(false, true).GetString(raw);
             ValidateXml(content);
             var hash = Convert.ToHexString(SHA256.HashData(raw));
-            documents.Add(new NfeEnvelope(nsu, schema, content, hash));
+            documents.Add(new NfeEnvelope(nsu, schema, content, hash, raw));
         }
 
         if (documents.GroupBy(d => d.Nsu).Any(g => g.Count() > 1))

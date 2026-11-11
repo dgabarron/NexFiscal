@@ -33,6 +33,7 @@ function App(){
  const [captureState,setCaptureState]=useState(null),[captureBusy,setCaptureBusy]=useState(false);
  const [captureResult,setCaptureResult]=useState(null);
  const [connectivity,setConnectivity]=useState({});
+ const [handoffs,setHandoffs]=useState({});
  useEffect(()=>{fetch("/api/health").then(r=>r.json()).then(async x=>{
     if(!x.hanaConfigured)return;
     setHanaReady(true);
@@ -93,6 +94,26 @@ function App(){
     if(!resp.ok)throw new Error("Falha ao consultar HANA.");
     setCaptureState(await resp.json());
   }catch(e){setError(e.message);}
+ }
+ function updateHandoff(companyId,field,value){
+   setHandoffs(prev=>({...prev,[companyId]:{...prev[companyId],[field]:value}}));
+ }
+ async function prepareHandoff(company){
+   const h=handoffs[company.companyId]||{};
+   setCaptureBusy(true);setError("");setMessage("");
+   try{
+     const result=await invoke("/api/capture/prepare-handoff",{
+       companyId:company.companyId,
+       lastNsu:(h.lastNsu||"").trim(),
+       sourceSystem:(h.sourceSystem||"").trim(),
+       lastSuccessfulQueryUtc:h.lastSuccessfulQueryUtc?new Date(h.lastSuccessfulQueryUtc).toISOString():"",
+       confirmCnpj:(h.confirmCnpj||"").replace(/\\D/g,""),
+       previousConsumerStopped:!!h.previousConsumerStopped,
+       checkpointVerified:!!h.checkpointVerified
+     });
+     setMessage(result.message);
+     await refreshCapture();
+   }catch(e){setError(e.message);}finally{setCaptureBusy(false);}
  }
  async function testConnectivity(companyId){
   setCaptureBusy(true);setError("");setMessage("");
@@ -187,6 +208,21 @@ function App(){
              <div className="flex gap-2 items-center">{company.enabled?<CheckCircle2 className="text-emerald-600" size={18}/>:<CircleDot className="text-amber-600" size={18}/>} Empresa {company.enabled?"habilitada":"pausada"}</div>
            </div>
            <div className="mt-5"><Notice>{company.reason}</Notice></div>
+           {!company.cursorConfigured&&<div className="mt-6 rounded-xl border border-amber-200 bg-amber-50/40 p-5 space-y-4">
+             <h4 className="font-bold text-amber-950">Preparar transferência do NSU</h4>
+             <p className="text-sm text-amber-900">Use somente os dados confirmados pelo sistema fiscal atual. Este procedimento grava o checkpoint no HANA e mantém a captura pausada. Não consulta a SEFAZ.</p>
+             <div className="grid sm:grid-cols-2 gap-4">
+               <div><Label>Sistema atual de captura</Label><Input placeholder="Nome do fornecedor / sistema" value={handoffs[company.companyId]?.sourceSystem||""} onChange={e=>updateHandoff(company.companyId,"sourceSystem",e.target.value)}/></div>
+               <div><Label>Último NSU confirmado (15 dígitos)</Label><Input inputMode="numeric" maxLength={15} placeholder="000000000000000" value={handoffs[company.companyId]?.lastNsu||""} onChange={e=>updateHandoff(company.companyId,"lastNsu",e.target.value.replace(/\\D/g,"").slice(0,15))}/></div>
+               <div><Label>Data/hora da última consulta (horário local)</Label><Input type="datetime-local" value={handoffs[company.companyId]?.lastSuccessfulQueryUtc||""} onChange={e=>updateHandoff(company.companyId,"lastSuccessfulQueryUtc",e.target.value)}/></div>
+               <div><Label>Confirme o CNPJ da empresa</Label><Input inputMode="numeric" placeholder="14 dígitos, sem máscara" value={handoffs[company.companyId]?.confirmCnpj||""} onChange={e=>updateHandoff(company.companyId,"confirmCnpj",e.target.value.replace(/\\D/g,"").slice(0,14))}/></div>
+             </div>
+             <label className="flex gap-3 items-start text-sm text-amber-950"><input type="checkbox" className="mt-1" checked={!!handoffs[company.companyId]?.checkpointVerified} onChange={e=>updateHandoff(company.companyId,"checkpointVerified",e.target.checked)}/>Conferi o último NSU e a data da última consulta no sistema atual.</label>
+             <label className="flex gap-3 items-start text-sm text-amber-950"><input type="checkbox" className="mt-1" checked={!!handoffs[company.companyId]?.previousConsumerStopped} onChange={e=>updateHandoff(company.companyId,"previousConsumerStopped",e.target.checked)}/>Confirmei que o consumidor anterior de NF-e para este CNPJ está parado.</label>
+             <Button disabled={captureBusy || !handoffs[company.companyId]?.checkpointVerified || !handoffs[company.companyId]?.previousConsumerStopped || (handoffs[company.companyId]?.lastNsu||"").length!==15 || (handoffs[company.companyId]?.confirmCnpj||"").length!==14 || !handoffs[company.companyId]?.lastSuccessfulQueryUtc || (handoffs[company.companyId]?.sourceSystem||"").trim().length<3} onClick={()=>prepareHandoff(company)}>Registrar checkpoint no HANA (sem ativar captura)</Button>
+             <p className="text-xs text-amber-900">A confirmação acima é declaratória. Após gravar, o checkpoint não pode ser sobrescrito pela tela. A primeira consulta exige autorização separada.</p>
+           </div>}
+
            {connectivity[company.companyId]&&<div className="mt-5"><Notice type={connectivity[company.companyId].reachable?"success":"error"}>{connectivity[company.companyId].message}<div className="mt-1 text-xs font-medium">Etapa: {connectivity[company.companyId].stage || "desconhecida"} · Código: {connectivity[company.companyId].code || "indisponível"}{connectivity[company.companyId].httpStatus ? ` · HTTP ${connectivity[company.companyId].httpStatus}` : ""}{connectivity[company.companyId].hresult ? ` · ${connectivity[company.companyId].hresult}` : ""}</div>{connectivity[company.companyId].chainErrors?.length > 0 && <div className="mt-1 text-xs">Cadeia ICP-Brasil: {connectivity[company.companyId].chainErrors.join(", ")}</div>}{connectivity[company.companyId].causes?.length > 0 && <div className="mt-1 text-xs">Causas técnicas: {connectivity[company.companyId].causes.join(" → ")} · Protocolo: {connectivity[company.companyId].tlsPolicy || "padrão do sistema"}</div>}</Notice></div>}
            <div className="mt-5 flex flex-wrap items-center gap-3">
              <Button variant="outline" disabled={!company.certificateStored||captureBusy} onClick={()=>testConnectivity(company.companyId)}><PlugZap size={17}/>Testar conexão SEFAZ</Button>

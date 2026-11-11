@@ -24,3 +24,6 @@ frontend/.nexfiscal-build.log
 
 # XMLs fiscais baixados localmente (dados confidenciais, fora de wwwroot)
 **/.nexfiscal-downloads/
+
+# Checkpoint de distribuição CT-e local por CNPJ; nunca versionar
+**/.nexfiscal-cte/

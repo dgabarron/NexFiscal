@@ -75,7 +75,10 @@ public sealed class NfeCaptureCoordinator(
             try
             {
                 stage = "abertura_a1";
-                using var certificate = new X509Certificate2(pfx, password, X509KeyStorageFlags.EphemeralKeySet);
+                // Schannel no Windows não suporta chaves privadas efêmeras no TLS cliente (0x8009030E).
+                // UserKeySet não usa PersistKeySet: .NET 8 remove o contêiner temporário ao liberar o A1.
+                using var certificate = new X509Certificate2(pfx, password,
+                    OperatingSystem.IsWindows() ? X509KeyStorageFlags.UserKeySet : X509KeyStorageFlags.EphemeralKeySet);
                 if (!certificate.HasPrivateKey)
                     return new { reachable = false, certificateValid = false, stage,
                         code = "A1_NO_PRIVATE_KEY", message = "Certificado A1 sem chave privada." };
@@ -202,7 +205,8 @@ public sealed class NfeCaptureCoordinator(
             var (pfx, password) = await vault.ReadAsync(companyId, ct);
             try
             {
-                using var certificate = new X509Certificate2(pfx, password, X509KeyStorageFlags.EphemeralKeySet);
+                using var certificate = new X509Certificate2(pfx, password,
+                    OperatingSystem.IsWindows() ? X509KeyStorageFlags.UserKeySet : X509KeyStorageFlags.EphemeralKeySet);
                 if (!certificate.HasPrivateKey)
                     throw new InvalidOperationException("A1 não contém chave privada.");
                 using var chain = new X509Chain();

@@ -107,7 +107,7 @@ function App(){
        lastNsu:(h.lastNsu||"").trim(),
        sourceSystem:(h.sourceSystem||"").trim(),
        lastSuccessfulQueryUtc:h.lastSuccessfulQueryUtc?new Date(h.lastSuccessfulQueryUtc).toISOString():"",
-       confirmCnpj:(h.confirmCnpj||"").replace(/\\D/g,""),
+       confirmCnpj:(h.confirmCnpj||"").replace(/\D/g,""),
        previousConsumerStopped:!!h.previousConsumerStopped,
        checkpointVerified:!!h.checkpointVerified
      });
@@ -213,9 +213,9 @@ function App(){
              <p className="text-sm text-amber-900">Use somente os dados confirmados pelo sistema fiscal atual. Este procedimento grava o checkpoint no HANA e mantém a captura pausada. Não consulta a SEFAZ.</p>
              <div className="grid sm:grid-cols-2 gap-4">
                <div><Label>Sistema atual de captura</Label><Input placeholder="Nome do fornecedor / sistema" value={handoffs[company.companyId]?.sourceSystem||""} onChange={e=>updateHandoff(company.companyId,"sourceSystem",e.target.value)}/></div>
-               <div><Label>Último NSU confirmado (15 dígitos)</Label><Input inputMode="numeric" maxLength={15} placeholder="000000000000000" value={handoffs[company.companyId]?.lastNsu||""} onChange={e=>updateHandoff(company.companyId,"lastNsu",e.target.value.replace(/\\D/g,"").slice(0,15))}/></div>
+               <div><Label>Último NSU confirmado (15 dígitos)</Label><Input inputMode="numeric" maxLength={15} placeholder="000000000000000" value={handoffs[company.companyId]?.lastNsu||""} onChange={e=>updateHandoff(company.companyId,"lastNsu",e.target.value.replace(/\D/g,"").slice(0,15))}/></div>
                <div><Label>Data/hora da última consulta (horário local)</Label><Input type="datetime-local" value={handoffs[company.companyId]?.lastSuccessfulQueryUtc||""} onChange={e=>updateHandoff(company.companyId,"lastSuccessfulQueryUtc",e.target.value)}/></div>
-               <div><Label>Confirme o CNPJ da empresa</Label><Input inputMode="numeric" placeholder="14 dígitos, sem máscara" value={handoffs[company.companyId]?.confirmCnpj||""} onChange={e=>updateHandoff(company.companyId,"confirmCnpj",e.target.value.replace(/\\D/g,"").slice(0,14))}/></div>
+               <div><Label>Confirme o CNPJ da empresa</Label><Input inputMode="numeric" placeholder="14 dígitos, sem máscara" value={handoffs[company.companyId]?.confirmCnpj||""} onChange={e=>updateHandoff(company.companyId,"confirmCnpj",e.target.value.replace(/\D/g,"").slice(0,14))}/></div>
              </div>
              <label className="flex gap-3 items-start text-sm text-amber-950"><input type="checkbox" className="mt-1" checked={!!handoffs[company.companyId]?.checkpointVerified} onChange={e=>updateHandoff(company.companyId,"checkpointVerified",e.target.checked)}/>Conferi o último NSU e a data da última consulta no sistema atual.</label>
              <label className="flex gap-3 items-start text-sm text-amber-950"><input type="checkbox" className="mt-1" checked={!!handoffs[company.companyId]?.previousConsumerStopped} onChange={e=>updateHandoff(company.companyId,"previousConsumerStopped",e.target.checked)}/>Confirmei que o consumidor anterior de NF-e para este CNPJ está parado.</label>

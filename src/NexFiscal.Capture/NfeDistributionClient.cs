@@ -65,6 +65,8 @@ public sealed class NfeDistributionClient
         data.Add(new XElement(NfeNs + "distNSU",
             new XElement(NfeNs + "ultNSU", lastNsu.ToString("D15", CultureInfo.InvariantCulture))));
 
+        NfeRequestSchemaValidator.Validate(data);
+
         var request = new XDocument(new XElement(SoapNs + "Envelope",
             new XElement(SoapNs + "Body",
                 new XElement(WsNs + "nfeDistDFeInteresse",

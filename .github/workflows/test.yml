@@ -20,7 +20,7 @@ jobs:
         run: dotnet test tests/NexFiscal.Capture.Tests/NexFiscal.Capture.Tests.csproj -c Release
       - name: Compilar portal ASP.NET Core
         run: dotnet build src/NexFiscal.Web/NexFiscal.Web.csproj -c Release
-      - name: Compilar frontend Fluent UI
+      - name: Compilar frontend shadcn Tailwind
         working-directory: frontend
         run: |
           npm install --no-audit --no-fund

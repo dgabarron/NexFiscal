@@ -1,4 +1,3 @@
-using System.Reflection;
 using System.Xml;
 using System.Xml.Linq;
 using System.Xml.Schema;
@@ -20,18 +19,6 @@ public static class NfeRequestSchemaValidator
     {
         ArgumentNullException.ThrowIfNull(element);
         var errors = new List<string>();
-        using var reader = XmlReader.Create(new StringReader(element.ToString(SaveOptions.DisableFormatting)),
-            new XmlReaderSettings
-            {
-                DtdProcessing = DtdProcessing.Prohibit,
-                XmlResolver = null,
-                ValidationType = ValidationType.Schema,
-                Schemas = Schemas.Value,
-                ValidationFlags = XmlSchemaValidationFlags.ReportValidationWarnings,
-                MaxCharactersInDocument = 32768
-            });
-        // XmlReaderSettings retornado aqui não permite associar callback depois
-        // do Create; reconstituímos para coletar mensagens seguras de XSD.
         var settings = new XmlReaderSettings
         {
             DtdProcessing = DtdProcessing.Prohibit,

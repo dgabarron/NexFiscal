@@ -54,10 +54,47 @@ public static class A1CompanyCertificate
         if (string.IsNullOrWhiteSpace(name))
             throw new InvalidDataException("Razão social não encontrada no certificado.");
 
-        // Subject jurisdiction/state is not guaranteed to represent the registered
-        // business UF. Leave unconfirmed rather than guessing from responsible CPF/RG.
-        return new A1CompanyIdentity(rawCnpj, name, null, beginning, expiration,
+        // ST/S (2.5.4.8) identifica UF do endereço do titular no perfil e-CNPJ.
+        // NUNCA inferir a UF da empresa pelo RG/título do responsável no SAN.
+        var state = ReadSubjectState(cert);
+        return new A1CompanyIdentity(rawCnpj, name, state, beginning, expiration,
             cert.Issuer, cert.Thumbprint, true);
+    }
+
+    private static string? ReadSubjectState(X509Certificate2 cert)
+    {
+        // Em X500Name formatado pelo Windows, o atributo 2.5.4.8 pode
+        // aparecer como S ou ST; usamos o DER para evitar separadores
+        // escapados em valores de outros atributos.
+        try
+        {
+            var reader = new AsnReader(cert.SubjectName.RawData, AsnEncodingRules.DER);
+            var name = reader.ReadSequence();
+            while (name.HasData)
+            {
+                var set = name.ReadSetOf(skipSortOrderValidation: true);
+                while (set.HasData)
+                {
+                    var attribute = set.ReadSequence();
+                    var oid = attribute.ReadObjectIdentifier();
+                    if (oid != "2.5.4.8") continue;
+                    var tag = attribute.PeekTag();
+                    string? raw = null;
+                    if (tag.HasSameClassAndValue(new Asn1Tag(UniversalTagNumber.UTF8String)))
+                        raw = attribute.ReadCharacterString(UniversalTagNumber.UTF8String);
+                    else if (tag.HasSameClassAndValue(new Asn1Tag(UniversalTagNumber.PrintableString)))
+                        raw = attribute.ReadCharacterString(UniversalTagNumber.PrintableString);
+                    else if (tag.HasSameClassAndValue(new Asn1Tag(UniversalTagNumber.BMPString)))
+                        raw = attribute.ReadCharacterString(UniversalTagNumber.BMPString);
+                    var value = raw?.Trim().ToUpperInvariant();
+                    const string states = "|AC|AL|AP|AM|BA|CE|DF|ES|GO|MA|MT|MS|MG|PA|PB|PR|PE|PI|RJ|RN|RS|RO|RR|SC|SP|SE|TO|";
+                    return value is { Length: 2 } && states.Contains("|" + value + "|", StringComparison.Ordinal)
+                        ? value : null;
+                }
+            }
+        }
+        catch (AsnContentException) { /* Certificado sem Subject DN parseável. */ }
+        return null;
     }
 
     private static Dictionary<string, string> ReadBrazilianOtherNames(X509Certificate2 cert)

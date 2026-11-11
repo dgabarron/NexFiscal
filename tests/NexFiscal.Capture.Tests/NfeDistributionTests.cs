@@ -1,5 +1,6 @@
 using System.IO.Compression;
 using System.Text;
+using System.Xml;
 using NexFiscal.Capture;
 using Xunit;
 

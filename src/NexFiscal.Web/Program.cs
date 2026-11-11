@@ -55,9 +55,6 @@ app.MapPost("/api/companies/register", async (HttpRequest req, CancellationToken
     try
     {
         var (pfx, password) = await ReadCertificateAsync(req, ct);
-        if (!int.TryParse(req.Form["environment"], out var environment) ||
-            !long.TryParse(req.Form["initialNsu"], out var initialNsu))
-            return Results.BadRequest(new { error = "Ambiente ou NSU inválido." });
         var factoryName = app.Configuration["NexFiscal:HanaFactoryType"]!;
         var factoryType = Type.GetType(factoryName, throwOnError: true)!;
         DbProviderFactory factory;
@@ -65,9 +62,9 @@ app.MapPost("/api/companies/register", async (HttpRequest req, CancellationToken
         if (instance is DbProviderFactory fieldFactory) factory = fieldFactory;
         else throw new InvalidOperationException("Factory HANA não encontrada.");
         var store = new HanaCompanyRegistrationStore(factory, app.Configuration["NexFiscal:HanaConnectionString"]!);
-        var registered = await new A1CompanyRegistration(store).RegisterAsync(pfx, password, environment, initialNsu, ct);
-        return Results.Ok(new { registered.CompanyId, registered.Cnpj, registered.LegalName, registered.Environment, registered.Enabled,
-            message = "Empresa cadastrada e pausada. A1 não foi armazenado: captura permanece desabilitada." });
+        var registered = await new A1CompanyRegistration(store).RegisterAsync(pfx, password, ct);
+        return Results.Ok(new { registered.CompanyId, registered.Cnpj, registered.LegalName, registered.Environment, registered.Enabled, registered.CaptureStatus,
+            message = "Empresa cadastrada. Sincronização aguardando inicialização segura; A1 ainda não é armazenado." });
     }
     catch (Exception e) when (e is InvalidDataException or ArgumentException or System.Security.Cryptography.CryptographicException)
     {

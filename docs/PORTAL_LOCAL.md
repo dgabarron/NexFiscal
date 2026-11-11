@@ -2,8 +2,8 @@
 
 ## Requisitos
 - Windows com Visual Studio 2022 e workload ASP.NET Core ou .NET SDK 8.
-- Node.js 20 ou superior (frontend React + Fluent UI v9).
-- Para cadastro real, SAP HANA Client e provider .NET compatíveis, registrado e disponível ao processo.
+- Node.js 20 ou superior (frontend React + shadcn/ui + Tailwind CSS).
+- O portal usa o pacote SAP oficial `Sap.Data.Hana.Net.v8.0` para .NET 8. Validar compatibilidade do driver e a conexão com o HANA utilizado.
 - Por segurança, a primeira versão de configuração responde **somente em loopback** (127.0.0.1). Não publique na rede.
 
 ## Rodar no Visual Studio
@@ -14,17 +14,23 @@
 5. Se preferir depurar o C#, execute `npm install` e `npm run build` dentro de `frontend/` e defina `NexFiscal.Web` como projeto de inicialização.
 
 ## Capacidades atuais
-- Valida arquivo A1 e senha e exibe CNPJ, razão social, emissão/validade e emissor.
+- Assistente na ordem: **HANA → Empresa/Certificado A1 → Operação**. O HANA é validado e configurado antes do cadastro.
+- Valida arquivo A1 e senha e exibe CNPJ, razão social, UF quando presente no Subject ST, emissão/validade e emissor.
 - O endpoint `POST /api/certificates/inspect` não salva o A1 nem a senha.
 - O endpoint `POST /api/companies/register` recebe somente certificado e senha; cria a empresa **pausada** no HANA após configurar provider e connection string. Não aceita NSU nem ambiente enviado pelo usuário. O ambiente padrão da versão inicial é produção.
 - O XML, o certificado e a senha não devem ser comitados em Git.
 
 ## Configuração HANA
-Configurar no ambiente local do servidor, sem comitar segredos:
-- `NexFiscal__HanaConnectionString`: string de conexão SAP HANA da conta com DML em BRAI_NEX.
-- `NexFiscal__HanaFactoryType`: nome completo do tipo do factory provider e assembly, por exemplo via uma implementação instalada de `DbProviderFactory` com campo estático `Instance`.
+1. Abrir o NexFiscal em http://127.0.0.1:5187.
+2. Informar servidor, porta SQL, usuário técnico e senha no primeiro passo do assistente.
+3. Selecionar **Testar conexão**; o servidor abre uma conexão real e confere as cinco tabelas do schema `BRAI_NEX`.
+4. Selecionar **Salvar e continuar**; a configuração é protegida pelo ASP.NET Core Data Protection e armazenada no servidor, fora do repositório.
+5. O arquivo protegido `.nexfiscal-hana.dat` e as chaves `.nexfiscal-keys/` são dados locais de instalação: **não copiar para Git**, não excluir ao atualizar o ZIP e manter com acesso restrito. No Windows, as chaves são protegidas por DPAPI, vinculadas ao contexto da instalação.
+6. O cadastro da empresa só fica disponível depois da configuração HANA.
 
-**Atenção:** o projeto não distribui nem instala automaticamente driver SAP HANA. Sem um provider compatível, o cadastro permanece indisponível. O script SQL v1 deve existir no HANA. A1 não é armazenado nesta fase, portanto não é possível executar captura contínua após o cadastro. Não há verificação completa ICP-Brasil, CRL/OCSP ou comunicação real SEFAZ.
+Pode-se manter a variável de ambiente `NexFiscal__HanaConnectionString` como fallback de administração avançada. A conexão usa o driver oficial e não exige mais configurar um factory manualmente.
+
+**Não foi testada uma conexão no HANA da sua empresa**; os testes de CI verificam a compilação, não substituem o teste real. O portal permanece somente em loopback. Não há validação completa ICP-Brasil, CRL/OCSP nem comunicação real com a SEFAZ nesta etapa.
 
 ## Próximas etapas
 - Persistência segura de A1 e rotação do certificado sem perder NSU.

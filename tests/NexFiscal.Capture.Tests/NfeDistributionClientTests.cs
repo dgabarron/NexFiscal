@@ -1,5 +1,6 @@
 using System.IO.Compression;
 using System.Text;
+using System.Xml.Linq;
 using NexFiscal.Capture;
 using Xunit;
 
@@ -33,6 +34,36 @@ public sealed class NfeDistributionClientTests
         Assert.Contains(">35</", withUf);
         Assert.DoesNotContain("cUFAutor", withoutUf);
         Assert.Contains("000000000000000", withoutUf);
+    }
+
+    [Fact]
+    public void Request_XsdValidationRejectsMissingCnpj()
+    {
+        var payload = XElement.Parse(
+            "<distDFeInt xmlns=\\"http://www.portalfiscal.inf.br/nfe\\" versao=\\"1.01\\">" +
+            "<tpAmb>1</tpAmb><distNSU><ultNSU>000000000000000</ultNSU></distNSU>" +
+            "</distDFeInt>");
+        Assert.Throws<InvalidDataException>(() => NfeRequestSchemaValidator.Validate(payload));
+    }
+
+    [Fact]
+    public void Request_XsdValidationRejectsNsuWithout15Digits()
+    {
+        var payload = XElement.Parse(
+            "<distDFeInt xmlns=\\"http://www.portalfiscal.inf.br/nfe\\" versao=\\"1.01\\">" +
+            "<tpAmb>1</tpAmb><CNPJ>11222333000181</CNPJ>" +
+            "<distNSU><ultNSU>123</ultNSU></distNSU></distDFeInt>");
+        Assert.Throws<InvalidDataException>(() => NfeRequestSchemaValidator.Validate(payload));
+    }
+
+    [Fact]
+    public void Request_XsdValidationRejectsWrongElementOrder()
+    {
+        var payload = XElement.Parse(
+            "<distDFeInt xmlns=\\"http://www.portalfiscal.inf.br/nfe\\" versao=\\"1.01\\">" +
+            "<CNPJ>11222333000181</CNPJ><tpAmb>1</tpAmb>" +
+            "<distNSU><ultNSU>000000000000000</ultNSU></distNSU></distDFeInt>");
+        Assert.Throws<InvalidDataException>(() => NfeRequestSchemaValidator.Validate(payload));
     }
 
     [Fact]

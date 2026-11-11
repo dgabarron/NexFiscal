@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
   FluentProvider, webLightTheme, webDarkTheme, Button, Card, CardHeader,
-  Field, Input, Dropdown, Option, MessageBar, MessageBarBody,
+  Field, Input, MessageBar, MessageBarBody,
   Spinner, Text, Title3, Subtitle2, Divider, Badge, makeStyles, tokens
 } from "@fluentui/react-components";
 import { DocumentBulletList24Regular, ShieldKeyhole24Regular, Database24Regular,
@@ -31,8 +31,6 @@ function App() {
   const [dark, setDark] = useState(false);
   const [file, setFile] = useState(null);
   const [password, setPassword] = useState("");
-  const [environment, setEnvironment] = useState("1");
-  const [nsu, setNsu] = useState("");
   const [identity, setIdentity] = useState(null);
   const [hana, setHana] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -45,10 +43,6 @@ function App() {
     const data = new FormData();
     data.append("certificate", file);
     data.append("password", password);
-    if (includeRegistration) {
-      data.append("environment", environment);
-      data.append("initialNsu", nsu);
-    }
     return data;
   }
   async function call(path, register = false) {
@@ -57,7 +51,7 @@ function App() {
       const response = await fetch(path, { method: "POST", body: formData(register) });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || result.detail || "Falha na operação.");
-      if (register) setSuccess("Empresa cadastrada pausada, aguardando configuração de captura.");
+      if (register) setSuccess("Empresa cadastrada. Sincronização aguardando inicialização automática e validação fiscal.");
       else setIdentity(result);
     } catch (e) { setError(e.message || "Erro desconhecido."); }
     finally { setBusy(false); }
@@ -98,13 +92,9 @@ function App() {
                 ["Validade",new Date(identity.validUntil).toLocaleDateString("pt-BR")],["Emissor",identity.issuer]
               ].map(([name, value]) => <div key={name} className={styles.detail}><Text weight="semibold">{name}</Text><Text style={{maxWidth:"65%",overflowWrap:"anywhere"}}>{value}</Text></div>)}
               <MessageBar intent="warning"><MessageBarBody>Verificação de cadeia ICP-Brasil, revogação e autorização na SEFAZ ainda pendentes. A empresa será cadastrada pausada.</MessageBarBody></MessageBar>
-              <Field label="Ambiente de cadastro"><Dropdown value={environment === "1" ? "Produção" : "Homologação"} selectedOptions={[environment]} onOptionSelect={(_,d) => setEnvironment(d.optionValue)}>
-                <Option value="1">Produção</Option><Option value="2">Homologação</Option></Dropdown></Field>
-              <Field label="Último NSU confirmado" hint="Use o checkpoint do sistema anterior. Não reinicie em zero sem validar a situação fiscal.">
-                <Input value={nsu} onChange={(_,d)=>setNsu(d.value)} placeholder="Ex.: 000000000183248"/>
-              </Field>
-              <Button appearance="primary" disabled={!hana || !/^[0-9]{1,15}$/.test(nsu) || busy}
-                onClick={() => call("/api/companies/register", true)}>Cadastrar empresa no HANA (pausada)</Button>
+              <MessageBar intent="info"><MessageBarBody>A sequência da SEFAZ será gerenciada internamente. Nenhum NSU será solicitado. Até a inicialização fiscal, a captura permanece desabilitada.</MessageBarBody></MessageBar>
+              <Button appearance="primary" disabled={!hana || busy}
+                onClick={() => call("/api/companies/register", true)}>Cadastrar empresa</Button>
               {!hana && <Text className={styles.muted}>Cadastro indisponível: o driver e a conexão HANA devem ser configurados no serviço.</Text>}
             </>}
           </Card>

@@ -61,6 +61,12 @@ public sealed class CteFirstDownload(
                     DateTime.UtcNow >= certificate.NotAfter.ToUniversalTime())
                     throw new InvalidOperationException("Certificado A1 inválido ou vencido.");
 
+                using var chain = new X509Chain();
+                chain.ChainPolicy.RevocationMode = X509RevocationMode.Online;
+                chain.ChainPolicy.RevocationFlag = X509RevocationFlag.ExcludeRoot;
+                chain.ChainPolicy.UrlRetrievalTimeout = TimeSpan.FromSeconds(15);
+                if (!chain.Build(certificate))
+                    throw new InvalidOperationException("Não foi possível validar a cadeia ICP-Brasil do A1.");
                 // Identidade fiscal vinculada ao A1, sem solicitar CNPJ novamente.
                 var identity = A1CompanyCertificate.Inspect(pfx, password);
                 var uf = A1CompanyCertificate.GetSubjectState(certificate);
@@ -130,7 +136,7 @@ public sealed class CteFirstDownload(
                         skippedNonProcCTe = 0, saveSucceeded = false,
                         message = "Falha ao salvar CT-e na pasta X. Use o ZIP de recuperação; não repita a consulta até reconciliar os arquivos.",
                         archiveUrl = archiveId is null ? null :
-                            "/api/capture/archive/" + company + "/" + archiveId,
+                            "/api/capture/archive/" + company + "/" + archiveId + "?kind=CTe",
                         nextAllowedUtc = reserved.NextAllowedAtUtc
                     };
                 }

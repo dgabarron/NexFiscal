@@ -26,9 +26,11 @@ public sealed class NfeIndividualXmlStore
     }
 
     public async Task<NfeIndividualSaveResult> SaveAsync(
-        string directory, NfeDistributionResult response, CancellationToken ct)
+        string directory, NfeDistributionResult response, CancellationToken ct, string documentType = "NFE")
     {
         var full = ValidateDirectory(directory);
+        if (documentType is not ("NFE" or "CTE"))
+            throw new ArgumentException("Tipo fiscal inválido.", nameof(documentType));
         if (response.Status != 138 || response.Documents.Count == 0)
             return new NfeIndividualSaveResult(full, 0, 0, [], 0);
 
@@ -38,7 +40,7 @@ public sealed class NfeIndividualXmlStore
         var names = new List<string>();
         foreach (var document in response.Documents.OrderBy(d => d.Nsu))
         {
-            if (!NfeCompleteDocument.IsProcNFe(document))
+            if (!(documentType == "NFE" ? NfeCompleteDocument.IsProcNFe(document) : CteCompleteDocument.IsProcCTe(document)))
             {
                 skipped++;
                 continue;
@@ -48,7 +50,7 @@ public sealed class NfeIndividualXmlStore
                 throw new InvalidDataException("XML recebido inválido para gravação individual.");
 
             // O NSU numérico é usado como nome, sem qualquer caminho de origem externa.
-            var name = document.Nsu.ToString("D15") + ".xml";
+            var name = (documentType == "CTE" ? "CTe_" : "") + document.Nsu.ToString("D15") + ".xml";
             var destination = Path.Combine(full, name);
             var digest = SHA256.HashData(document.XmlBytes);
             if (!string.Equals(Convert.ToHexString(digest), document.Sha256,

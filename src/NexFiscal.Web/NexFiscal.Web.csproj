@@ -6,5 +6,6 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../NexFiscal.Capture/NexFiscal.Capture.csproj" />
+    <PackageReference Include="Sap.Data.Hana.Net.v8.0" Version="2.30.27" />
   </ItemGroup>
 </Project>

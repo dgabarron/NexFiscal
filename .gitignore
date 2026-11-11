@@ -17,3 +17,5 @@ secrets/
 
 **/.nexfiscal-hana.dat
 **/.nexfiscal-keys/
+
+**/.nexfiscal-certificates/

@@ -14,6 +14,7 @@ if (OperatingSystem.IsWindows())
 builder.Services.AddSingleton<HanaSetup>();
 builder.Services.AddSingleton<CompanyCertificateVault>();
 builder.Services.AddSingleton<NfeCaptureCoordinator>();
+builder.Services.AddSingleton<NfeFirstDownload>();
 builder.Services.AddSingleton<NfeHandoffPreparation>();
 var app = builder.Build();
 var hanaSetup = app.Services.GetRequiredService<HanaSetup>();
@@ -188,6 +189,22 @@ app.MapPost("/api/capture/prepare-handoff", async (
     }
 });
 
+// Primeira distribuição NF-e: um clique, sem digitar NSU, somente no portal local.
+// Bloqueio de uma hora já reservado no HANA antes de acessar a SEFAZ.
+app.MapPost("/api/capture/download", async (CaptureDownloadRequest request,
+    NfeFirstDownload capture, CancellationToken ct) =>
+{
+    try { return Results.Ok(await capture.ExecuteAsync(request.CompanyId, request.PreviousConsumerStopped, ct)); }
+    catch (ArgumentException ex) { return Results.BadRequest(new { error = ex.Message }); }
+    catch (InvalidOperationException ex) { return Results.Conflict(new { error = ex.Message }); }
+    catch (Exception ex)
+    {
+        var id = Guid.NewGuid().ToString("N")[..8];
+        app.Logger.LogError(ex, "NF-e consulta falhou. Diagnostico={Id}", id);
+        return Results.Json(new { error = "A consulta SOAP ou a gravação no HANA falhou. Verifique o log do servidor.", diagnostico = id }, statusCode: 503);
+    }
+});
+
 // Consulta unitária somente para empresa explicitamente autorizada e com
 // checkpoint válido. A rotina nunca cria nem importa NSU automaticamente.
 app.MapPost("/api/capture/test-once", async (CaptureTestRequest request, NfeCaptureCoordinator coordinator, CancellationToken ct) =>
@@ -228,3 +245,5 @@ static async Task<(byte[] pfx, string password)> ReadCertificateAsync(HttpReques
 public partial class Program { }
 
 public sealed record CaptureTestRequest(string CompanyId);
+
+public sealed record CaptureDownloadRequest(string CompanyId, bool PreviousConsumerStopped);

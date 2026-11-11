@@ -63,3 +63,12 @@ A próxima implementação deve identificar checkpoint anterior de fonte confiá
 ### Persistência do primeiro lote no HANA
 
 A classe `HanaNfeDistributionStore` recebe a resposta já validada e executa uma única transação: bloqueia `BRAI_NEX_CaptureCursor` com `FOR UPDATE`, compara o checkpoint com o NSU solicitado, grava os XMLs em `BRAI_NEX_Envelope` por NSU e SHA-256, e só então atualiza `LastNsu`. Uma falha provoca rollback. Status 137/656 nunca avançam o NSU; aplicam cooldown. Na falta de cursor preexistente, a gravação é recusada. **Ainda não há job, endpoint ou execução real habilitada.**
+
+## Central de operação e teste de captura NF-e
+
+- `GET /api/capture/status`: consulta o HANA e informa empresas, A1 armazenado, checkpoint NF-e, quantidade de envelopes, última tentativa, cooldown e motivo de bloqueio, sem acessar a SEFAZ. A interface abre a Central de operação diretamente quando encontra empresas registradas.
+- `POST /api/capture/test-once`: recebe `{ "companyId": "<GUID>" }`, executa no máximo uma consulta e retorna código SEFAZ e quantidade de documentos novos. A captura não é automática e não cria NSU.
+- **Bloqueio padrão obrigatório:** requer simultaneamente empresa `Enabled=1`, cursor `BRAI_NEX_CaptureCursor` inicializado e ainda disponível, A1 no cofre, cadeia de certificados verificável e configuração de servidor `NexFiscal:Capture:AllowControlledQuery=true` + `NexFiscal:Capture:ExclusiveConsumerConfirmed=true` após validação administrativa de handoff. Enquanto não houver migração segura do consumidor atual, não ativar as flags nem habilitar empresas. A interface informa o motivo e mantém o botão desabilitado.
+- Para status 138, arquivos XML são armazenados por NSU e hash na transação que avança o cursor. Status 137/656 não avançam NSU, aplicam espera. Status de consulta são persistidos em `BRAI_NEX_CaptureLog` na mesma transação.
+- Limitação deliberada: o controle de concorrência de execução é local ao processo; para agendamento multi-instância, ainda será necessário lease distribuído. Não executar várias instâncias para o mesmo CNPJ.
+- Não existe processo administrativo completo de transferência de NSU entre fornecedores: esse procedimento e a validação de ambiente/credenciais devem ser concluídos antes do primeiro teste real.

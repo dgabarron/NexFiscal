@@ -1,4 +1,7 @@
 using System.Data.Common;
+using System.Net.Sockets;
+using System.Security.Authentication;
+using System.ComponentModel;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using NexFiscal.Capture;
@@ -101,7 +104,8 @@ public sealed class NfeCaptureCoordinator(
                 {
                     ClientCertificateOptions = ClientCertificateOption.Manual,
                     CheckCertificateRevocationList = true,
-                    AllowAutoRedirect = false
+                    AllowAutoRedirect = false,
+                SslProtocols = SslProtocols.Tls12
                 };
                 handler.ClientCertificates.Add(certificate);
                 using var http = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(25) };
@@ -126,13 +130,30 @@ public sealed class NfeCaptureCoordinator(
         {
             // HResult e tipo são limitados a metadados de diagnóstico.
             // Nunca enviar ex.Message/StackTrace ao navegador.
-            var code = ex switch
+            var chain = new List<string>();
+            for (Exception? cause = ex; cause is not null && chain.Count < 8; cause = cause.InnerException)
             {
-                System.Security.Cryptography.CryptographicException => "CRYPTO_ERROR",
-                HttpRequestException => "HTTP_TRANSPORT_ERROR",
+                var detail = cause.GetType().Name + ":0x" + cause.HResult.ToString("X8");
+                if (cause is SocketException socket)
+                    detail += ":SOCKET_" + socket.SocketErrorCode;
+                if (cause is Win32Exception win32)
+                    detail += ":WIN32_" + win32.NativeErrorCode;
+                chain.Add(detail);
+            }
+            var rootCause = ex;
+            while (rootCause.InnerException is not null)
+                rootCause = rootCause.InnerException;
+            var code = rootCause switch
+            {
+                SocketException socket when socket.SocketErrorCode == SocketError.HostNotFound => "DNS_HOST_NOT_FOUND",
+                SocketException socket when socket.SocketErrorCode == SocketError.ConnectionRefused => "TCP_CONNECTION_REFUSED",
+                SocketException socket when socket.SocketErrorCode == SocketError.TimedOut => "TCP_TIMEOUT",
+                SocketException => "SOCKET_CONNECTION_ERROR",
+                AuthenticationException => "TLS_HANDSHAKE_OR_CERTIFICATE_ERROR",
+                System.Security.Cryptography.CryptographicException => "CERTIFICATE_CRYPTO_ERROR",
                 TaskCanceledException => "HTTP_TIMEOUT",
-                IOException => "IO_ERROR",
-                InvalidOperationException => "INVALID_OPERATION",
+                IOException => "TLS_CONNECTION_CLOSED",
+                _ when ex is HttpRequestException => "HTTP_TRANSPORT_ERROR",
                 _ => "UNEXPECTED_ERROR"
             };
             return new
@@ -140,13 +161,15 @@ public sealed class NfeCaptureCoordinator(
                 reachable = false, certificateValid = false, stage, code,
                 exceptionType = ex.GetType().Name,
                 hresult = $"0x{ex.HResult:X8}",
+                causes = chain,
+                tlsPolicy = "TLS 1.2",
                 message = stage switch
                 {
                     "consulta_empresa_hana" => "Erro ao consultar o cadastro no HANA.",
                     "cofre_a1" => "Não foi possível ler ou descriptografar o certificado A1 armazenado.",
                     "abertura_a1" => "Não foi possível abrir o certificado A1 protegido.",
                     "validacao_cadeia_a1" => "Erro durante a validação da cadeia do certificado.",
-                    "https_sefaz" => "Não foi possível completar a comunicação HTTPS com a SEFAZ.",
+                    "https_sefaz" => "A conexão HTTPS com a SEFAZ falhou. Confira as causas técnicas abaixo.",
                     _ => "Falha no diagnóstico de conectividade."
                 }
             };

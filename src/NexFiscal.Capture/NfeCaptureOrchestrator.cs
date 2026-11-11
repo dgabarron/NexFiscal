@@ -24,13 +24,14 @@ public sealed class NfeCaptureOrchestrator(INfeCaptureStore store, INfeDistribut
         if (now < current.NextAllowedAt) return null;
 
         // Reserva conservadora antes da rede evita repetição imediata em falha, timeout ou reinício.
-        await store.ReserveNextAttemptAsync(current, now.AddHours(1), cancellationToken);
+        var reserved = current with { NextAllowedAt = now.AddHours(1) };
+        await store.ReserveNextAttemptAsync(current, reserved.NextAllowedAt, cancellationToken);
         var response = await client.QueryByNsuAsync(cnpj, environment, current.LastNsu, cancellationToken);
         var batch = NfeDistribution.Parse(response);
         if (batch.Status is 137 or 138)
         {
             var updated = NfeDistribution.Advance(current, batch, now);
-            await store.CommitAsync(current, updated, batch.Documents, cancellationToken);
+            await store.CommitAsync(reserved, updated, batch.Documents, cancellationToken);
         }
         return batch;
     }

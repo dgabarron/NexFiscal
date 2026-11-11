@@ -70,14 +70,7 @@ public sealed class HanaSetup(IDataProtectionProvider provider, IWebHostEnvironm
         // Não logar ou devolver exceções de conexão contendo credenciais.
         await using var connection = new HanaConnection(Build(request));
         await connection.OpenAsync(ct);
-        await using var command = connection.CreateCommand();
-        command.CommandText = "SELECT COUNT(*) FROM SYS.TABLES WHERE SCHEMA_NAME='BRAI_NEX' AND TABLE_NAME IN (" +
-            string.Join(",", RequiredTables.Select(t => "'" + t + "'")) + ")";
-        var count = Convert.ToInt32(await command.ExecuteScalarAsync(ct));
-        return new HanaSetupResult(true, count == RequiredTables.Length, count,
-            count == RequiredTables.Length
-                ? "Conexão estabelecida e schema BRAI_NEX validado."
-                : "Conexão estabelecida, mas faltam tabelas no schema BRAI_NEX.");
+        return await HanaSchemaVerifier.VerifyAsync(connection, ct);
     }
 
     private static void Validate(HanaSetupRequest request)

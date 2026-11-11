@@ -11,7 +11,7 @@
 2. Abra `NexFiscal.sln` no Visual Studio.
 3. No terminal do Visual Studio, rode `powershell -ExecutionPolicy Bypass -File scripts/Run-NexFiscalLocal.ps1`.
 4. Acesse `http://127.0.0.1:5187`.
-5. Se preferir depurar o C#, execute `npm install` e `npm run build` dentro de `frontend/` e defina `NexFiscal.Web` como projeto de inicialização.
+5. Para depurar, defina `NexFiscal.Web` como projeto de inicialização e pressione **F5**. O MSBuild executa `npm install` somente na primeira vez ou quando `frontend/package.json` mudar e executa `npm run build` automaticamente antes do backend. Não é necessário abrir PowerShell.
 
 ## Capacidades atuais
 - Assistente na ordem: **HANA → Empresa/Certificado A1 → Operação**. O HANA é validado e configurado antes do cadastro.

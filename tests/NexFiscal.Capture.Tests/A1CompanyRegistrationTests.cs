@@ -31,15 +31,14 @@ public sealed class A1CompanyRegistrationTests
     private sealed class FakeStore : ICompanyRegistrationStore
     {
         public int Calls { get; private set; }
-        public Task<CompanyRegistration> RegisterPausedAsync(A1CompanyIdentity identity, int env, long nsu, CancellationToken ct)
+        public Task<CompanyRegistration> RegisterPausedAsync(A1CompanyIdentity identity, int env, CancellationToken ct)
         {
             Calls++;
             Assert.Equal(Cnpj, identity.Cnpj);
             Assert.Equal("EMPRESA TESTE LTDA", identity.LegalName);
             Assert.Equal(1, env);
-            Assert.Equal(123, nsu);
             return Task.FromResult(new CompanyRegistration(
-                Guid.NewGuid().ToString(), identity.Cnpj, identity.LegalName, env, identity.Thumbprint, identity.ValidUntil, false));
+                Guid.NewGuid().ToString(), identity.Cnpj, identity.LegalName, env, identity.Thumbprint, identity.ValidUntil, false, "AGUARDANDO_INICIALIZACAO"));
         }
     }
 
@@ -48,18 +47,28 @@ public sealed class A1CompanyRegistrationTests
     {
         var store = new FakeStore();
         var sut = new A1CompanyRegistration(store);
-        var company = await sut.RegisterAsync(FakePfx(), "senha-teste", 1, 123);
+        var company = await sut.RegisterAsync(FakePfx(), "senha-teste");
         Assert.False(company.Enabled);
         Assert.Equal(Cnpj, company.Cnpj);
         Assert.Equal(1, store.Calls);
     }
 
     [Fact]
-    public async Task InvalidEnvironment_DoesNotWrite()
+    public async Task WrongPassword_DoesNotCreateCompany()
     {
         var store = new FakeStore();
         var sut = new A1CompanyRegistration(store);
-        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => sut.RegisterAsync(FakePfx(), "senha-teste", 3, 123));
+        await Assert.ThrowsAnyAsync<CryptographicException>(() => sut.RegisterAsync(FakePfx(), "errada"));
         Assert.Equal(0, store.Calls);
+    }
+
+    [Fact]
+    public async Task Register_Is_Paused_And_Has_No_User_Nsu()
+    {
+        var store = new FakeStore();
+        var company = await new A1CompanyRegistration(store).RegisterAsync(FakePfx(), "senha-teste");
+        Assert.False(company.Enabled);
+        Assert.Equal("AGUARDANDO_INICIALIZACAO", company.CaptureStatus);
+        Assert.Equal(1, company.Environment);
     }
 }

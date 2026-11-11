@@ -90,42 +90,59 @@ app.MapPost("/api/certificates/inspect", async (HttpRequest req, CancellationTok
 app.MapPost("/api/companies/register", async (HttpRequest req, CancellationToken ct) =>
 {
     if (!HasHana())
-        return Results.Problem("Configure a conexão SAP HANA na primeira etapa antes de cadastrar.", statusCode: 503);
+        return Results.Problem("Configure a conexão SAP HANA antes de cadastrar.", statusCode: 503);
+
+    var step = "validacao_certificado";
+    var diagnosticId = Guid.NewGuid().ToString("N")[..8];
     try
     {
         var (pfx, password) = await ReadCertificateAsync(req, ct);
-        var store = new HanaCompanyRegistrationStore(HanaSetup.Factory, hanaSetup.ConnectionString!);
         var identity = A1CompanyCertificate.Inspect(pfx, password);
+
+        step = "consulta_empresa_hana";
+        var store = new HanaCompanyRegistrationStore(HanaSetup.Factory, hanaSetup.ConnectionString!);
         var existingId = await store.FindPausedCompanyIdAsync(identity.Cnpj, 1, ct);
         if (existingId is not null && certificateVault.IsStored(existingId))
-            return Results.Conflict(new { error = "Empresa e certificado já cadastrados. Utilize a área de operação." });
-        // Não regravar empresa/cursor existente: apenas vincular A1 protegido.
+            return Results.Conflict(new { error = "Empresa e certificado já cadastrados. Consulte a área de operação." });
+
+        step = "gravacao_empresa_hana";
         var registered = existingId is null
             ? await new A1CompanyRegistration(store).RegisterAsync(pfx, password, ct)
             : new CompanyRegistration(existingId, identity.Cnpj, identity.LegalName, 1,
                 identity.Thumbprint, identity.ValidUntil, false, "AGUARDANDO_INICIALIZACAO");
-        try
+
+        step = "protecao_certificado";
+        await certificateVault.SaveAsync(registered.CompanyId, registered.Cnpj, pfx, password, ct);
+
+        return Results.Ok(new
         {
-            await certificateVault.SaveAsync(registered.CompanyId, registered.Cnpj, pfx, password, ct);
-        }
-        catch (Exception)
-        {
-            // O cadastro permanece pausado. Não reportar sucesso ou habilitar captura
-            // quando a proteção do A1 falhou.
-            return Results.Problem("A empresa foi cadastrada pausada, mas o A1 não pôde ser protegido. A captura não será habilitada; solicite recuperação administrativa.", statusCode: 500);
-        }
-        return Results.Ok(new { registered.CompanyId, registered.Cnpj, registered.LegalName, registered.Environment, registered.Enabled, registered.CaptureStatus,
+            registered.CompanyId, registered.Cnpj, registered.LegalName,
+            registered.Environment, registered.Enabled, registered.CaptureStatus,
             certificateStored = true,
-            message = "Empresa e certificado A1 protegido cadastrados. Sincronização aguardando inicialização segura da SEFAZ." });
+            message = "Empresa e A1 protegido cadastrados. A captura permanece pausada."
+        });
     }
-    catch (Exception e) when (e is InvalidDataException or ArgumentException or System.Security.Cryptography.CryptographicException)
+    catch (Exception ex) when (step == "validacao_certificado" &&
+                               ex is InvalidDataException or ArgumentException or System.Security.Cryptography.CryptographicException)
     {
-        return Results.BadRequest(new { error = "Não foi possível validar o certificado ou os parâmetros." });
+        return Results.BadRequest(new { error = "Certificado ou senha inválidos." });
     }
-    catch (Exception)
+    catch (Exception ex)
     {
-        // Never return secrets, connection strings or provider exception details.
-        return Results.Problem("Cadastro não concluído. Consulte o diagnóstico local do HANA.", statusCode: 500);
+        // NUNCA registrar Exception.ToString ou Message: drivers podem incluir SQL e credenciais.
+        var dbCode = ex is DbException db ? db.ErrorCode.ToString() : "n/a";
+        app.Logger.LogError(
+            "NexFiscal cadastro falhou. Diagnostico={DiagnosticId} Etapa={Step} Classe={Class} DbCode={DbCode}",
+            diagnosticId, step, ex.GetType().Name, dbCode);
+        var message = step switch
+        {
+            "consulta_empresa_hana" => "Não foi possível consultar o cadastro no HANA.",
+            "gravacao_empresa_hana" => "Não foi possível gravar a empresa no HANA.",
+            "protecao_certificado" => "Empresa cadastrada pausada, mas não foi possível proteger o A1. Não repita cadastros manualmente; tente novamente com a mesma empresa após verificar o serviço.",
+            _ => "Cadastro não concluído."
+        };
+        return Results.Json(new { error = message, etapa = step, diagnostico = diagnosticId },
+            statusCode: 500);
     }
 }).DisableAntiforgery();
 

@@ -13,6 +13,7 @@ if (OperatingSystem.IsWindows())
     protection.ProtectKeysWithDpapi();
 builder.Services.AddSingleton<HanaSetup>();
 builder.Services.AddSingleton<CompanyCertificateVault>();
+builder.Services.AddSingleton<NfeCaptureCoordinator>();
 var app = builder.Build();
 var hanaSetup = app.Services.GetRequiredService<HanaSetup>();
 var certificateVault = app.Services.GetRequiredService<CompanyCertificateVault>();
@@ -146,6 +147,35 @@ app.MapPost("/api/companies/register", async (HttpRequest req, CancellationToken
     }
 }).DisableAntiforgery();
 
+// Pré-voo somente leitura. Não chama SEFAZ, não cria NSU e não ativa empresas.
+app.MapGet("/api/capture/status", async (NfeCaptureCoordinator coordinator, CancellationToken ct) =>
+{
+    if (!HasHana()) return Results.Problem("HANA não configurado.", statusCode: 503);
+    try { return Results.Ok(await coordinator.StatusAsync(ct)); }
+    catch (Exception ex)
+    {
+        app.Logger.LogError("Pré-voo NF-e falhou: {Type}", ex.GetType().Name);
+        return Results.Problem("Não foi possível consultar o estado da captura no HANA.", statusCode: 503);
+    }
+});
+
+// Consulta unitária somente para empresa explicitamente autorizada e com
+// checkpoint válido. A rotina nunca cria nem importa NSU automaticamente.
+app.MapPost("/api/capture/test-once", async (CaptureTestRequest request, NfeCaptureCoordinator coordinator, CancellationToken ct) =>
+{
+    try { return Results.Ok(await coordinator.TestOnceAsync(request.CompanyId, ct)); }
+    catch (ArgumentException) { return Results.BadRequest(new { error = "Empresa inválida." }); }
+    catch (InvalidOperationException ex)
+    {
+        return Results.Conflict(new { error = ex.Message });
+    }
+    catch (Exception ex)
+    {
+        app.Logger.LogError("Consulta unitária NF-e falhou: {Type}", ex.GetType().Name);
+        return Results.Problem("A consulta NF-e falhou. Verifique a conexão SEFAZ e os logs do servidor.", statusCode: 503);
+    }
+});
+
 app.MapFallbackToFile("index.html");
 app.Run();
 
@@ -167,3 +197,5 @@ static async Task<(byte[] pfx, string password)> ReadCertificateAsync(HttpReques
 }
 
 public partial class Program { }
+
+public sealed record CaptureTestRequest(string CompanyId);

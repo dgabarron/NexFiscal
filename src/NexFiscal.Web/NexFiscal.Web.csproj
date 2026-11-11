@@ -11,36 +11,20 @@
   <ItemGroup>
     <EmbeddedResource Include="../../sql/migrations/001_BRAI_NEX_initial.sql" LogicalName="NexFiscal.Web.sql.migrations.001_BRAI_NEX_initial.sql" />
   </ItemGroup>
-  <!-- F5 no Visual Studio prepara o frontend antes de compilar o ASP.NET. -->
+  <!-- O F5 usa Node diretamente e NÃO executa npm install; npm install
+       no Windows pode tentar modificar node_modules bloqueado (EPERM). -->
   <PropertyGroup>
-    <NexFiscalFrontendDir>$(MSBuildProjectDirectory)/../../frontend/</NexFiscalFrontendDir>
-    <!-- O Visual Studio pode ter sido aberto antes de instalar o Node.js,
-         portanto não depender apenas do PATH herdado pelo processo. -->
-    <NexFiscalNpm Condition="'$(OS)' == 'Windows_NT' and Exists('$(ProgramFiles)\nodejs\npm.cmd')">&quot;$(ProgramFiles)\nodejs\npm.cmd&quot;</NexFiscalNpm>
-    <NexFiscalNpm Condition="'$(OS)' == 'Windows_NT' and '$(NexFiscalNpm)' == ''">npm.cmd</NexFiscalNpm>
-    <NexFiscalNpm Condition="'$(OS)' != 'Windows_NT'">npm</NexFiscalNpm>
+    <NexFiscalRootDir>$(MSBuildProjectDirectory)/../../</NexFiscalRootDir>
+    <NexFiscalNode Condition="'$(OS)' == 'Windows_NT' and Exists('$(ProgramFiles)\nodejs\node.exe')">&quot;$(ProgramFiles)\nodejs\node.exe&quot;</NexFiscalNode>
+    <NexFiscalNode Condition="'$(NexFiscalNode)' == ''">node</NexFiscalNode>
   </PropertyGroup>
-  <!-- npm install só quando não há dependências instaladas.
-       Não executar npm install em cada F5: no Windows isso causa EPERM
-       quando outro processo mantém node_modules em uso. -->
-  <Target Name="NexFiscalInstallFrontendDependencies"
-          Condition="'$(DesignTimeBuild)' != 'true' and '$(IsCrossTargetingBuild)' != 'true'
-                     and (!Exists('$(NexFiscalFrontendDir)node_modules/vite/package.json')
-                       or !Exists('$(NexFiscalFrontendDir)node_modules/react-dom/package.json')
-                       or !Exists('$(NexFiscalFrontendDir)node_modules/tailwindcss/package.json'))">
-    <Message Importance="high" Text="NexFiscal: dependências ausentes; instalando frontend uma única vez..." />
-    <Exec WorkingDirectory="$(NexFiscalFrontendDir)"
-          Command="$(NexFiscalNpm) install --package-lock=false --no-audit --no-fund"
-          StandardOutputImportance="high"
-          StandardErrorImportance="high" />
-  </Target>
   <Target Name="NexFiscalBuildFrontend"
           BeforeTargets="BeforeBuild"
-          DependsOnTargets="NexFiscalInstallFrontendDependencies"
           Condition="'$(DesignTimeBuild)' != 'true' and '$(IsCrossTargetingBuild)' != 'true'">
-    <Message Importance="high" Text="NexFiscal: compilando frontend automaticamente para wwwroot (erros do Vite exibidos abaixo)..." />
-    <Exec WorkingDirectory="$(NexFiscalFrontendDir)"
-          Command="$(NexFiscalNpm) run build"
+    <Message Importance="high" Text="NexFiscal: compilando React (diagnóstico salvo em frontend/.nexfiscal-build.log)..." />
+    <Exec WorkingDirectory="$(NexFiscalRootDir)"
+          Command="$(NexFiscalNode) &quot;$(NexFiscalRootDir)scripts/build-frontend.mjs&quot;"
+          ConsoleToMSBuild="true"
           StandardOutputImportance="high"
           StandardErrorImportance="high" />
   </Target>

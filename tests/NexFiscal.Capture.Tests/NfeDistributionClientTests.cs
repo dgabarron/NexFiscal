@@ -104,6 +104,15 @@ public sealed class NfeDistributionClientTests
     }
 
     [Fact]
+    public void Response_SoapFault_ThrowsBeforeReadingCStat()
+    {
+        var soap = "<s:Envelope xmlns:s=\"http://www.w3.org/2003/05/soap-envelope\">" +
+                   "<s:Body><s:Fault><s:Reason><s:Text>Erro SOAP</s:Text></s:Reason>" +
+                   "</s:Fault></s:Body></s:Envelope>";
+        Assert.Throws<InvalidDataException>(() => NfeDistributionClient.ParseResponse(soap));
+    }
+
+    [Fact]
     public void Response_WithoutRetDistDFeInt_Throws()
     {
         Assert.Throws<InvalidDataException>(() => NfeDistributionClient.ParseResponse("<Envelope/>"));

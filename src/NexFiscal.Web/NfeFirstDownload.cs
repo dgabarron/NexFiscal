@@ -51,14 +51,45 @@ public sealed class NfeFirstDownload(HanaSetup hana, CompanyCertificateVault vau
                         (result.Reason.Length > 220 ? result.Reason[..220] : result.Reason) +
                         ". Nenhum XML foi gravado. Aguarde o intervalo de segurança antes de uma nova consulta.");
                 }
-                var documents = await new HanaNfeDistributionStore(HanaSetup.Factory,
-                        hana.ConnectionString ?? throw new InvalidOperationException("HANA não configurado."))
-                    .SaveBatchAsync(guid.ToString("D"), nsu, result, ct);
+                // O primeiro objetivo é entregar os arquivos recebidos.
+                // Um erro de persistência HANA não pode apagar os XMLs já baixados.
+                string? archiveId = null;
+                string[] schemas = [];
+                if (result.Status == 138)
+                {
+                    var saved = await archive.SaveAsync(guid.ToString("D"), result, ct);
+                    archiveId = saved.Id;
+                    schemas = saved.Schemas;
+                }
+
+                var hanaSaved = false;
+                string? persistenceWarning = null;
+                try
+                {
+                    await new HanaNfeDistributionStore(HanaSetup.Factory,
+                            hana.ConnectionString ?? throw new InvalidOperationException("HANA não configurado."))
+                        .SaveBatchAsync(guid.ToString("D"), nsu, result, ct);
+                    hanaSaved = true;
+                }
+                catch (Exception ex)
+                {
+                    // O ZIP já foi finalizado e pode ser baixado mesmo
+                    // que o checkpoint não tenha avançado no HANA.
+                    persistenceWarning = "XMLs disponíveis para download, mas gravação HANA não confirmada. " +
+                        "Não reinicie o NSU nem repita a consulta antes de reconciliar o checkpoint.";
+                    System.Diagnostics.Trace.TraceError(
+                        "NexFiscal HANA após XML capturado: {0}", ex.GetType().Name);
+                }
                 return new
                 {
                     status = result.Status,
                     reason = result.Reason,
-                    downloaded = documents,
+                    downloaded = result.Documents.Count,
+                    archiveUrl = archiveId is null ? null :
+                        "/api/capture/archive/" + guid.ToString("D") + "/" + archiveId,
+                    schemas,
+                    hanaSaved,
+                    persistenceWarning,
                     lastNsu = result.Status == 138 ? result.LastNsu : nsu,
                     maxNsu = result.MaxNsu,
                     nextAllowedUtc = result.Status is 137 or 656 || result.LastNsu == result.MaxNsu

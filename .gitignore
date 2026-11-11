@@ -21,3 +21,6 @@ secrets/
 **/.nexfiscal-certificates/
 
 frontend/.nexfiscal-build.log
+
+# XMLs fiscais baixados localmente (dados confidenciais, fora de wwwroot)
+**/.nexfiscal-downloads/

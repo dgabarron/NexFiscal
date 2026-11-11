@@ -72,7 +72,7 @@ public sealed class NfeFirstDownload(HanaSetup hana, CompanyCertificateVault vau
                 {
                     individual = result.Status == 138
                         ? await individualStore.SaveAsync(validatedDestination, result, ct)
-                        : new NfeIndividualSaveResult(validatedDestination, 0, 0, []);
+                        : new NfeIndividualSaveResult(validatedDestination, 0, 0, [], 0);
                 }
                 catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
                 {
@@ -86,6 +86,7 @@ public sealed class NfeFirstDownload(HanaSetup hana, CompanyCertificateVault vau
                         downloaded = result.Documents.Count,
                         filesSaved = 0,
                         filesAlreadyPresent = 0,
+                        skippedNonProcNFe = 0,
                         saveSucceeded = false,
                         fileSaveError = "Falha ao salvar XML individual na pasta indicada. " +
                             "O ZIP de recuperação foi preservado. Verifique permissões, " +
@@ -130,6 +131,8 @@ public sealed class NfeFirstDownload(HanaSetup hana, CompanyCertificateVault vau
                     saveSucceeded = true,
                     fileSaveError = (string?)null,
                     filesAlreadyPresent = individual.AlreadyPresent,
+                    skippedNonProcNFe = individual.SkippedNonProcNFe,
+                    completeOnly = true,
                     destinationDirectory = validatedDestination,
                     filenames = individual.Filenames,
                     archiveUrl = archiveId is null ? null :

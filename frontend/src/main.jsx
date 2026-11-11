@@ -108,7 +108,7 @@ function App(){
     const result=await invoke("/api/capture/download",{companyId,previousConsumerStopped:true});
     setCaptureResult(result);
     if(result.status===656)setError("SEFAZ 656 — consumo indevido. Aguarde pelo menos 1 hora antes de nova tentativa. "+result.reason);
-    else if(result.status===137)setMessage("SEFAZ 137 — nenhum documento disponível agora. A próxima consulta só será permitida após 1 hora.");
+    else if(result.status===137)setMessage("");
     else setMessage(`SEFAZ 138 — ${result.downloaded} XML(s) gravado(s) no HANA. Último NSU: ${String(result.lastNsu).padStart(15,"0")}.`);
     await refreshCapture();
   }catch(e){setError(e.message);await refreshCapture();}
@@ -187,8 +187,8 @@ function App(){
              <div className="rounded-lg bg-slate-50 p-4"><p className="text-xs text-slate-500">Certificado A1</p><p className="mt-2 text-sm font-semibold"><span className={company.certificateStored?"text-emerald-700":"text-amber-800"}>{company.certificateStored?"Protegido no servidor":"Não encontrado"}</span></p></div>
            </div>
            <div className="mt-5 space-y-3 text-sm">
-             <div className="flex gap-2 items-center">{company.cursorConfigured?<CheckCircle2 className="text-emerald-600" size={18}/>:<CircleDot className="text-amber-600" size={18}/>} Checkpoint interno de NSU {company.cursorConfigured?"encontrado":"aguardando inicialização segura"}</div>
-             <div className="flex gap-2 items-center">{company.enabled?<CheckCircle2 className="text-emerald-600" size={18}/>:<CircleDot className="text-amber-600" size={18}/>} Empresa {company.enabled?"habilitada":"pausada"}</div>
+             <div className="flex gap-2 items-center">{company.cursorConfigured?<CheckCircle2 className="text-emerald-600" size={18}/>:<CircleDot className="text-amber-600" size={18}/>} Controle de NSU {company.cursorConfigured?"inicializado":"será inicializado na primeira consulta"}</div>
+             <div className="flex gap-2 items-center">{company.enabled?<CheckCircle2 className="text-emerald-600" size={18}/>:<CircleDot className="text-amber-600" size={18}/>} Captura {company.enabled?"habilitada para execução manual":"ainda não iniciada"}</div>
            </div>
            <div className="mt-5"><Notice>{company.reason}</Notice></div>
            {connectivity[company.companyId]&&<div className="mt-5"><Notice type={connectivity[company.companyId].reachable?"success":"error"}>{connectivity[company.companyId].message}<div className="mt-1 text-xs font-medium">Etapa: {connectivity[company.companyId].stage || "desconhecida"} · Código: {connectivity[company.companyId].code || "indisponível"}{connectivity[company.companyId].httpStatus ? ` · HTTP ${connectivity[company.companyId].httpStatus}` : ""}{connectivity[company.companyId].hresult ? ` · ${connectivity[company.companyId].hresult}` : ""}</div>{connectivity[company.companyId].chainErrors?.length > 0 && <div className="mt-1 text-xs">Cadeia ICP-Brasil: {connectivity[company.companyId].chainErrors.join(", ")}</div>}{connectivity[company.companyId].causes?.length > 0 && <div className="mt-1 text-xs">Causas técnicas: {connectivity[company.companyId].causes.join(" → ")} · Protocolo: {connectivity[company.companyId].tlsPolicy || "padrão do sistema"}</div>}</Notice></div>}
@@ -202,7 +202,7 @@ function App(){
            </div>
          </CardContent>
        </Card>)}
-       {captureResult&&<Notice type={captureResult.status===656?"error":captureResult.status===137?"warning":"success"}>SEFAZ: {captureResult.status} · {captureResult.reason} · XMLs novos: {captureResult.downloaded}</Notice>}
+       {captureResult&&<Notice type={captureResult.status===656?"error":captureResult.status===137?"warning":"success"}>SEFAZ: {captureResult.status} · {captureResult.reason} · XMLs novos: {captureResult.downloaded}{captureResult.status===137?" · Aguarde pelo menos 1 hora antes de outra consulta.":""}</Notice>}
        <Notice>A primeira consulta inicializa automaticamente o NSU se não houver checkpoint. Execute somente após desligar o consumidor anterior; o sistema impede consultas repetidas durante o intervalo de segurança.</Notice>
      </div>}
      <div className="mt-10 text-xs text-slate-400">NexFiscal · Microsoft .NET 8 + React + Tailwind CSS · Configuração local</div>

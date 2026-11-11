@@ -1,11 +1,19 @@
 using System.Data.Common;
 using System.Net;
+using Microsoft.AspNetCore.DataProtection;
 using NexFiscal.Capture;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.WebHost.UseUrls(builder.Configuration["NexFiscal:ListenUrl"] ?? "http://127.0.0.1:5187");
 builder.WebHost.ConfigureKestrel(k => k.Limits.MaxRequestBodySize = 5_500_000);
+var protection = builder.Services.AddDataProtection()
+    .SetApplicationName("NexFiscal")
+    .PersistKeysToFileSystem(new DirectoryInfo(Path.Combine(builder.Environment.ContentRootPath, ".nexfiscal-keys")));
+if (OperatingSystem.IsWindows())
+    protection.ProtectKeysWithDpapi();
+builder.Services.AddSingleton<HanaSetup>();
 var app = builder.Build();
+var hanaSetup = app.Services.GetRequiredService<HanaSetup>();
 
 // Secure bootstrap: this initial configuration portal must never be accessible
 // from the network. Production multi-user authentication is not implemented.
@@ -25,7 +33,29 @@ app.Use(async (ctx, next) =>
 app.UseDefaultFiles();
 app.UseStaticFiles();
 
-app.MapGet("/api/health", () => Results.Ok(new { product = "NexFiscal", state = "configuration", hanaConfigured = HasHana() }));
+app.MapGet("/api/health", () => Results.Ok(new
+{
+    product = "NexFiscal", state = "configuration",
+    hanaConfigured = HasHana(), hanaSetupCompleted = hanaSetup.Configured
+}));
+
+app.MapPost("/api/setup/hana/test", async (HanaSetupRequest request, CancellationToken ct) =>
+{
+    try { return Results.Ok(await hanaSetup.TestAsync(request, ct)); }
+    catch (ArgumentException) { return Results.BadRequest(new { error = "Parâmetros de conexão inválidos." }); }
+    catch (Exception) { return Results.Problem("Não foi possível conectar ao HANA. Confira servidor, porta, credenciais e conectividade.", statusCode: 503); }
+});
+
+app.MapPost("/api/setup/hana/save", async (HanaSetupRequest request, CancellationToken ct) =>
+{
+    try
+    {
+        var result = await hanaSetup.SaveAsync(request, ct);
+        return result.SchemaReady ? Results.Ok(result) : Results.BadRequest(result);
+    }
+    catch (ArgumentException) { return Results.BadRequest(new { error = "Parâmetros de conexão inválidos." }); }
+    catch (Exception) { return Results.Problem("Não foi possível validar e salvar a configuração HANA.", statusCode: 503); }
+});
 
 app.MapPost("/api/certificates/inspect", async (HttpRequest req, CancellationToken ct) =>
 {
@@ -51,17 +81,11 @@ app.MapPost("/api/certificates/inspect", async (HttpRequest req, CancellationTok
 app.MapPost("/api/companies/register", async (HttpRequest req, CancellationToken ct) =>
 {
     if (!HasHana())
-        return Results.Problem("Configure NexFiscal:HanaConnectionString e NexFiscal:HanaFactoryType antes de cadastrar.", statusCode: 503);
+        return Results.Problem("Configure a conexão SAP HANA na primeira etapa antes de cadastrar.", statusCode: 503);
     try
     {
         var (pfx, password) = await ReadCertificateAsync(req, ct);
-        var factoryName = app.Configuration["NexFiscal:HanaFactoryType"]!;
-        var factoryType = Type.GetType(factoryName, throwOnError: true)!;
-        DbProviderFactory factory;
-        var instance = factoryType.GetField("Instance")?.GetValue(null);
-        if (instance is DbProviderFactory fieldFactory) factory = fieldFactory;
-        else throw new InvalidOperationException("Factory HANA não encontrada.");
-        var store = new HanaCompanyRegistrationStore(factory, app.Configuration["NexFiscal:HanaConnectionString"]!);
+        var store = new HanaCompanyRegistrationStore(HanaSetup.Factory, hanaSetup.ConnectionString!);
         var registered = await new A1CompanyRegistration(store).RegisterAsync(pfx, password, ct);
         return Results.Ok(new { registered.CompanyId, registered.Cnpj, registered.LegalName, registered.Environment, registered.Enabled, registered.CaptureStatus,
             message = "Empresa cadastrada. Sincronização aguardando inicialização segura; A1 ainda não é armazenado." });
@@ -80,8 +104,7 @@ app.MapPost("/api/companies/register", async (HttpRequest req, CancellationToken
 app.MapFallbackToFile("index.html");
 app.Run();
 
-bool HasHana() => !string.IsNullOrWhiteSpace(app.Configuration["NexFiscal:HanaConnectionString"]) &&
-                  !string.IsNullOrWhiteSpace(app.Configuration["NexFiscal:HanaFactoryType"]);
+bool HasHana() => !string.IsNullOrWhiteSpace(hanaSetup.ConnectionString);
 
 static async Task<(byte[] pfx, string password)> ReadCertificateAsync(HttpRequest req, CancellationToken ct)
 {

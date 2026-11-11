@@ -15,6 +15,7 @@ builder.Services.AddSingleton<HanaSetup>();
 builder.Services.AddSingleton<CompanyCertificateVault>();
 builder.Services.AddSingleton<NfeCaptureCoordinator>();
 builder.Services.AddSingleton<NfeFirstDownload>();
+builder.Services.AddSingleton<CteFirstDownload>();
 builder.Services.AddSingleton<NfeXmlArchive>();
 builder.Services.AddSingleton<NfeIndividualXmlStore>();
 builder.Services.AddSingleton<NfeHandoffPreparation>();
@@ -199,6 +200,35 @@ app.MapGet("/api/capture/archive/{companyId}/{archiveId}", (
     return file is null
         ? Results.NotFound()
         : Results.File(file, "application/zip", "NexFiscal_NFe_" + archiveId + ".zip");
+});
+
+// CT-e tem distribuição e cursor próprios, independentes do NSU de NF-e.
+app.MapGet("/api/cte/status/{companyId}", async (
+    string companyId, CteFirstDownload service, CancellationToken ct) =>
+{
+    try { return Results.Ok(await service.StatusAsync(companyId, ct)); }
+    catch (ArgumentException ex) { return Results.BadRequest(new { error = ex.Message }); }
+    catch (Exception ex)
+    {
+        app.Logger.LogError(ex, "Falha ao consultar cursor CT-e");
+        return Results.Json(new { error = "Não foi possível ler o checkpoint CT-e." }, statusCode: 503);
+    }
+});
+
+app.MapPost("/api/cte/download", async (
+    CaptureDownloadRequest request, CteFirstDownload service, CancellationToken ct) =>
+{
+    try { return Results.Ok(await service.ExecuteAsync(
+        request.CompanyId, request.PreviousConsumerStopped, request.DestinationDirectory, ct)); }
+    catch (ArgumentException ex) { return Results.BadRequest(new { error = ex.Message }); }
+    catch (DirectoryNotFoundException ex) { return Results.BadRequest(new { error = ex.Message }); }
+    catch (InvalidOperationException ex) { return Results.Conflict(new { error = ex.Message }); }
+    catch (Exception ex)
+    {
+        var id = Guid.NewGuid().ToString("N")[..8];
+        app.Logger.LogError(ex, "Falha de captura CT-e Diagnostico={Id}", id);
+        return Results.Json(new { error = "A consulta ou a gravação CT-e falhou. Verifique os logs do servidor.", diagnostico = id }, statusCode: 503);
+    }
 });
 
 // Primeira distribuição NF-e: um clique, sem digitar NSU, somente no portal local.

@@ -186,42 +186,59 @@ function App(){
         <Button className="mt-6" disabled={busy||!hanaReady} onClick={()=>inspect(true)}>Cadastrar empresa<ArrowRight size={17}/></Button>
        </div>}
       </CardContent></Card><div className="space-y-5"><Card><CardHeader><h2 className="font-bold">Infraestrutura conectada</h2></CardHeader><CardContent><div className="flex items-center gap-2 text-sm"><CheckCircle2 size={18} className="text-emerald-500"/>Banco SAP HANA configurado</div><div className="mt-4 flex items-center gap-2 text-sm text-slate-500"><ShieldCheck size={18}/>Controle interno de NSU</div><p className="mt-3 text-xs text-slate-500 leading-5">O NSU não é solicitado ao usuário. A captura começa somente após uma inicialização fiscal segura.</p></CardContent></Card></div></div>}
-     {stage===2&&<div className="space-y-6">
+     {stage===2&&<div className="space-y-5">
        <div className="flex flex-wrap items-center justify-between gap-4">
-         <div><h2 className="text-lg font-bold">Distribuição de NF-e</h2><p className="mt-1 text-sm text-slate-500">Verificação do ambiente antes da primeira consulta real à SEFAZ Nacional.</p></div>
-         <Button variant="outline" onClick={refreshCapture} disabled={captureBusy}><RefreshCw size={17}/>Atualizar situação</Button>
+         <div><h2 className="text-lg font-bold">Captura de NF-e</h2><p className="mt-1 text-sm text-slate-500">Consulte a SEFAZ e acompanhe os XMLs recebidos no SAP HANA.</p></div>
+         <Button variant="outline" disabled={captureBusy} onClick={refreshCapture}><RefreshCw size={17}/>Atualizar dados</Button>
        </div>
-       {!captureState&&<Notice>Consulte a situação do HANA para verificar as empresas cadastradas.</Notice>}
-       {captureState?.companies?.length===0&&<Notice>Não há empresa cadastrada. Volte à etapa de certificado para iniciar o cadastro.</Notice>}
-       {captureState?.companies?.map(company=><Card key={company.companyId}>
-         <CardHeader><div className="flex flex-wrap justify-between gap-3">
-           <div><h3 className="font-bold text-lg">{company.legalName}</h3><p className="text-sm text-slate-500 mt-1">CNPJ {formatCnpj(company.cnpj)}</p></div>
-           <span className={`rounded-full px-3 py-1.5 text-xs font-semibold ${company.certificateStored&&!pendingWindow(company)?"bg-emerald-50 text-emerald-700":"bg-amber-50 text-amber-800"}`}>{!company.certificateStored?"Certificado ausente":pendingWindow(company)?"Aguardando intervalo":"Pronto para consulta"}</span>
-         </div></CardHeader>
-         <CardContent>
-           <div className="grid gap-4 sm:grid-cols-3">
-             <div className="rounded-lg bg-slate-50 p-4"><p className="text-xs text-slate-500">XMLs gravados no HANA</p><p className="mt-2 text-2xl font-bold">{company.documentsStored}</p></div>
-             <div className="rounded-lg bg-slate-50 p-4"><p className="text-xs text-slate-500">Última tentativa registrada</p><p className="mt-2 text-sm font-semibold">{company.lastConsultationUtc?new Date(company.lastConsultationUtc).toLocaleString("pt-BR"):"Nenhuma"}</p></div>
-             <div className="rounded-lg bg-slate-50 p-4"><p className="text-xs text-slate-500">Certificado A1</p><p className="mt-2 text-sm font-semibold"><span className={company.certificateStored?"text-emerald-700":"text-amber-800"}>{company.certificateStored?"Protegido no servidor":"Não encontrado"}</span></p></div>
-           </div>
-           <div className="mt-5 space-y-3 text-sm">
-             <div className="flex gap-2 items-center">{company.cursorConfigured?<CheckCircle2 className="text-emerald-600" size={18}/>:<CircleDot className="text-amber-600" size={18}/>} Controle de NSU {company.cursorConfigured?"inicializado":"será inicializado na primeira consulta"}</div>
-             <div className="flex gap-2 items-center">{company.enabled?<CheckCircle2 className="text-emerald-600" size={18}/>:<CircleDot className="text-amber-600" size={18}/>} Captura {company.enabled?"habilitada para execução manual":"ainda não iniciada"}</div>
-           </div>
-           <div className="mt-5"><Notice>{company.reason}</Notice></div>
-           {connectivity[company.companyId]&&<div className="mt-5"><Notice type={connectivity[company.companyId].reachable?"success":"error"}>{connectivity[company.companyId].message}<div className="mt-1 text-xs font-medium">Etapa: {connectivity[company.companyId].stage || "desconhecida"} · Código: {connectivity[company.companyId].code || "indisponível"}{connectivity[company.companyId].httpStatus ? ` · HTTP ${connectivity[company.companyId].httpStatus}` : ""}{connectivity[company.companyId].hresult ? ` · ${connectivity[company.companyId].hresult}` : ""}</div>{connectivity[company.companyId].chainErrors?.length > 0 && <div className="mt-1 text-xs">Cadeia ICP-Brasil: {connectivity[company.companyId].chainErrors.join(", ")}</div>}{connectivity[company.companyId].causes?.length > 0 && <div className="mt-1 text-xs">Causas técnicas: {connectivity[company.companyId].causes.join(" → ")} · Protocolo: {connectivity[company.companyId].tlsPolicy || "padrão do sistema"}</div>}</Notice></div>}
-           <div className="mt-5 flex flex-wrap items-center gap-3">
-             <Button variant="outline" disabled={!company.certificateStored||captureBusy} onClick={()=>testConnectivity(company.companyId)}><PlugZap size={17}/>Testar conexão SEFAZ</Button>
-             <Button disabled={!company.certificateStored||captureBusy} onClick={()=>downloadNfe(company)}>
-               {captureBusy?<RefreshCw size={17}/>:<CloudUpload size={17}/>}
-               {captureBusy?"Consultando SEFAZ...":pendingWindow(company)?"Ver horário da próxima consulta":"Baixar NF-e agora"}
-             </Button>
-             {pendingWindow(company)?<span className="text-xs font-medium text-amber-800">Próxima consulta após {pendingWindow(company).time} · {pendingWindow(company).minutes} min restantes</span>:<span className="text-xs text-slate-500">Consulta manual controlada, sem agendamento automático</span>}
-           </div>
-         </CardContent>
-       </Card>)}
-       {captureResult&&<Notice type={captureResult.status===656?"error":captureResult.status===137?"warning":"success"}>SEFAZ: {captureResult.status} · {captureResult.reason} · XMLs novos: {captureResult.downloaded}{captureResult.status===137?" · Aguarde pelo menos 1 hora antes de outra consulta.":""}</Notice>}
-       <Notice>A primeira consulta inicializa automaticamente o NSU se não houver checkpoint. Execute somente após desligar o consumidor anterior; o sistema impede consultas repetidas durante o intervalo de segurança.</Notice>
+       {!captureState&&<Notice>Não foi possível carregar os dados da operação. Clique em Atualizar dados.</Notice>}
+       {captureState?.companies?.length===0&&<Notice>Não há empresa cadastrada para consultar.</Notice>}
+       {captureState?.companies?.map(company=>{
+         const cooldown=pendingWindow(company);
+         const connected=connectivity[company.companyId];
+         return <Card key={company.companyId}>
+           <CardHeader>
+             <div className="flex flex-wrap items-center justify-between gap-3">
+               <div><h3 className="text-lg font-bold">{company.legalName}</h3><p className="mt-1 text-sm text-slate-500">CNPJ {formatCnpj(company.cnpj)}</p></div>
+               <span className={`rounded-full px-3 py-1.5 text-xs font-semibold ${!company.certificateStored?"bg-amber-50 text-amber-800":cooldown?"bg-amber-50 text-amber-800":"bg-emerald-50 text-emerald-800"}`}>
+                 {!company.certificateStored?"Certificado ausente":cooldown?"Aguardando próxima consulta":"Consulta disponível"}
+               </span>
+             </div>
+           </CardHeader>
+           <CardContent>
+             <div className="grid gap-3 sm:grid-cols-3">
+               <div className="rounded-lg bg-slate-50 p-4">
+                 <p className="text-xs text-slate-500">XMLs armazenados</p>
+                 <p className="mt-2 text-2xl font-bold">{company.documentsStored}</p>
+               </div>
+               <div className="rounded-lg bg-slate-50 p-4">
+                 <p className="text-xs text-slate-500">Última tentativa</p>
+                 <p className="mt-2 text-sm font-semibold">{company.lastConsultationUtc?new Date(company.lastConsultationUtc.endsWith("Z")?company.lastConsultationUtc:company.lastConsultationUtc+"Z").toLocaleString("pt-BR"):"Ainda não realizada"}</p>
+               </div>
+               <div className="rounded-lg bg-slate-50 p-4">
+                 <p className="text-xs text-slate-500">Próxima consulta</p>
+                 <p className={`mt-2 text-sm font-semibold ${cooldown?"text-amber-800":"text-emerald-800"}`}>{cooldown?`Após ${cooldown.time} (${cooldown.minutes} min)`:company.certificateStored?"Disponível agora":"Aguardando certificado"}</p>
+               </div>
+             </div>
+             {!company.certificateStored&&<div className="mt-4"><Notice>O certificado digital A1 não está disponível no servidor.</Notice></div>}
+             {cooldown&&<div className="mt-4"><Notice>A última tentativa foi registrada. O sistema aguardará o horário permitido antes de enviar outra consulta à SEFAZ. Não é necessário alterar NSU ou banco.</Notice></div>}
+             {connected&&<div className="mt-4"><Notice type={connected.reachable?"success":"error"}>
+               <div className="font-semibold">{connected.reachable?"Conexão HTTPS com a SEFAZ confirmada":connected.message}</div>
+               {!connected.reachable&&<div className="mt-1 text-xs">Etapa: {connected.stage||"não identificada"} · Código: {connected.code||"indisponível"}{connected.causes?.length>0?` · ${connected.causes.join(" → ")}`:""}</div>}
+             </Notice></div>}
+             <div className="mt-5 flex flex-wrap gap-3">
+               <Button disabled={!company.certificateStored||captureBusy} onClick={()=>downloadNfe(company)}>
+                 {captureBusy?<RefreshCw size={17}/>:<CloudUpload size={17}/>}
+                 {captureBusy?"Executando consulta...":cooldown?"Ver quando posso consultar":"Consultar SEFAZ e salvar XMLs"}
+               </Button>
+               <Button variant="outline" disabled={!company.certificateStored||captureBusy} onClick={()=>testConnectivity(company.companyId)}><PlugZap size={17}/>Testar conexão</Button>
+             </div>
+           </CardContent>
+         </Card>;
+       })}
+       {captureResult&&<Notice type={captureResult.status===656?"error":captureResult.status===137?"warning":"success"}>
+         SEFAZ {captureResult.status}: {captureResult.reason} · XMLs novos: {captureResult.downloaded}
+       </Notice>}
      </div>}
      <div className="mt-10 text-xs text-slate-400">NexFiscal · Microsoft .NET 8 + React + Tailwind CSS · Configuração local</div>
     </main>

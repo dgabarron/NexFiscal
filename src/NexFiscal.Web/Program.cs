@@ -12,8 +12,10 @@ var protection = builder.Services.AddDataProtection()
 if (OperatingSystem.IsWindows())
     protection.ProtectKeysWithDpapi();
 builder.Services.AddSingleton<HanaSetup>();
+builder.Services.AddSingleton<CompanyCertificateVault>();
 var app = builder.Build();
 var hanaSetup = app.Services.GetRequiredService<HanaSetup>();
+var certificateVault = app.Services.GetRequiredService<CompanyCertificateVault>();
 
 // Secure bootstrap: this initial configuration portal must never be accessible
 // from the network. Production multi-user authentication is not implemented.
@@ -57,6 +59,13 @@ app.MapPost("/api/setup/hana/save", async (HanaSetupRequest request, Cancellatio
     catch (Exception) { return Results.Problem("Não foi possível validar e salvar a configuração HANA.", statusCode: 503); }
 });
 
+app.MapPost("/api/setup/hana/provision", async (HanaSetupRequest request, CancellationToken ct) =>
+{
+    try { return Results.Ok(await hanaSetup.ProvisionAsync(request, ct)); }
+    catch (ArgumentException) { return Results.BadRequest(new { error = "Parâmetros de conexão inválidos." }); }
+    catch (Exception) { return Results.Problem("Não foi possível preparar o schema BRAI_NEX. Confira permissões DDL ou a estrutura existente. Nenhum dado foi apagado.", statusCode: 503); }
+});
+
 app.MapPost("/api/certificates/inspect", async (HttpRequest req, CancellationToken ct) =>
 {
     try
@@ -87,8 +96,19 @@ app.MapPost("/api/companies/register", async (HttpRequest req, CancellationToken
         var (pfx, password) = await ReadCertificateAsync(req, ct);
         var store = new HanaCompanyRegistrationStore(HanaSetup.Factory, hanaSetup.ConnectionString!);
         var registered = await new A1CompanyRegistration(store).RegisterAsync(pfx, password, ct);
+        try
+        {
+            await certificateVault.SaveAsync(registered.CompanyId, registered.Cnpj, pfx, password, ct);
+        }
+        catch (Exception)
+        {
+            // O cadastro permanece pausado. Não reportar sucesso ou habilitar captura
+            // quando a proteção do A1 falhou.
+            return Results.Problem("A empresa foi cadastrada pausada, mas o A1 não pôde ser protegido. A captura não será habilitada; solicite recuperação administrativa.", statusCode: 500);
+        }
         return Results.Ok(new { registered.CompanyId, registered.Cnpj, registered.LegalName, registered.Environment, registered.Enabled, registered.CaptureStatus,
-            message = "Empresa cadastrada. Sincronização aguardando inicialização segura; A1 ainda não é armazenado." });
+            certificateStored = true,
+            message = "Empresa e certificado A1 protegido cadastrados. Sincronização aguardando inicialização segura da SEFAZ." });
     }
     catch (Exception e) when (e is InvalidDataException or ArgumentException or System.Security.Cryptography.CryptographicException)
     {

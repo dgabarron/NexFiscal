@@ -51,6 +51,21 @@ public sealed class CteDistributionClientTests
         Assert.Equal(xml, Encoding.UTF8.GetString(result.Documents[0].XmlBytes));
     }
 
+    [Theory]
+    [InlineData(137)]
+    [InlineData(656)]
+    public void NoDocumentsOrConsumptionBlocked_ProducesNoXml(int cstat)
+    {
+        var soap = "<s:Envelope xmlns:s=\"http://www.w3.org/2003/05/soap-envelope\"><s:Body>" +
+                   "<retDistDFeInt xmlns=\"http://www.portalfiscal.inf.br/cte\" versao=\"1.00\">" +
+                   "<cStat>" + cstat + "</cStat><xMotivo>Consulta indisponível</xMotivo>" +
+                   "<ultNSU>000000000000000</ultNSU><maxNSU>000000000000000</maxNSU>" +
+                   "</retDistDFeInt></s:Body></s:Envelope>";
+        var result = CteDistributionClient.ParseResponse(soap);
+        Assert.Equal(cstat, result.Status);
+        Assert.Empty(result.Documents);
+    }
+
     [Fact]
     public async Task FolderWriter_SavesOnlyProcCteWithDistinctFilename()
     {

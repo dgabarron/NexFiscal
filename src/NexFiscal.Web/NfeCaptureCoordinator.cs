@@ -26,20 +26,17 @@ public sealed class NfeCaptureCoordinator(
         {
             var certificateStored = vault.IsStored(company.Id);
             var reason = !certificateStored ? "Certificado A1 não está armazenado."
-                : !company.CursorConfigured ? "Checkpoint de NSU não inicializado. É necessário coordenar a migração do consumidor atual."
-                : !company.Enabled ? "Empresa permanece pausada; o administrador deve autorizar a captura."
                 : company.NextAllowedUtc is not null && company.NextAllowedUtc > DateTime.UtcNow
-                    ? "Aguardando intervalo permitido de consulta."
-                : !IsExplicitlyAuthorized ? "A captura exige confirmação administrativa da exclusividade do consumidor de NSU."
-                : "Pré-requisitos internos atendidos. A validade do A1 será verificada antes da consulta.";
+                    ? "Consulta anterior registrada. Aguarde o intervalo obrigatório antes de tentar novamente."
+                : !company.CursorConfigured ? "Pronto para a primeira consulta. O NSU inicial será criado automaticamente ao clicar em Baixar NF-e."
+                : "Pronto para a próxima consulta manual. O NSU é controlado automaticamente pelo NexFiscal.";
 
             result.Add(new
             {
                 companyId = company.Id, cnpj = company.Cnpj,
                 legalName = company.Name, company.Enabled, certificateStored,
                 company.CursorConfigured,
-                ready = certificateStored && company.CursorConfigured && company.Enabled &&
-                        IsExplicitlyAuthorized &&
+                ready = certificateStored &&
                         (company.NextAllowedUtc is null || company.NextAllowedUtc <= DateTime.UtcNow),
                 reason,
                 documentsStored = company.DocumentsStored,

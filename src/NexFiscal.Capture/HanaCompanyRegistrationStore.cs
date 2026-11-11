@@ -12,6 +12,32 @@ public sealed class HanaCompanyRegistrationStore(DbProviderFactory factory, stri
 {
     private const string S = "\"BRAI_NEX\".";
 
+    /// <summary>
+    /// Encontra cadastro anterior pausado para migrar A1 ao cofre.
+    /// Não altera cursor, NSU, empresa ou estado operacional.
+    /// </summary>
+    public async Task<string?> FindPausedCompanyIdAsync(string cnpj, int environment, CancellationToken ct)
+    {
+        await using var connection = factory.CreateConnection()
+            ?? throw new InvalidOperationException("Provider HANA indisponível.");
+        connection.ConnectionString = connectionString;
+        await connection.OpenAsync(ct);
+        await using var query = connection.CreateCommand();
+        query.CommandText = "SELECT \"CompanyId\",\"Enabled\" FROM " + S +
+            "\"BRAI_NEX_Company\" WHERE \"Cnpj\"=? AND \"Environment\"=?";
+        foreach (var value in new object[] { cnpj, environment })
+        {
+            var parameter = query.CreateParameter();
+            parameter.Value = value;
+            query.Parameters.Add(parameter);
+        }
+        await using var reader = await query.ExecuteReaderAsync(ct);
+        if (!await reader.ReadAsync(ct)) return null;
+        if (Convert.ToInt32(reader.GetValue(1)) != 0)
+            throw new InvalidOperationException("Empresa já habilitada. Exige fluxo de renovação.");
+        return reader.GetString(0);
+    }
+
     public async Task<CompanyRegistration> RegisterPausedAsync(
         A1CompanyIdentity identity, int environment, CancellationToken ct)
     {

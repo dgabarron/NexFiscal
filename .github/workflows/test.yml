@@ -1,4 +1,4 @@
-name: NexFiscal capture tests
+name: NexFiscal build and tests
 on:
   push:
   pull_request:
@@ -13,5 +13,15 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.0.x'
-      - name: Testar núcleo NF-e
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Testar núcleo NF-e e cadastro A1
         run: dotnet test tests/NexFiscal.Capture.Tests/NexFiscal.Capture.Tests.csproj -c Release
+      - name: Compilar portal ASP.NET Core
+        run: dotnet build src/NexFiscal.Web/NexFiscal.Web.csproj -c Release
+      - name: Compilar frontend Fluent UI
+        working-directory: frontend
+        run: |
+          npm install --no-audit --no-fund
+          npm run build

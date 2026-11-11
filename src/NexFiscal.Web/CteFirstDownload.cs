@@ -16,7 +16,7 @@ public sealed class CteFirstDownload(
 
     public sealed record Cursor(
         long LastNsu, DateTime NextAllowedAtUtc,
-        DateTime? LastAttemptUtc = null, int? LastStatus = null, string? LastReason = null);
+        DateTime? LastAttemptUtc = null, int? LastStatus = null, string? LastReason = null, long? MaxNsu = null);
 
     public async Task<object> StatusAsync(string companyId, CancellationToken ct)
     {
@@ -27,6 +27,7 @@ public sealed class CteFirstDownload(
         {
             companyId = id.ToString("D"),
             lastNsu = cursor.LastNsu.ToString("D15"),
+            maxNsu = cursor.MaxNsu?.ToString("D15"),
             nextAllowedUtc = cursor.NextAllowedAtUtc,
             lastAttemptUtc = cursor.LastAttemptUtc,
             lastStatus = cursor.LastStatus,
@@ -95,6 +96,7 @@ public sealed class CteFirstDownload(
                     await WriteAsync(id, reserved with
                     {
                         LastStatus = response.Status,
+                        MaxNsu = response.MaxNsu > 0 ? response.MaxNsu : reserved.MaxNsu,
                         LastReason = response.Reason.Length > 255 ? response.Reason[..255] : response.Reason
                     }, ct);
                     return new
@@ -154,6 +156,7 @@ public sealed class CteFirstDownload(
                 var final = reserved with
                 {
                     LastNsu = next,
+                    MaxNsu = response.MaxNsu,
                     NextAllowedAtUtc = wait ? DateTime.UtcNow.AddHours(1) : DateTime.UtcNow,
                     LastStatus = response.Status,
                     LastReason = response.Reason.Length > 255 ? response.Reason[..255] : response.Reason

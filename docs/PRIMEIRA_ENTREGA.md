@@ -22,3 +22,14 @@
 
 ## Produto
 Nome visual: NexFiscal. Prefixo técnico reservado: `BRAI_NEX`. Portal futuro: Microsoft Fluent Design System / Fluent UI React v9.
+
+## Etapa seguinte — persistência intermediária HANA (11/11/2026)
+
+Implementados na branch:
+- `sql/migrations/001_BRAI_NEX_initial.sql`: schema exclusivo `BRAI_NEX`, empresas, cursores, envelopes XML, log e versão de schema.
+- `HanaNfeCaptureStore`: implementação ADO.NET de `INfeCaptureStore`, com reserva persistida, concorrência otimista, confirmação de NSU e XML na mesma transação e detecção de NSU com hash divergente.
+- O modelo `NfeEnvelope` passa a preservar os bytes do XML descompactado, além de sua representação textual e hash.
+
+**Validação:** compilação e testes sintéticos via GitHub Actions. A DDL e as operações SQL **não foram executadas em uma instância SAP HANA real**; compatibilidade do provider e do servidor deve ser testada antes de instalar. O provider HANA é fornecido pela aplicação host através de `DbProviderFactory`.
+
+**Próximos bloqueios:** validar a migração inicial no HANA da empresa, criar rotina de migrações seguras para upgrades, cadastrar empresa e cursor de forma transacional, cliente SEFAZ usando A1, e testar a operação real ponta a ponta. Nenhuma tabela de schema nativo SAP B1 é acessada pelo motor.

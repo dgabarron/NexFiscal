@@ -15,6 +15,7 @@ builder.Services.AddSingleton<HanaSetup>();
 builder.Services.AddSingleton<CompanyCertificateVault>();
 builder.Services.AddSingleton<NfeCaptureCoordinator>();
 builder.Services.AddSingleton<NfeFirstDownload>();
+builder.Services.AddSingleton<NfeXmlArchive>();
 builder.Services.AddSingleton<NfeHandoffPreparation>();
 var app = builder.Build();
 var hanaSetup = app.Services.GetRequiredService<HanaSetup>();
@@ -187,6 +188,16 @@ app.MapPost("/api/capture/prepare-handoff", async (
         app.Logger.LogError("Preparação NSU falhou. Categoria={Category}", ex.GetType().Name);
         return Results.Problem("Não foi possível preparar o checkpoint no SAP HANA. Nenhuma consulta foi executada.", statusCode: 503);
     }
+});
+
+// Exporta o ZIP já recebido sem nova consulta fiscal e sem acesso ao HANA.
+app.MapGet("/api/capture/archive/{companyId}/{archiveId}", (
+    string companyId, string archiveId, NfeXmlArchive archive) =>
+{
+    var file = archive.Find(companyId, archiveId);
+    return file is null
+        ? Results.NotFound()
+        : Results.File(file, "application/zip", "NexFiscal_NFe_" + archiveId + ".zip");
 });
 
 // Primeira distribuição NF-e: um clique, sem digitar NSU, somente no portal local.

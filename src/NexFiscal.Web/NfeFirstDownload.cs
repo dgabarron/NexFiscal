@@ -44,10 +44,13 @@ public sealed class NfeFirstDownload(HanaSetup hana, CompanyCertificateVault vau
                 var (cnpj, nsu) = await ReserveAsync(guid.ToString("D"), ct);
                 var result = await new NfeDistributionClient().QueryAsync(cert, cnpj, nsu, 1, ct);
                 if (result.Status is not (137 or 138 or 656))
+                {
+                    await RecordRejectionAsync(guid.ToString("D"), nsu, result, ct);
                     throw new InvalidOperationException(
                         "SEFAZ cStat " + result.Status + " — " +
                         (result.Reason.Length > 220 ? result.Reason[..220] : result.Reason) +
                         ". Nenhum XML foi gravado. Aguarde o intervalo de segurança antes de uma nova consulta.");
+                }
                 var documents = await new HanaNfeDistributionStore(HanaSetup.Factory,
                         hana.ConnectionString ?? throw new InvalidOperationException("HANA não configurado."))
                     .SaveBatchAsync(guid.ToString("D"), nsu, result, ct);
@@ -65,6 +68,26 @@ public sealed class NfeFirstDownload(HanaSetup hana, CompanyCertificateVault vau
             finally { CryptographicOperations.ZeroMemory(pfx); }
         }
         finally { Gate.Release(); }
+    }
+
+    // Registra cStat/xMotivo rejeitados para diagnóstico sem alterar o NSU.
+    // A reserva de intervalo já foi persistida antes de enviar o SOAP.
+    private async Task RecordRejectionAsync(
+        string companyId, long requestedNsu, NfeDistributionResult response, CancellationToken ct)
+    {
+        var connectionString = hana.ConnectionString
+            ?? throw new InvalidOperationException("HANA não configurado.");
+        await using var conn = HanaSetup.Factory.CreateConnection()
+            ?? throw new InvalidOperationException("Provider HANA indisponível.");
+        conn.ConnectionString = connectionString;
+        await conn.OpenAsync(ct);
+        await using var cmd = Cmd(conn, null,
+            "INSERT INTO \\"BRAI_NEX\\".\\"BRAI_NEX_CaptureLog\\" " +
+            "(\\"AttemptId\\",\\"CompanyId\\",\\"DocumentType\\",\\"RequestedNsu\\",\\"Status\\",\\"Result\\",\\"Message\\",\\"StartedAtUtc\\",\\"FinishedAtUtc\\") " +
+            "VALUES (?,?,'NFE',?,?,'REJEICAO_SEFAZ',?,CURRENT_UTCTIMESTAMP,CURRENT_UTCTIMESTAMP)",
+            Guid.NewGuid().ToString("D"), companyId, requestedNsu, response.Status,
+            response.Reason.Length > 1000 ? response.Reason[..1000] : response.Reason);
+        await cmd.ExecuteNonQueryAsync(ct);
     }
 
     private async Task<(string Cnpj, long Nsu)> ReserveAsync(string companyId, CancellationToken ct)
@@ -143,7 +166,7 @@ public sealed class NfeFirstDownload(HanaSetup hana, CompanyCertificateVault vau
         }
     }
 
-    private static DbCommand Cmd(DbConnection conn, DbTransaction tx, string sql, params object[] values)
+    private static DbCommand Cmd(DbConnection conn, DbTransaction? tx, string sql, params object[] values)
     {
         var cmd = conn.CreateCommand();
         cmd.Transaction = tx;

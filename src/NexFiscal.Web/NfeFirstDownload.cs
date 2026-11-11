@@ -82,8 +82,8 @@ public sealed class NfeFirstDownload(HanaSetup hana, CompanyCertificateVault vau
         conn.ConnectionString = connectionString;
         await conn.OpenAsync(ct);
         await using var cmd = Cmd(conn, null,
-            "INSERT INTO \\"BRAI_NEX\\".\\"BRAI_NEX_CaptureLog\\" " +
-            "(\\"AttemptId\\",\\"CompanyId\\",\\"DocumentType\\",\\"RequestedNsu\\",\\"Status\\",\\"Result\\",\\"Message\\",\\"StartedAtUtc\\",\\"FinishedAtUtc\\") " +
+            "INSERT INTO \"BRAI_NEX\".\"BRAI_NEX_CaptureLog\" " +
+            "(\"AttemptId\",\"CompanyId\",\"DocumentType\",\"RequestedNsu\",\"Status\",\"Result\",\"Message\",\"StartedAtUtc\",\"FinishedAtUtc\") " +
             "VALUES (?,?,'NFE',?,?,'REJEICAO_SEFAZ',?,CURRENT_UTCTIMESTAMP,CURRENT_UTCTIMESTAMP)",
             Guid.NewGuid().ToString("D"), companyId, requestedNsu, response.Status,
             response.Reason.Length > 1000 ? response.Reason[..1000] : response.Reason);

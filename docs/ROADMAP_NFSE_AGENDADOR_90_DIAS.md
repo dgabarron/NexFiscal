@@ -131,3 +131,13 @@ O operador não quer apenas identificar/reconsultar um NSU já conhecido. Quer d
 **Para implementar auditoria efetivamente abrangente:** criar um controle de cobertura dos lotes `distNSU` recebidos, detectar intervalos de NSU sem persistência; confrontar todos os XMLs por **chave de acesso** e data; consultar candidatos identificáveis conforme limite fiscal; buscar lista independente de chaves/documentos a partir de dados fiscais autorizados (ERP, emissor/prestador, portal fiscal ou relatórios fiscais disponíveis). Se não existir lista externa nem histórico dos NSUs, a ferramenta **não pode declarar período totalmente coberto**. Relatório deverá marcar **cobertura desconhecida** em vez de 'nenhuma nota faltante'. Não reverter o cursor ativo nem reiniciar `distNSU` automaticamente.
 
 A interface nesta revisão só clarifica a diferença e muda a data para português brasileiro. A varredura completa, com reconciliação de fontes, **não está implementada**.
+
+## Ajuste de escopo da conferência (12/11/2026)
+
+Por solicitação do usuário, **não exibir documentos `resNFe`** nem oferecer ação de **reconsulta individual de um NSU** no painel. O processo operacional considera **apenas XMLs completos `procNFe`**.
+
+- A seção é **Conferência de XMLs completos de NF-e**, com data inicial `DD/MM/AAAA` e um único botão **Conferir XMLs completos**.
+- O backend `GET /api/recovery/nfe/preview/{companyId}` filtra apenas entradas `procNFe_v*.xsd` dos ZIPs locais, verifica hash e chave de acesso e retorna os documentos completos no intervalo.
+- A rota `POST /api/recovery/nfe/one` e o método de recuperação pontual foram removidos da aplicação. Nada nessa seção consulta a SEFAZ.
+- A consulta sequencial normal NF-e permanece intacta; nela, os resumos podem ser recebidos da SEFAZ mas nunca são entregues como XML de NF-e na pasta operacional.
+- **Aviso de cobertura:** conferência de ZIPs já recebidos não equivale a varrer todas as NF-e emitidas entre duas datas. Não declarar ausência de faltantes se a origem não permite confirmar a cobertura.

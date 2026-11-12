@@ -105,8 +105,8 @@ public sealed class NfeHistoricalBulkImport(
             {
                 examined++;
                 if (fromZip) zipDocs++; else folderDocs++;
-                NfeDocument? doc;
-                try { doc = InspectProcNfe(bytes); }
+                NfeHistoricalDocumentInspector.Document? doc;
+                try { doc = NfeHistoricalDocumentInspector.Inspect(bytes); }
                 catch (Exception ex) when (ex is XmlException or InvalidDataException)
                     { invalid++; return; }
                 if (doc is null) return; // CT-e, resNFe, eventos, outros arquivos.
@@ -240,39 +240,6 @@ public sealed class NfeHistoricalBulkImport(
             Jobs[company] = snapshot;
             if (status != "running") _ = PersistAsync(snapshot);
         }
-    }
-
-    public sealed record NfeDocument(string Key, DateOnly? IssueDate, string? Issuer, string? Recipient);
-
-    public static NfeDocument? InspectProcNfe(byte[] bytes)
-    {
-        if (bytes.Length is < 1 or > MaxXmlSize) throw new InvalidDataException("XML fora do limite.");
-        using var reader = XmlReader.Create(new MemoryStream(bytes), new XmlReaderSettings
-        {
-            DtdProcessing = DtdProcessing.Prohibit, XmlResolver = null,
-            MaxCharactersInDocument = MaxXmlSize
-        });
-        var root = XDocument.Load(reader).Root;
-        XNamespace ns = "http://www.portalfiscal.inf.br/nfe";
-        if (root?.Name != ns + "nfeProc") return null;
-        var info = root.Element(ns + "NFe")?.Element(ns + "infNFe");
-        var prot = root.Element(ns + "protNFe")?.Element(ns + "infProt");
-        if (info is null || prot is null) throw new InvalidDataException("NF-e sem protocolo.");
-        var id = (string?)info.Attribute("Id");
-        if (id is not { Length: 47 } || !id.StartsWith("NFe", StringComparison.Ordinal) ||
-            !id[3..].All(char.IsAsciiDigit) ||
-            id[3..] != (string?)prot.Element(ns + "chNFe"))
-            throw new InvalidDataException("Chave do documento não corresponde ao protocolo.");
-        var issuer = (string?)info.Element(ns + "emit")?.Element(ns + "CNPJ");
-        var recipient = (string?)info.Element(ns + "dest")?.Element(ns + "CNPJ");
-        var rawDate = (string?)info.Element(ns + "ide")?.Element(ns + "dhEmi") ??
-            (string?)info.Element(ns + "ide")?.Element(ns + "dEmi");
-        DateOnly? date = DateTimeOffset.TryParse(rawDate, CultureInfo.InvariantCulture,
-            DateTimeStyles.AssumeUniversal, out var parsed)
-            ? DateOnly.FromDateTime(parsed.DateTime)
-            : DateOnly.TryParse(rawDate, CultureInfo.InvariantCulture, DateTimeStyles.None, out var day)
-                ? day : null;
-        return new NfeDocument(id[3..], date, issuer, recipient);
     }
 
     private static string NormalizeCompany(string value) =>

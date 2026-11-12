@@ -64,3 +64,11 @@ Nenhuma API de ADN foi acionada nem agendamento/recuperação de 90 dias foi ini
 - Persistência da configuração em `.nexfiscal-schedules/<CompanyId>.json`, via GET/POST `/api/capture/schedules/{companyId}`.
 - Salvar a configuração **não inicia consultas** enquanto o Worker de captura automática ainda não tiver sido implementado e homologado.
 - O agendamento efetivo respeitará `NextAllowedAtUtc` e as regras das três fontes, mesmo quando o operador configurar 1 minuto.
+
+## Unificação das pastas manual e automática
+
+- O antigo campo avulso "Pasta de destino dos XMLs" abaixo do painel foi removido por duplicidade.
+- A configuração por tipo (NF-e, CT-e, NFS-e) é a única fonte de destino tanto para as consultas manuais quanto para o futuro serviço automático.
+- Para consultar manualmente, marcar `Captura ativa`, configurar a pasta e clicar em `Salvar configurações de captura`. Isto **não** ativa por si só o Worker, ainda não implementado.
+- As rotas `POST /api/capture/download` e `POST /api/cte/download` recebem apenas `companyId` e `previousConsumerStopped`, e resolvem a pasta exclusivamente na configuração persistida; o cliente não pode indicar pasta alternativa.
+- O backend mantém a validação de pasta existente e acessível antes de iniciar uma consulta fiscal.

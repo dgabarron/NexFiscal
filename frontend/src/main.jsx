@@ -39,6 +39,7 @@ function App(){
  const [scheduleNotice,setScheduleNotice]=useState({});
  const [recoveryDates,setRecoveryDates]=useState({});
  const [recoveryPreviews,setRecoveryPreviews]=useState({});
+ const [restoreResults,setRestoreResults]=useState({});
  const [recoveryBusy,setRecoveryBusy]=useState({});
  const [connectivity,setConnectivity]=useState({});
  const [clockNow,setClockNow]=useState(Date.now());
@@ -204,6 +205,21 @@ function App(){
    }catch(e){setError(e.message);}
    finally{setRecoveryBusy(prev=>({...prev,[companyId]:false}));}
  }
+ async function restoreNfeFromZip(companyId){
+   const preview=recoveryPreviews[companyId];
+   if(!preview?.scanComplete||preview.invalidFiles>0){
+     setError("Antes de restaurar, resolva os arquivos inválidos ou a conferência incompleta.");return;
+   }
+   if(!window.confirm("Restaurar TODOS os XMLs completos encontrados SOMENTE nos ZIPs internos para a pasta configurada? Arquivos existentes não serão substituídos. Não haverá consulta à SEFAZ."))return;
+   setRecoveryBusy(prev=>({...prev,[companyId]:true}));setError("");
+   try{
+     const result=await invoke("/api/recovery/nfe/restore",{companyId,from:recoveryFrom(companyId)});
+     setRestoreResults(prev=>({...prev,[companyId]:result}));
+     const resp=await fetch(`/api/recovery/nfe/preview/${companyId}?from=${encodeURIComponent(recoveryFrom(companyId))}`);
+     if(resp.ok){const previewData=await resp.json();setRecoveryPreviews(prev=>({...prev,[companyId]:previewData}));}
+   }catch(e){setError(e.message);}
+   finally{setRecoveryBusy(prev=>({...prev,[companyId]:false}));}
+ }
  async function downloadCte(company){
   const id=company.companyId;
   const cteSchedule=(scheduleSettings[id]||[]).find(s=>s.documentType==="CTE");
@@ -365,6 +381,12 @@ function App(){
                </div>
                {recoveryPreviews[company.companyId]&&<div className="rounded-md bg-slate-50 p-3 text-sm">
                  <div className="font-semibold">NF-e completas encontradas: {recoveryPreviews[company.companyId].candidates} · Arquivos na pasta analisados: {recoveryPreviews[company.companyId].individualFiles} · XMLs de ZIP analisados no período: {recoveryPreviews[company.companyId].archiveDocuments}</div>
+                 <p className="mt-2 text-xs text-slate-600">XMLs completos que estão somente nos ZIPs: {recoveryPreviews[company.companyId].documents?.filter(d=>!d.xmlPresent).length||0}</p>
+                 <Button variant="outline" disabled={!!recoveryBusy[company.companyId]||!recoveryPreviews[company.companyId].scanComplete||recoveryPreviews[company.companyId].invalidFiles>0||!recoveryPreviews[company.companyId].documents?.some(d=>!d.xmlPresent)}
+                   onClick={()=>restoreNfeFromZip(company.companyId)}>Restaurar XMLs dos ZIPs para a pasta</Button>
+                 {restoreResults[company.companyId]&&<Notice type={restoreResults[company.companyId].missing?"warning":"success"}>
+                   XMLs restaurados: {restoreResults[company.companyId].restored} · Já existentes: {restoreResults[company.companyId].already} · Não localizados: {restoreResults[company.companyId].missing}. Sem consulta à SEFAZ.
+                 </Notice>}
                  {recoveryPreviews[company.companyId].documents?.length>0?
                    <div className="mt-2 max-h-40 overflow-auto">{recoveryPreviews[company.companyId].documents.map(doc=>
                      <div key={doc.key} className="border-t border-slate-200 py-1 text-xs break-all">NF-e completa · {doc.documentDate?new Date(doc.documentDate).toLocaleDateString("pt-BR"):"Sem data"} · Chave {doc.key} · {doc.source}{!doc.xmlPresent?" (somente no ZIP)":""}</div>)}</div>

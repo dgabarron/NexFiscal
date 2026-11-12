@@ -49,8 +49,8 @@ public sealed class NfeIndividualXmlStore
                 document.XmlBytes.Length is < 1 or > 10_000_000)
                 throw new InvalidDataException("XML recebido inválido para gravação individual.");
 
-            // O NSU numérico é usado como nome, sem qualquer caminho de origem externa.
-            var name = (documentType == "CTE" ? "CTe_" : "") + document.Nsu.ToString("D15") + ".xml";
+            // O nome do XML é exclusivamente a chave de acesso fiscal (44 dígitos).
+            var name = FiscalAccessKey.Extract(document, documentType) + ".xml";
             var destination = Path.Combine(full, name);
             var digest = SHA256.HashData(document.XmlBytes);
             if (!string.Equals(Convert.ToHexString(digest), document.Sha256,
@@ -62,7 +62,7 @@ public sealed class NfeIndividualXmlStore
                 await using var current = File.OpenRead(destination);
                 var existingDigest = await SHA256.HashDataAsync(current, ct);
                 if (!CryptographicOperations.FixedTimeEquals(digest, existingDigest))
-                    throw new IOException("Arquivo XML com mesmo NSU já existe com conteúdo diferente: " + name);
+                    throw new IOException("Arquivo XML com mesma chave já existe com conteúdo diferente: " + name);
                 existing++;
                 names.Add(name);
                 continue;

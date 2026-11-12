@@ -12,7 +12,7 @@ using NexFiscal.Capture;
 /// das notas emitidas no período.
 /// </summary>
 public sealed class NfeHistoricalRecovery(
-    IWebHostEnvironment host, CaptureScheduleSettings settings)
+    IWebHostEnvironment host, CaptureScheduleSettings settings, NfeIndividualXmlStore writer)
 {
     private string ArchiveRoot => Path.Combine(host.ContentRootPath, ".nexfiscal-downloads");
 
@@ -146,6 +146,81 @@ public sealed class NfeHistoricalRecovery(
 
         return new Preview(from, now, list.Length, individualFiles, archives,
             withoutDate, invalidFiles, scanComplete, list, warning);
+    }
+
+    private static readonly SemaphoreSlim RestoreGate = new(1, 1);
+
+    /// <summary>Restaura somente procNFe presentes em ZIPs íntegros e ausentes da pasta.</summary>
+    public async Task<object> RestoreAsync(string companyId, DateTimeOffset from, CancellationToken ct)
+    {
+        if (!Guid.TryParse(companyId, out var companyGuid))
+            throw new ArgumentException("Empresa inválida.");
+        if (!await RestoreGate.WaitAsync(0, ct))
+            throw new InvalidOperationException("Já existe uma restauração em execução.");
+        try
+        {
+            var preview = await PreviewAsync(companyId, from, ct);
+            if (!preview.ScanComplete || preview.InvalidFiles != 0)
+                throw new InvalidOperationException("Conferência incompleta ou com arquivos inválidos. Corrija antes de restaurar.");
+            var folder = await settings.RequireDestinationAsync(companyGuid.ToString("D"), "NFE", ct);
+            var pending = preview.Documents.Where(x => !x.XmlPresent && x.Nsu is not null)
+                .ToDictionary(x => x.Key, StringComparer.Ordinal);
+            var restored = 0;
+            var already = 0;
+            var missing = 0;
+            var directory = Path.Combine(ArchiveRoot, companyGuid.ToString("D"));
+            if (pending.Count == 0)
+                return new { restored, already, missing, message = "Todos os procNFe conhecidos já estão na pasta.", noSefazCall = true };
+            foreach (var zipPath in Directory.EnumerateFiles(directory, "*.zip"))
+            {
+                ct.ThrowIfCancellationRequested();
+                if (pending.Count == 0) break;
+                using var zip = ZipFile.OpenRead(zipPath);
+                var manifestEntry = zip.GetEntry("manifest.json");
+                if (manifestEntry is null || manifestEntry.Length is < 1 or > 500_000) continue;
+                await using var manifestStream = manifestEntry.Open();
+                using var manifest = await JsonDocument.ParseAsync(manifestStream, cancellationToken: ct);
+                if (!manifest.RootElement.TryGetProperty("documents", out var docs) ||
+                    docs.ValueKind != JsonValueKind.Array) continue;
+                foreach (var item in docs.EnumerateArray())
+                {
+                    ct.ThrowIfCancellationRequested();
+                    if (!item.TryGetProperty("schema", out var schemaEl) ||
+                        schemaEl.ValueKind != JsonValueKind.String) continue;
+                    var schema = schemaEl.GetString() ?? "";
+                    if (!schema.StartsWith("procNFe_v", StringComparison.OrdinalIgnoreCase) ||
+                        !schema.EndsWith(".xsd", StringComparison.OrdinalIgnoreCase)) continue;
+                    if (!item.TryGetProperty("nsu", out var nsuEl) ||
+                        nsuEl.ValueKind != JsonValueKind.String ||
+                        !long.TryParse(nsuEl.GetString(), out var nsu) || nsu <= 0) continue;
+                    var matched = pending.Values.FirstOrDefault(x => x.Nsu ==
+                        nsu.ToString("D15", CultureInfo.InvariantCulture));
+                    if (matched is null) continue;
+                    var entry = zip.GetEntry(nsu.ToString("D15", CultureInfo.InvariantCulture) + ".xml");
+                    if (entry is null || entry.Length is < 1 or > 10_000_000) continue;
+                    await using var input = entry.Open();
+                    using var buffer = new MemoryStream();
+                    await input.CopyToAsync(buffer, ct);
+                    if (buffer.Length > 10_000_000) continue;
+                    var bytes = buffer.ToArray();
+                    var hash = Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
+                    if (!item.TryGetProperty("sha256", out var hashElement) ||
+                        !string.Equals(hash, hashElement.GetString(), StringComparison.OrdinalIgnoreCase)) continue;
+                    var doc = new NfeDistributedDocument(nsu, schema, bytes, hash);
+                    if (!NfeCompleteDocument.IsProcNFe(doc) ||
+                        FiscalAccessKey.Extract(doc, "NFE") != matched.Key) continue;
+                    var result = new NfeDistributionResult(138, "Restaurado de ZIP local", nsu, nsu, [doc]);
+                    var save = await writer.SaveAsync(folder, result, ct);
+                    restored += save.Created;
+                    already += save.AlreadyPresent;
+                    pending.Remove(matched.Key);
+                }
+            }
+            missing = pending.Count;
+            return new { restored, already, missing, noSefazCall = true,
+                message = "Restauração local finalizada. Nenhuma consulta à SEFAZ foi realizada." };
+        }
+        finally { RestoreGate.Release(); }
     }
 
     private static (string Key, DateTimeOffset? Date)? ParseCompleteDocument(byte[] bytes)

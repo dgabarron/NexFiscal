@@ -70,7 +70,10 @@ public sealed class NfeHistoricalRecovery(
                     if (dt is null) { noDate++; continue; }
                     if (dt < from || dt > now.AddDays(1)) continue;
                     var complete = schema.StartsWith("procNFe_v", StringComparison.OrdinalIgnoreCase);
-                    var present = File.Exists(Path.Combine(folder, nsu.ToString("D15") + ".xml"));
+                    // Documentos completos têm nome por chave, enquanto o ZIP bruto usa NSU.
+                    var present = complete && File.Exists(Path.Combine(folder,
+                        FiscalAccessKey.Extract(
+                            new NfeDistributedDocument(nsu, schema, bytes, hash), "NFE") + ".xml"));
                     var item = new Candidate(nsu.ToString("D15"), schema, dt, complete, "Lote SEFAZ armazenado", present);
                     // Preferir registros completos quando houver versões repetidas do mesmo NSU.
                     if (!found.TryGetValue(nsu, out var prev) || (!prev.Complete && complete))

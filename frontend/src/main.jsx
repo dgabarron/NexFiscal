@@ -140,10 +140,10 @@ function App(){
   if(!nfeSchedule?.enabled||!nfeSchedule.destinationDirectory?.trim()){
     setError("Ative a captura NF-e, informe a pasta de XMLs e salve a configuração.");return;
   }
-  if(!window.confirm("O sistema anterior de captura NF-e está desligado para este CNPJ? Esta ação enviará uma consulta REAL à SEFAZ. Se não existir checkpoint, o NexFiscal iniciará pelo NSU zero. Confirma?"))return;
+  if(!window.confirm("Consultar a SEFAZ para o CNPJ cadastrado? O NexFiscal usa o último NSU salvo ou inicia no zero se ainda não existir checkpoint."))return;
   setCaptureBusy(true);setError("");setMessage("");setCaptureResult(null);
   try{
-    const result=await invoke("/api/capture/download",{companyId,previousConsumerStopped:true});
+    const result=await invoke("/api/capture/download",{companyId});
     setCaptureResult(result);
     if(result.saveSucceeded===false)setError(result.fileSaveError||"Falha ao salvar os arquivos XML.");
     else if(result.status===656)setError("SEFAZ 656 — consumo indevido. Aguarde pelo menos 1 hora antes de nova tentativa. "+result.reason);
@@ -228,10 +228,10 @@ function App(){
    if(!schedule?.enabled||!schedule.destinationDirectory?.trim()){
      setError("Ative a captura NF-e, configure a pasta de XMLs e salve a configuração.");return;
    }
-   if(!window.confirm("Consultar TODOS os lotes NF-e atualmente disponibilizados pela SEFAZ para o CNPJ cadastrado? O NexFiscal continuará do NSU atual, sem reiniciar o histórico. Confirme que não existe outro distribuidor ativo para este CNPJ."))return;
+   if(!window.confirm("Capturar todos os XMLs de NF-e disponíveis na SEFAZ para este CNPJ? A consulta continuará do NSU salvo até alcançar o máximo informado pela SEFAZ."))return;
    setSefazStarting(prev=>({...prev,[companyId]:true}));setError("");
    try{
-     const result=await invoke("/api/sefaz/nfe/catchup",{companyId,previousConsumerStopped:true});
+     const result=await invoke("/api/sefaz/nfe/catchup",{companyId});
      setSefazRuns(prev=>({...prev,[companyId]:result}));
    }catch(e){setError(e.message);}
    finally{setSefazStarting(prev=>({...prev,[companyId]:false}));}
@@ -400,7 +400,7 @@ function App(){
              <div className="mt-5 rounded-lg border border-slate-200 p-4 space-y-3">
                <h4 className="font-semibold text-sm">Capturar XMLs disponíveis na SEFAZ — NF-e</h4>
                <p className="text-xs text-slate-600">Consulta a distribuição nacional da SEFAZ para o CNPJ cadastrado e baixa automaticamente todos os procNFe completos disponíveis, sem selecionar NSUs ou XMLs. Retoma do último NSU confirmado, respeitando os limites fiscais. Não consulta arquivos de outras empresas nem pastas históricas.</p>
-               <p className="text-xs text-amber-800">A SEFAZ não disponibiliza todas as NF-e desde a abertura da empresa por essa API. Esta ação busca todos os lotes atualmente disponíveis para o CNPJ, até o máximo de 100 lotes por execução; se houver mais, execute novamente. Resumos e eventos não são salvos como NF-e completas.</p>
+               <p className="text-xs text-amber-800">A SEFAZ não disponibiliza todas as NF-e desde a abertura da empresa por essa API. Esta ação percorre os lotes atualmente disponíveis para o CNPJ, até o último NSU informado pela SEFAZ, sem limite interno de lotes. Resumos e eventos recebidos são preservados no registro de distribuição, mas não são salvos como NF-e completas na pasta.</p>
                <Button disabled={!company.certificateStored||!!sefazStarting[company.companyId]||!!captureBusy||sefazRuns[company.companyId]?.status==="running"||!!pendingWindow(company)}
                  onClick={()=>startSefazRecovery(company)}>
                    {sefazRuns[company.companyId]?.status==="running"?"Captura na SEFAZ em andamento":sefazStarting[company.companyId]?"Iniciando...":"Capturar todos os XMLs disponíveis"}

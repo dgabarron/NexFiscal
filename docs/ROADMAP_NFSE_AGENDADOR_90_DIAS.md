@@ -87,3 +87,17 @@ Nenhuma API de ADN foi acionada nem agendamento/recuperação de 90 dias foi ini
 **Referência NF-e:** [NT 2014.002, portal oficial](https://www.nfe.fazenda.gov.br/Portal/exibirArquivo.aspx?conteudo=VgPuhtPApQo%3D). A NT distingue `distNSU` sequencial de `consNSU` pontual. Somente a consulta pontual pode referenciar um NSU antigo sem modificar a sequência principal, sujeito às regras do serviço.
 
 **Situação:** roteiro do teste registrado. Ainda não foi desenvolvido endpoint `consNSU`, o botão de data-limite nem executada chamada real de recuperação.
+
+## Esclarecimento: recuperação sem NSU informado pelo operador
+
+A interface **não exige digitar NSU**. O usuário escolhe a data-limite (90 dias por padrão), empresa e tipo fiscal.
+
+**Fontes locais de descoberta (ordem):** lotes brutos `docZip` preservados no ZIP de recuperação; `BRAI_NEX_Envelope` e logs HANA de NF-e; índices de NSU/chaves no sistema; arquivos XML individuais existentes. O lote que retornou 48 resumos/eventos é um candidato importante para identificar `resNFe` e seus NSUs e buscar possíveis XMLs completos após manifestação autorizada.
+
+**NF-e:** `distNSU` é sequencial e limitado à janela da distribuição; não possui filtro por emissão/data. `consNSU` exige conhecer o NSU, recuperado do índice local, e `consChNFe` exige uma chave conhecida. Cada retorno deve respeitar o prazo de disponibilização, os limites de consultas pontuais e os bloqueios `656`. Nunca colocar `ultNSU=0` ou retroceder o cursor da captura contínua como estratégia para varrer histórico: quem já consultou o serviço pode receber bloqueio por sequência.
+
+**Limite intransponível sem outra fonte:** se não há NSU, chave, lote bruto, registro fiscal ou outra referência do documento, não existe método oficial de pesquisar arbitrariamente todo o histórico informando somente a data. Em casos assim mostrar `não rastreável pela fonte atual` e orientar fontes fiscais/fornecedores autorizados. Novos consumidores podem ter disponibilidade inicial distinta, mas não é um reset seguro para consumidor ativo.
+
+**CT-e e NFS-e:** descoberta local análoga, mas verificar endpoints, retenção e limites oficiais específicos de cada ambiente; não presumir os mesmos métodos da NF-e.
+
+**Observação de implementação:** o botão primeiro gera uma prévia de documentos rastreáveis e data de referência; só depois executa consultas fiscais. Resultado inclui recuperados, já existentes, resumos pendentes, não disponíveis e sem cobertura comprovada. O checkpoint normal permanece intacto.

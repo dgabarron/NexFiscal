@@ -41,10 +41,8 @@ function App(){
  const [recoveryPreviews,setRecoveryPreviews]=useState({});
  const [restoreResults,setRestoreResults]=useState({});
  const [recoveryBusy,setRecoveryBusy]=useState({});
- const [historicalDates,setHistoricalDates]=useState({});
- const [historicalFolders,setHistoricalFolders]=useState({});
- const [historicalJobs,setHistoricalJobs]=useState({});
- const [historicalStarting,setHistoricalStarting]=useState({});
+ const [sefazRuns,setSefazRuns]=useState({});
+ const [sefazStarting,setSefazStarting]=useState({});
  const [connectivity,setConnectivity]=useState({});
  const [clockNow,setClockNow]=useState(Date.now());
  useEffect(()=>{
@@ -224,30 +222,32 @@ function App(){
    }catch(e){setError(e.message);}
    finally{setRecoveryBusy(prev=>({...prev,[companyId]:false}));}
  }
- async function startHistorical(companyId){
-   const fromDate=(historicalDates[companyId]||"01/01/1900").trim();
-   if(!/^\d{2}\/\d{2}\/\d{4}$/.test(fromDate)){setError("Data inicial inválida. Informe DD/MM/AAAA.");return;}
-   const sourceDirectories=(historicalFolders[companyId]||"").split("\n").map(x=>x.trim()).filter(Boolean);
-   if(!window.confirm("Iniciar recuperação dos XMLs completos em pastas históricas, ZIPs e pasta atual? O sistema não consulta notas antigas indisponíveis na SEFAZ. Arquivos existentes não serão sobrescritos."))return;
-   setHistoricalStarting(prev=>({...prev,[companyId]:true}));setError("");
+ async function startSefazRecovery(company){
+   const companyId=company.companyId;
+   const schedule=(scheduleSettings[companyId]||[]).find(s=>s.documentType==="NFE");
+   if(!schedule?.enabled||!schedule.destinationDirectory?.trim()){
+     setError("Ative a captura NF-e, configure a pasta de XMLs e salve a configuração.");return;
+   }
+   if(!window.confirm("Consultar TODOS os lotes NF-e atualmente disponibilizados pela SEFAZ para o CNPJ cadastrado? O NexFiscal continuará do NSU atual, sem reiniciar o histórico. Confirme que não existe outro distribuidor ativo para este CNPJ."))return;
+   setSefazStarting(prev=>({...prev,[companyId]:true}));setError("");
    try{
-     const result=await invoke("/api/history/nfe/start",{companyId,fromDate,sourceDirectories});
-     setHistoricalJobs(prev=>({...prev,[companyId]:result}));
+     const result=await invoke("/api/sefaz/nfe/catchup",{companyId,previousConsumerStopped:true});
+     setSefazRuns(prev=>({...prev,[companyId]:result}));
    }catch(e){setError(e.message);}
-   finally{setHistoricalStarting(prev=>({...prev,[companyId]:false}));}
+   finally{setSefazStarting(prev=>({...prev,[companyId]:false}));}
  }
  useEffect(()=>{
    const timer=setInterval(()=>{
-     Object.entries(historicalJobs).forEach(([companyId,job])=>{
+     Object.entries(sefazRuns).forEach(([companyId,job])=>{
        if(job?.status!=="running")return;
-       fetch(`/api/history/nfe/status/${companyId}`)
+       fetch(`/api/sefaz/nfe/catchup/${companyId}`)
          .then(resp=>resp.ok?resp.json():null)
-         .then(data=>{if(data)setHistoricalJobs(prev=>({...prev,[companyId]:data}));})
+         .then(data=>{if(data)setSefazRuns(prev=>({...prev,[companyId]:data}));})
          .catch(()=>{});
      });
-   },2500);
+   },3000);
    return ()=>clearInterval(timer);
- },[historicalJobs]);
+ },[sefazRuns]);
  async function downloadCte(company){
   const id=company.companyId;
   const cteSchedule=(scheduleSettings[id]||[]).find(s=>s.documentType==="CTE");
@@ -398,37 +398,22 @@ function App(){
                {scheduleNotice[company.companyId]&&<p className="text-xs text-amber-800">{scheduleNotice[company.companyId]}</p>}
              </div>
              <div className="mt-5 rounded-lg border border-slate-200 p-4 space-y-3">
-               <h4 className="font-semibold text-sm">Recuperação histórica de XMLs — NF-e</h4>
-               <p className="text-xs text-slate-600">Procura automaticamente XMLs completos (procNFe) na pasta atual, em todos os ZIPs internos do NexFiscal e nas pastas históricas informadas. Busca desde a data escolhida até hoje, sem seleção de notas e sem duplicar por chave de acesso.</p>
-               <div className="grid gap-3 md:grid-cols-2">
-                 <div>
-                   <label className="mb-1 block text-xs text-slate-600">Desde (DD/MM/AAAA)</label>
-                   <input type="text" inputMode="numeric" maxLength={10} className="w-40 rounded-md border border-slate-300 p-2 text-sm" placeholder="DD/MM/AAAA" value={historicalDates[company.companyId]??"01/01/1900"}
-                     onChange={e=>{const digits=e.target.value.replace(/\D/g,"").slice(0,8);const value=digits.length>4?digits.slice(0,2)+"/"+digits.slice(2,4)+"/"+digits.slice(4):digits.length>2?digits.slice(0,2)+"/"+digits.slice(2):digits;setHistoricalDates(prev=>({...prev,[company.companyId]:value}));}}/>
-                 </div>
-                 <div>
-                   <label className="mb-1 block text-xs text-slate-600">Pastas históricas adicionais (uma por linha, opcionais)</label>
-                   <textarea rows={3} className="w-full rounded-md border border-slate-300 p-2 text-sm" placeholder={"C:\\\\Historico\\\\NF-e\\nD:\\\\Backup\\\\XML"} value={historicalFolders[company.companyId]||""}
-                     onChange={e=>setHistoricalFolders(prev=>({...prev,[company.companyId]:e.target.value}))}/>
-                 </div>
-               </div>
-               <p className="text-xs text-amber-800">A recuperação histórica procura nas fontes de arquivos às quais o servidor tem acesso. Para notas nunca armazenadas e fora do período disponibilizado pela SEFAZ, é necessário fornecer outra fonte autorizada. O processo não reinicia o NSU e não faz busca fiscal por data.</p>
-               <Button disabled={!company.certificateStored||!!historicalStarting[company.companyId]||historicalJobs[company.companyId]?.status==="running"}
-                 onClick={()=>startHistorical(company.companyId)}>{historicalJobs[company.companyId]?.status==="running"?"Recuperação em andamento":historicalStarting[company.companyId]?"Iniciando...":"Recuperar todos os XMLs possíveis"}</Button>
-               {historicalJobs[company.companyId]&&<div className="rounded-md bg-slate-50 p-3 space-y-2 text-sm">
-                 <div className="font-semibold">Estado: {historicalJobs[company.companyId].status==="running"?"Em execução":historicalJobs[company.companyId].status==="completed"?"Concluído":historicalJobs[company.companyId].status==="failed"?"Falhou":"Interrompido"} · Examinados: {historicalJobs[company.companyId].examined}</div>
+               <h4 className="font-semibold text-sm">Capturar XMLs disponíveis na SEFAZ — NF-e</h4>
+               <p className="text-xs text-slate-600">Consulta a distribuição nacional da SEFAZ para o CNPJ cadastrado e baixa automaticamente todos os procNFe completos disponíveis, sem selecionar NSUs ou XMLs. Retoma do último NSU confirmado, respeitando os limites fiscais. Não consulta arquivos de outras empresas nem pastas históricas.</p>
+               <p className="text-xs text-amber-800">A SEFAZ não disponibiliza todas as NF-e desde a abertura da empresa por essa API. Esta ação busca todos os lotes atualmente disponíveis para o CNPJ, até o máximo de 100 lotes por execução; se houver mais, execute novamente. Resumos e eventos não são salvos como NF-e completas.</p>
+               <Button disabled={!company.certificateStored||!!sefazStarting[company.companyId]||!!captureBusy||sefazRuns[company.companyId]?.status==="running"||!!pendingWindow(company)}
+                 onClick={()=>startSefazRecovery(company)}>
+                   {sefazRuns[company.companyId]?.status==="running"?"Captura na SEFAZ em andamento":sefazStarting[company.companyId]?"Iniciando...":"Capturar todos os XMLs disponíveis"}
+               </Button>
+               {sefazRuns[company.companyId]&&<div className="rounded-md bg-slate-50 p-3 space-y-2 text-sm">
+                 <div className="font-semibold">Estado: {sefazRuns[company.companyId].status==="running"?"Em execução":sefazRuns[company.companyId].status==="completed"?"Consulta concluída":sefazRuns[company.companyId].status==="paused"?"Pausada":sefazRuns[company.companyId].status==="attention"?"Requer verificação":sefazRuns[company.companyId].status==="failed"?"Falhou":"Interrompida"} · Lotes: {sefazRuns[company.companyId].batches}</div>
                  <div className="grid grid-cols-2 gap-2 md:grid-cols-4 text-xs">
-                   <span>Novos XMLs: <strong>{historicalJobs[company.companyId].imported}</strong></span>
-                   <span>Já existentes: <strong>{historicalJobs[company.companyId].existing}</strong></span>
-                   <span>Conflitos: <strong>{historicalJobs[company.companyId].conflicts}</strong></span>
-                   <span>Inválidos: <strong>{historicalJobs[company.companyId].invalid}</strong></span>
-                   <span>Outras empresas: <strong>{historicalJobs[company.companyId].otherCompany}</strong></span>
-                   <span>Fora do período: <strong>{historicalJobs[company.companyId].outsidePeriod}</strong></span>
-                   <span>XMLs em ZIPs: <strong>{historicalJobs[company.companyId].xmlFromZip}</strong></span>
-                   <span>XMLs em pastas: <strong>{historicalJobs[company.companyId].xmlFromFolder}</strong></span>
+                   <span>XMLs novos: <strong>{sefazRuns[company.companyId].completeSaved}</strong></span>
+                   <span>Já existentes: <strong>{sefazRuns[company.companyId].alreadyPresent}</strong></span>
+                   <span>Resumos/eventos ignorados: <strong>{sefazRuns[company.companyId].ignoredNonProcNFe}</strong></span>
+                   <span>Último NSU: <strong>{sefazRuns[company.companyId].lastNsu||"—"}</strong></span>
                  </div>
-                 <p className="text-xs text-slate-600">{historicalJobs[company.companyId].message}</p>
-                 {historicalJobs[company.companyId].scanComplete===false&&<p className="text-xs text-red-700">A varredura não foi completa. Confira o acesso às fontes ou os limites de segurança.</p>}
+                 <p className="text-xs text-slate-600">{sefazRuns[company.companyId].message}</p>
                </div>}
              </div>
              <div className="mt-5 flex flex-wrap gap-3">

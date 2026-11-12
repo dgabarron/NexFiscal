@@ -226,8 +226,8 @@ function App(){
  }
  async function startHistorical(companyId){
    const fromDate=(historicalDates[companyId]||"01/01/1900").trim();
-   if(!/^\\d{2}\\/\\d{2}\\/\\d{4}$/.test(fromDate)){setError("Data inicial inválida. Informe DD/MM/AAAA.");return;}
-   const sourceDirectories=(historicalFolders[companyId]||"").split("\\n").map(x=>x.trim()).filter(Boolean);
+   if(!/^\d{2}\/\d{2}\/\d{4}$/.test(fromDate)){setError("Data inicial inválida. Informe DD/MM/AAAA.");return;}
+   const sourceDirectories=(historicalFolders[companyId]||"").split("\n").map(x=>x.trim()).filter(Boolean);
    if(!window.confirm("Iniciar recuperação dos XMLs completos em pastas históricas, ZIPs e pasta atual? O sistema não consulta notas antigas indisponíveis na SEFAZ. Arquivos existentes não serão sobrescritos."))return;
    setHistoricalStarting(prev=>({...prev,[companyId]:true}));setError("");
    try{
@@ -404,7 +404,7 @@ function App(){
                  <div>
                    <label className="mb-1 block text-xs text-slate-600">Desde (DD/MM/AAAA)</label>
                    <input type="text" inputMode="numeric" maxLength={10} className="w-40 rounded-md border border-slate-300 p-2 text-sm" placeholder="DD/MM/AAAA" value={historicalDates[company.companyId]??"01/01/1900"}
-                     onChange={e=>{const digits=e.target.value.replace(/\\D/g,"").slice(0,8);const value=digits.length>4?digits.slice(0,2)+"/"+digits.slice(2,4)+"/"+digits.slice(4):digits.length>2?digits.slice(0,2)+"/"+digits.slice(2):digits;setHistoricalDates(prev=>({...prev,[company.companyId]:value}));}}/>
+                     onChange={e=>{const digits=e.target.value.replace(/\D/g,"").slice(0,8);const value=digits.length>4?digits.slice(0,2)+"/"+digits.slice(2,4)+"/"+digits.slice(4):digits.length>2?digits.slice(0,2)+"/"+digits.slice(2):digits;setHistoricalDates(prev=>({...prev,[company.companyId]:value}));}}/>
                  </div>
                  <div>
                    <label className="mb-1 block text-xs text-slate-600">Pastas históricas adicionais (uma por linha, opcionais)</label>

@@ -225,6 +225,21 @@ app.MapGet("/api/recovery/nfe/preview/{companyId}", async (
     }
 });
 
+// Restaura procNFe já armazenados em ZIPs locais. Nenhuma consulta fiscal.
+app.MapPost("/api/recovery/nfe/restore", async (
+    RestoreNfeRequest request, NfeHistoricalRecovery recovery, CancellationToken ct) =>
+{
+    try { return Results.Ok(await recovery.RestoreAsync(request.CompanyId, request.From, ct)); }
+    catch (ArgumentException ex) { return Results.BadRequest(new { error = ex.Message }); }
+    catch (DirectoryNotFoundException ex) { return Results.BadRequest(new { error = ex.Message }); }
+    catch (InvalidOperationException ex) { return Results.Conflict(new { error = ex.Message }); }
+    catch (IOException ex)
+    {
+        app.Logger.LogError(ex, "Falha ao restaurar XMLs de ZIP local");
+        return Results.Problem("Falha de arquivo durante a restauração. Nenhum XML existente foi sobrescrito.", statusCode: 503);
+    }
+});
+
 // Configuração do futuro Worker: salvar não inicia consultas automáticas.
 app.MapGet("/api/capture/schedules/{companyId}", async (
     string companyId, CaptureScheduleSettings settings, CancellationToken ct) =>
@@ -348,3 +363,5 @@ public partial class Program { }
 public sealed record CaptureTestRequest(string CompanyId);
 
 public sealed record CaptureDownloadRequest(string CompanyId, bool PreviousConsumerStopped);
+
+public sealed record RestoreNfeRequest(string CompanyId, DateTimeOffset From);

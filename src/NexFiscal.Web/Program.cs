@@ -16,6 +16,7 @@ builder.Services.AddSingleton<CompanyCertificateVault>();
 builder.Services.AddSingleton<NfeCaptureCoordinator>();
 builder.Services.AddSingleton<NfeFirstDownload>();
 builder.Services.AddSingleton<CteFirstDownload>();
+builder.Services.AddSingleton<CaptureScheduleSettings>();
 builder.Services.AddSingleton<NfeXmlArchive>();
 builder.Services.AddSingleton<NfeIndividualXmlStore>();
 builder.Services.AddSingleton<NfeHandoffPreparation>();
@@ -201,6 +202,33 @@ app.MapGet("/api/capture/archive/{companyId}/{archiveId}", (
     return file is null
         ? Results.NotFound()
         : Results.File(file, "application/zip", "NexFiscal_" + type + "_" + archiveId + ".zip");
+});
+
+// Configuração do futuro Worker: salvar não inicia consultas automáticas.
+app.MapGet("/api/capture/schedules/{companyId}", async (
+    string companyId, CaptureScheduleSettings settings, CancellationToken ct) =>
+{
+    try { return Results.Ok(await settings.GetAsync(companyId, ct)); }
+    catch (ArgumentException ex) { return Results.BadRequest(new { error = ex.Message }); }
+    catch (Exception ex)
+    {
+        app.Logger.LogError("Leitura de agenda falhou: {Type}", ex.GetType().Name);
+        return Results.Problem("Falha ao carregar configuração de captura.", statusCode: 503);
+    }
+});
+
+app.MapPost("/api/capture/schedules/{companyId}", async (
+    string companyId, CaptureScheduleSettings.ScheduleInput[] schedules,
+    CaptureScheduleSettings settings, CancellationToken ct) =>
+{
+    try { return Results.Ok(await settings.SaveAsync(companyId, schedules, ct)); }
+    catch (ArgumentException ex) { return Results.BadRequest(new { error = ex.Message }); }
+    catch (DirectoryNotFoundException ex) { return Results.BadRequest(new { error = ex.Message }); }
+    catch (Exception ex)
+    {
+        app.Logger.LogError("Gravação de agenda falhou: {Type}", ex.GetType().Name);
+        return Results.Problem("Falha ao salvar configuração de captura.", statusCode: 503);
+    }
 });
 
 // CT-e tem distribuição e cursor próprios, independentes do NSU de NF-e.

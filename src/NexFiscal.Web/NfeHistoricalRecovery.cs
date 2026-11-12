@@ -79,7 +79,7 @@ public sealed class NfeHistoricalRecovery(
             }
         }
         var list = found.Values.OrderBy(x => x.DocumentDate).ThenBy(x => x.Nsu).ToArray();
-        return new Preview(from, now, list.Count, noDate,
+        return new Preview(from, now, list.Length, noDate,
             list.Count(x => x.Complete || x.XmlPresent), list,
             "Pesquisa local dos lotes disponíveis, não varredura por data na SEFAZ. " +
             "A janela de 90 dias não garante cobertura completa; NSUs não armazenados não são descobertos.");

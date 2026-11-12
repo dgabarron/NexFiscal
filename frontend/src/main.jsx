@@ -41,6 +41,10 @@ function App(){
  const [recoveryPreviews,setRecoveryPreviews]=useState({});
  const [restoreResults,setRestoreResults]=useState({});
  const [recoveryBusy,setRecoveryBusy]=useState({});
+ const [historicalDates,setHistoricalDates]=useState({});
+ const [historicalFolders,setHistoricalFolders]=useState({});
+ const [historicalJobs,setHistoricalJobs]=useState({});
+ const [historicalStarting,setHistoricalStarting]=useState({});
  const [connectivity,setConnectivity]=useState({});
  const [clockNow,setClockNow]=useState(Date.now());
  useEffect(()=>{
@@ -220,6 +224,30 @@ function App(){
    }catch(e){setError(e.message);}
    finally{setRecoveryBusy(prev=>({...prev,[companyId]:false}));}
  }
+ async function startHistorical(companyId){
+   const fromDate=(historicalDates[companyId]||"01/01/1900").trim();
+   if(!/^\\d{2}\\/\\d{2}\\/\\d{4}$/.test(fromDate)){setError("Data inicial inválida. Informe DD/MM/AAAA.");return;}
+   const sourceDirectories=(historicalFolders[companyId]||"").split("\\n").map(x=>x.trim()).filter(Boolean);
+   if(!window.confirm("Iniciar recuperação dos XMLs completos em pastas históricas, ZIPs e pasta atual? O sistema não consulta notas antigas indisponíveis na SEFAZ. Arquivos existentes não serão sobrescritos."))return;
+   setHistoricalStarting(prev=>({...prev,[companyId]:true}));setError("");
+   try{
+     const result=await invoke("/api/history/nfe/start",{companyId,fromDate,sourceDirectories});
+     setHistoricalJobs(prev=>({...prev,[companyId]:result}));
+   }catch(e){setError(e.message);}
+   finally{setHistoricalStarting(prev=>({...prev,[companyId]:false}));}
+ }
+ useEffect(()=>{
+   const timer=setInterval(()=>{
+     Object.entries(historicalJobs).forEach(([companyId,job])=>{
+       if(job?.status!=="running")return;
+       fetch(`/api/history/nfe/status/${companyId}`)
+         .then(resp=>resp.ok?resp.json():null)
+         .then(data=>{if(data)setHistoricalJobs(prev=>({...prev,[companyId]:data}));})
+         .catch(()=>{});
+     });
+   },2500);
+   return ()=>clearInterval(timer);
+ },[historicalJobs]);
  async function downloadCte(company){
   const id=company.companyId;
   const cteSchedule=(scheduleSettings[id]||[]).find(s=>s.documentType==="CTE");
@@ -370,27 +398,37 @@ function App(){
                {scheduleNotice[company.companyId]&&<p className="text-xs text-amber-800">{scheduleNotice[company.companyId]}</p>}
              </div>
              <div className="mt-5 rounded-lg border border-slate-200 p-4 space-y-3">
-               <h4 className="font-semibold text-sm">Conferência de XMLs completos de NF-e</h4>
-               <p className="text-xs text-slate-500">Consulta os XMLs completos (procNFe) na pasta configurada e nos ZIPs de lotes recebidos, desde a data escolhida até hoje. Não faz nova consulta à SEFAZ e não comprova que todas as notas emitidas foram recebidas.</p>
-               <div className="flex flex-wrap items-end gap-3">
-                 <div><label className="mb-1 block text-xs text-slate-600">Data inicial (DD/MM/AAAA)</label>
-                   <input type="text" inputMode="numeric" maxLength={10} placeholder="DD/MM/AAAA" aria-label="Data inicial no formato brasileiro" className="rounded-md border border-slate-300 p-2 text-sm w-36" value={recoveryDates[company.companyId]??defaultRecoveryDate()}
-                     onChange={e=>{const digits=e.target.value.replace(/\\D/g,"").slice(0,8);const formatted=digits.length>4?digits.slice(0,2)+"/"+digits.slice(2,4)+"/"+digits.slice(4):digits.length>2?digits.slice(0,2)+"/"+digits.slice(2):digits;setRecoveryDates(prev=>({...prev,[company.companyId]:formatted}));setRecoveryPreviews(prev=>({...prev,[company.companyId]:null}));}}/>
+               <h4 className="font-semibold text-sm">Recuperação histórica de XMLs — NF-e</h4>
+               <p className="text-xs text-slate-600">Procura automaticamente XMLs completos (procNFe) na pasta atual, em todos os ZIPs internos do NexFiscal e nas pastas históricas informadas. Busca desde a data escolhida até hoje, sem seleção de notas e sem duplicar por chave de acesso.</p>
+               <div className="grid gap-3 md:grid-cols-2">
+                 <div>
+                   <label className="mb-1 block text-xs text-slate-600">Desde (DD/MM/AAAA)</label>
+                   <input type="text" inputMode="numeric" maxLength={10} className="w-40 rounded-md border border-slate-300 p-2 text-sm" placeholder="DD/MM/AAAA" value={historicalDates[company.companyId]??"01/01/1900"}
+                     onChange={e=>{const digits=e.target.value.replace(/\\D/g,"").slice(0,8);const value=digits.length>4?digits.slice(0,2)+"/"+digits.slice(2,4)+"/"+digits.slice(4):digits.length>2?digits.slice(0,2)+"/"+digits.slice(2):digits;setHistoricalDates(prev=>({...prev,[company.companyId]:value}));}}/>
                  </div>
-                 <Button variant="outline" disabled={!!recoveryBusy[company.companyId]} onClick={()=>previewNfeRecovery(company.companyId)}>Conferir XMLs completos</Button>
+                 <div>
+                   <label className="mb-1 block text-xs text-slate-600">Pastas históricas adicionais (uma por linha, opcionais)</label>
+                   <textarea rows={3} className="w-full rounded-md border border-slate-300 p-2 text-sm" placeholder={"C:\\\\Historico\\\\NF-e\\nD:\\\\Backup\\\\XML"} value={historicalFolders[company.companyId]||""}
+                     onChange={e=>setHistoricalFolders(prev=>({...prev,[company.companyId]:e.target.value}))}/>
+                 </div>
                </div>
-               {recoveryPreviews[company.companyId]&&<div className="rounded-md bg-slate-50 p-3 text-sm">
-                 <div className="font-semibold">NF-e completas encontradas: {recoveryPreviews[company.companyId].candidates} · Arquivos na pasta analisados: {recoveryPreviews[company.companyId].individualFiles} · XMLs de ZIP analisados no período: {recoveryPreviews[company.companyId].archiveDocuments}</div>
-                 <p className="mt-2 text-xs text-slate-600">XMLs completos que estão somente nos ZIPs: {recoveryPreviews[company.companyId].documents?.filter(d=>!d.xmlPresent).length||0}</p>
-                 <Button variant="outline" disabled={!!recoveryBusy[company.companyId]||!recoveryPreviews[company.companyId].scanComplete||recoveryPreviews[company.companyId].invalidFiles>0||!recoveryPreviews[company.companyId].documents?.some(d=>!d.xmlPresent)}
-                   onClick={()=>restoreNfeFromZip(company.companyId)}>Restaurar XMLs dos ZIPs para a pasta</Button>
-                 {restoreResults[company.companyId]&&<Notice type={restoreResults[company.companyId].missing?"warning":"success"}>
-                   XMLs restaurados: {restoreResults[company.companyId].restored} · Já existentes: {restoreResults[company.companyId].already} · Não localizados: {restoreResults[company.companyId].missing}. Sem consulta à SEFAZ.
-                 </Notice>}
-                 {recoveryPreviews[company.companyId].documents?.length>0?
-                   <div className="mt-2 max-h-40 overflow-auto">{recoveryPreviews[company.companyId].documents.map(doc=>
-                     <div key={doc.key} className="border-t border-slate-200 py-1 text-xs break-all">NF-e completa · {doc.documentDate?new Date(doc.documentDate).toLocaleDateString("pt-BR"):"Sem data"} · Chave {doc.key} · {doc.source}{!doc.xmlPresent?" (somente no ZIP)":""}</div>)}</div>
-                   :<p className="mt-2 text-xs text-slate-500">Nenhum procNFe foi identificado na pasta configurada ou nos ZIPs internos no período. Isso não significa que nenhuma NF-e tenha sido emitida.</p>}
+               <p className="text-xs text-amber-800">A recuperação histórica procura nas fontes de arquivos às quais o servidor tem acesso. Para notas nunca armazenadas e fora do período disponibilizado pela SEFAZ, é necessário fornecer outra fonte autorizada. O processo não reinicia o NSU e não faz busca fiscal por data.</p>
+               <Button disabled={!company.certificateStored||!!historicalStarting[company.companyId]||historicalJobs[company.companyId]?.status==="running"}
+                 onClick={()=>startHistorical(company.companyId)}>{historicalJobs[company.companyId]?.status==="running"?"Recuperação em andamento":historicalStarting[company.companyId]?"Iniciando...":"Recuperar todos os XMLs possíveis"}</Button>
+               {historicalJobs[company.companyId]&&<div className="rounded-md bg-slate-50 p-3 space-y-2 text-sm">
+                 <div className="font-semibold">Estado: {historicalJobs[company.companyId].status==="running"?"Em execução":historicalJobs[company.companyId].status==="completed"?"Concluído":historicalJobs[company.companyId].status==="failed"?"Falhou":"Interrompido"} · Examinados: {historicalJobs[company.companyId].examined}</div>
+                 <div className="grid grid-cols-2 gap-2 md:grid-cols-4 text-xs">
+                   <span>Novos XMLs: <strong>{historicalJobs[company.companyId].imported}</strong></span>
+                   <span>Já existentes: <strong>{historicalJobs[company.companyId].existing}</strong></span>
+                   <span>Conflitos: <strong>{historicalJobs[company.companyId].conflicts}</strong></span>
+                   <span>Inválidos: <strong>{historicalJobs[company.companyId].invalid}</strong></span>
+                   <span>Outras empresas: <strong>{historicalJobs[company.companyId].otherCompany}</strong></span>
+                   <span>Fora do período: <strong>{historicalJobs[company.companyId].outsidePeriod}</strong></span>
+                   <span>XMLs em ZIPs: <strong>{historicalJobs[company.companyId].xmlFromZip}</strong></span>
+                   <span>XMLs em pastas: <strong>{historicalJobs[company.companyId].xmlFromFolder}</strong></span>
+                 </div>
+                 <p className="text-xs text-slate-600">{historicalJobs[company.companyId].message}</p>
+                 {historicalJobs[company.companyId].scanComplete===false&&<p className="text-xs text-red-700">A varredura não foi completa. Confira o acesso às fontes ou os limites de segurança.</p>}
                </div>}
              </div>
              <div className="mt-5 flex flex-wrap gap-3">

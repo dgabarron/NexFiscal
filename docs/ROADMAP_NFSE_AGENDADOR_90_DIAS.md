@@ -24,7 +24,7 @@ A captura manual NF-e (`procNFe`) e CT-e (`procCTe`) com XMLs individuais já fo
 Arquitetura sugerida:
 - .NET 8 `BackgroundService`/Worker hospedado no servidor, como processo durável; para on-prem Windows, Windows Service; para Linux, systemd. **Não usar timer do navegador**.
 - Um registro de execução por `CompanyId + DocumentType`, com `Enabled`, `IntervalMinutes`, `NextRunAtUtc`, `LastRunAtUtc`, `LastSuccessAtUtc`, `LastStatus`, `LastErrorCode`, `LastErrorMessage` e lease transacional. Manter configuração e estado persistentes, não em memória do processo.
-- Intervalos configuráveis por empresa e por tipo (NF-e, CT-e, NFS-e), com 60 minutos como sugestão inicial. O intervalo efetivo é o maior entre a configuração e `NextAllowedAtUtc`/limites da respectiva fonte; permitir continuar lotes enquanto a regra fiscal permitir.
+- Intervalos configuráveis em **campo numérico livre de minutos**, aceitando qualquer inteiro positivo de 1 até o limite representável (Int64) sem teto de negócio; 60 minutos como valor inicial de proposta. O intervalo efetivo é o maior entre a configuração e `NextAllowedAtUtc`/limites da respectiva fonte; permitir continuar lotes enquanto a regra fiscal permitir.
 - Lock distribuído/lease resistente a reinício, no máximo um consumidor do mesmo tipo/CNPJ; backoff em 429, 656, timeout e indisponibilidade, sem reset de NSU.
 - Pausar/retomar no painel e executar manualmente sem corrida com o serviço automático.
 - Manter os XMLs na pasta escolhida, com escrita atômica, idempotência, checagem de hash e checkpoint somente após preservar a resposta.
@@ -55,3 +55,12 @@ Critérios de segurança: trilhas de auditoria, proteção do certificado A1, ac
 ## Situação atual
 
 Nenhuma API de ADN foi acionada nem agendamento/recuperação de 90 dias foi iniciado por este documento. Esta especificação orienta as próximas alterações.
+
+## Ajuste de interface acordado em 12/11/2026
+
+- Campo de intervalo **livre** em minutos, mínimo de 1 minuto, sem opções predefinidas e sem máximo arbitrário de negócio. O backend usa `Int64`, que impõe apenas um limite técnico representável.
+- Checkbox **Captura ativa** separado para NF-e, CT-e e NFS-e.
+- **Pasta de destino** começa desabilitada quando Captura ativa está desmarcada. Ao marcar, habilita o campo de caminho e exige pasta existente no servidor com permissões de acesso. Desmarcar desabilita o campo, sem apagar o caminho já preenchido.
+- Persistência da configuração em `.nexfiscal-schedules/<CompanyId>.json`, via GET/POST `/api/capture/schedules/{companyId}`.
+- Salvar a configuração **não inicia consultas** enquanto o Worker de captura automática ainda não tiver sido implementado e homologado.
+- O agendamento efetivo respeitará `NextAllowedAtUtc` e as regras das três fontes, mesmo quando o operador configurar 1 minuto.

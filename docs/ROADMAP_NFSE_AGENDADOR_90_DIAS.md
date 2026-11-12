@@ -115,3 +115,7 @@ A interface **não exige digitar NSU**. O usuário escolhe a data-limite (90 dia
 - O teste CT-e e a captura NFS-e/ADN retroativa não estão disponíveis nesta versão; cada serviço exige método próprio.
 
 **Como testar:** atualizar o projeto sem excluir `.nexfiscal-downloads`, `.nexfiscal-certificates`, `.nexfiscal-keys`, `.nexfiscal-cte`, `.nexfiscal-schedules` e o checkpoint HANA. No painel, marcar e salvar **Captura ativa — NF-e** e a pasta existente. Primeiro clicar **Identificar NSUs antigos**, verificar os candidatos. Depois, quando permitido, clicar **Reconsultar 1 NSU na SEFAZ**. Conferir status e arquivo. Não reexecutar manualmente após erro de conexão sem averiguar o estado.
+
+## Convenção definitiva para nomes XML
+
+O arquivo individual baixado para a pasta configurada usa **somente a chave fiscal de 44 dígitos + `.xml`** em NF-e (`NFe/infNFe/@Id` vs. `protNFe/infProt/chNFe`) e CT-e (`CTe/infCte/@Id` vs. `protCTe/infProt/chCTe`). NFS-e futura seguirá seu identificador oficial de chave, após validação de layout do ADN. O NSU permanece apenas para cursor e ZIP de diagnóstico. Chave ausente ou divergente impede gravar o arquivo; conteúdo conflitante com a mesma chave nunca é sobrescrito. Arquivos anteriores não são renomeados automaticamente.

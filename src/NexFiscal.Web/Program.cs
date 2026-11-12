@@ -19,6 +19,8 @@ builder.Services.AddSingleton<CteFirstDownload>();
 builder.Services.AddSingleton<CaptureScheduleSettings>();
 builder.Services.AddSingleton<NfeHistoricalRecovery>();
 builder.Services.AddSingleton<NfeSefazCatchup>();
+builder.Services.AddSingleton<NfeRetroactiveRecovery>();
+builder.Services.AddHostedService<NfeMonitoringWorker>();
 builder.Services.AddSingleton<NfeXmlArchive>();
 builder.Services.AddSingleton<NfeIndividualXmlStore>();
 builder.Services.AddSingleton<NfeHandoffPreparation>();
@@ -267,7 +269,22 @@ app.MapGet("/api/sefaz/nfe/catchup/{companyId}", (
     catch (ArgumentException ex) { return Results.BadRequest(new { error = ex.Message }); }
 });
 
-// Configuração do futuro Worker: salvar não inicia consultas automáticas.
+// Recuperação independente: consNSU para lacunas conhecidas; não altera LastNsu.
+app.MapPost("/api/recovery/nfe/sefaz/{companyId}", async (
+    string companyId, NfeRetroactiveRecovery recovery, CancellationToken ct) =>
+{
+    try { return Results.Ok(await recovery.RunOnceAsync(companyId, ct)); }
+    catch (ArgumentException ex) { return Results.BadRequest(new { error = ex.Message }); }
+    catch (DirectoryNotFoundException ex) { return Results.BadRequest(new { error = ex.Message }); }
+    catch (InvalidOperationException ex) { return Results.Conflict(new { error = ex.Message }); }
+    catch (Exception ex)
+    {
+        app.Logger.LogError(ex, "Falha em recuperação pontual NF-e");
+        return Results.Problem("Não foi possível concluir a recuperação retroativa.", statusCode: 503);
+    }
+});
+
+// Agenda por tipo: o Worker ativo é o de NF-e.
 app.MapGet("/api/capture/schedules/{companyId}", async (
     string companyId, CaptureScheduleSettings settings, CancellationToken ct) =>
 {

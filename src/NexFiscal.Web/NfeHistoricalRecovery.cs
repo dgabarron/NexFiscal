@@ -59,7 +59,7 @@ public sealed class NfeHistoricalRecovery(
                 if (info.Length is < 1 or > 10_000_000) { invalidFiles++; continue; }
                 var bytes = await File.ReadAllBytesAsync(file, ct);
                 var parsed = ParseCompleteDocument(bytes);
-                if (parsed is null) { invalidFiles++; continue; }
+                if (parsed is null) continue;
                 if (parsed.Value.Date is not { } date) { withoutDate++; continue; }
                 if (date < from || date > now) continue;
                 var item = new Candidate(parsed.Value.Key, null, date, "Pasta de XMLs", true);

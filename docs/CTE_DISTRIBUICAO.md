@@ -13,7 +13,7 @@
 2. O operador escolhe uma única pasta X. Ela precisa existir **no computador/servidor que executa o NexFiscal**, com permissão de gravação.
 3. A operação CT-e consulta `CTeDistribuicaoDFe`, método `cteDistDFeInteresse` e `distNSU/ultNSU`. **Não reutiliza o endpoint, namespace, NSU nem o cursor da NF-e.**
 4. Se houver documentos (`cStat 138`), o sistema preserva o lote bruto para recuperação e só copia documentos completos com `schema=procCTe_v*.xsd`, raiz `cteProc`, elementos `CTe/infCte` e `protCTe/infProt`.
-5. Os documentos completos são gravados na mesma pasta X como `CTe_000000000000001.xml` (o NSU específico do CT-e). Arquivo com mesmo conteúdo é ignorado; conteúdo diferente nunca é sobrescrito.
+5. Os documentos completos são gravados na mesma pasta X como `<chave-de-acesso-de-44-digitos>.xml` (o NSU específico do CT-e). Arquivo com mesmo conteúdo é ignorado; conteúdo diferente nunca é sobrescrito.
 6. Avança o NSU do CT-e somente após a cópia para a pasta X. O checkpoint está em `.nexfiscal-cte/<CompanyId>.json` e é independente do HANA. Os XMLs são armazenados individualmente no diretório escolhido, não nas tabelas SAP HANA.
 
 ## Fluxos negativos
@@ -34,3 +34,7 @@ Este é um primeiro fluxo controlado de **uma consulta manual por clique**, não
 A pasta `.nexfiscal-cte` contém estado necessário para continuidade. Preservá-la ao atualizar a aplicação, assim como os arquivos de chaves, certificados e conexão.
 
 O serviço pode entregar DF-e de interesse conforme os papéis fiscais do ator. Não há promessa de baixar CT-e que não esteja disponível ou de retornar todos os documentos históricos anteriores à janela permitida.
+
+## Convenção de nomes atualizada
+
+Cada XML completo salvo na pasta de destino é identificado exclusivamente pela **chave de acesso de 44 dígitos** extraída de `CTe/infCte/@Id` e conferida com `protCTe/infProt/chCTe`. A identificação por NSU fica apenas no checkpoint e no ZIP bruto de recuperação, para rastreabilidade. Arquivos já gravados com nome antigo não são renomeados automaticamente.

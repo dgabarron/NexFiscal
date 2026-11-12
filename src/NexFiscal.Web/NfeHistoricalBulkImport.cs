@@ -83,7 +83,7 @@ public sealed class NfeHistoricalBulkImport(
         var complete = true;
         var sourceCount = 0;
         string? cnpj = null;
-        var known = new HashSet<string>(StringComparer.Ordinal);
+        var known = new Dictionary<string, byte[]>(StringComparer.Ordinal);
         try
         {
             // Só CNPJ do certificado cadastrado: não misturar documentos de empresas distintas.
@@ -101,7 +101,7 @@ public sealed class NfeHistoricalBulkImport(
             var filesSeen = 0;
             var zipEntriesSeen = 0;
 
-            async Task ImportAsync(byte[] bytes, bool fromZip)
+            async Task ImportAsync(byte[] bytes, bool fromZip, bool alreadyInDestination = false)
             {
                 examined++;
                 if (fromZip) zipDocs++; else folderDocs++;
@@ -114,9 +114,18 @@ public sealed class NfeHistoricalBulkImport(
                 if (doc.IssueDate is null) { invalid++; return; }
                 if (doc.IssueDate.Value < from || doc.IssueDate.Value > DateOnly.FromDateTime(DateTime.UtcNow))
                     { outside++; return; }
-                if (!known.Add(doc.Key)) { existing++; return; }
-                var target = Path.Combine(destination, doc.Key + ".xml");
                 var hash = SHA256.HashData(bytes);
+                if (known.TryGetValue(doc.Key, out var previous))
+                {
+                    if (CryptographicOperations.FixedTimeEquals(hash, previous)) existing++;
+                    else conflicts++;
+                    return;
+                }
+                known[doc.Key] = hash;
+                // XML já está em alguma subpasta ou com nome antigo por NSU:
+                // contabilizar, mas nunca criar uma segunda cópia na pasta raiz.
+                if (alreadyInDestination) { existing++; return; }
+                var target = Path.Combine(destination, doc.Key + ".xml");
                 if (File.Exists(target))
                 {
                     await using var stream = File.OpenRead(target);
@@ -169,7 +178,7 @@ public sealed class NfeHistoricalBulkImport(
                             {
                                 var info = new FileInfo(file);
                                 if (info.Length is < 1 or > MaxXmlSize) { invalid++; continue; }
-                                await ImportAsync(await File.ReadAllBytesAsync(file, ct), false);
+                                await ImportAsync(await File.ReadAllBytesAsync(file, ct), false, comparer.Equals(root, destination));
                             }
                             else
                             {

@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Globalization;
 using System.IO.Compression;
 using System.Security.Cryptography;
@@ -6,8 +7,8 @@ using System.Xml.Linq;
 using NexFiscal.Capture;
 
 /// <summary>
-/// Retrospectiva NF-e sem NSU digitado. Reconstrói candidatos a partir de ZIPs
-/// recebidos anteriormente. Apenas consNSU pontual, nunca reinicia distNSU.
+/// Conferência local de NF-e completa (procNFe) a partir dos ZIPs
+/// já recebidos, sem realizar consultas à SEFAZ.
 /// </summary>
 public sealed class NfeHistoricalRecovery(
     IWebHostEnvironment host, CaptureScheduleSettings settings)

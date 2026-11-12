@@ -35,6 +35,9 @@ function App(){
  const [cteResults,setCteResults]=useState({});
  const [cteStates,setCteStates]=useState({});
  const [destinationDirs,setDestinationDirs]=useState({});
+ const [scheduleSettings,setScheduleSettings]=useState({});
+ const [scheduleSaving,setScheduleSaving]=useState({});
+ const [scheduleNotice,setScheduleNotice]=useState({});
  const [connectivity,setConnectivity]=useState({});
  const [clockNow,setClockNow]=useState(Date.now());
  useEffect(()=>{
@@ -60,6 +63,7 @@ function App(){
         const state=await resp.json();
         setCaptureState(state);
         for(const company of state.companies||[])fetch(`/api/cte/status/${company.companyId}`).then(r=>r.ok?r.json():null).then(data=>{if(data)setCteStates(prev=>({...prev,[company.companyId]:data}));}).catch(()=>{});
+        for(const company of state.companies||[])fetch(`/api/capture/schedules/${company.companyId}`).then(r=>r.ok?r.json():null).then(data=>{if(data)setScheduleSettings(prev=>({...prev,[company.companyId]:data.map(s=>({...s,intervalMinutes:String(s.intervalMinutes)}))}));}).catch(()=>{});
         if(state.companies?.length){setRegistered({companyId:state.companies[0].companyId});setStage(2);}
         else setStage(1);
       }else setStage(1);
@@ -113,6 +117,7 @@ function App(){
     const state=await resp.json();
     setCaptureState(state);
     for(const company of state.companies||[])fetch(`/api/cte/status/${company.companyId}`).then(r=>r.ok?r.json():null).then(data=>{if(data)setCteStates(prev=>({...prev,[company.companyId]:data}));}).catch(()=>{});
+        for(const company of state.companies||[])fetch(`/api/capture/schedules/${company.companyId}`).then(r=>r.ok?r.json():null).then(data=>{if(data)setScheduleSettings(prev=>({...prev,[company.companyId]:data.map(s=>({...s,intervalMinutes:String(s.intervalMinutes)}))}));}).catch(()=>{});
   }catch(e){setError(e.message);}
  }
  async function testConnectivity(companyId){
@@ -142,6 +147,30 @@ function App(){
     await refreshCapture();
   }catch(e){setError(e.message);await refreshCapture();}
   finally{setCaptureBusy(false);}
+ }
+ function setScheduleField(companyId,type,field,value){
+  setScheduleSettings(prev=>({...prev,[companyId]:(prev[companyId]||["NFE","CTE","NFSE"].map(documentType=>({documentType,enabled:false,intervalMinutes:"60",destinationDirectory:""}))).map(x=>x.documentType===type?{...x,[field]:value}:x)}));
+  setScheduleNotice(prev=>({...prev,[companyId]:""}));
+ }
+ async function saveSchedule(companyId){
+  const entries=scheduleSettings[companyId]||[];
+  if(entries.length!==3){setError("Não foi possível carregar a configuração do agendamento.");return;}
+  for(const s of entries){
+   const minutes=String(s.intervalMinutes||"").trim();
+   if(!/^[0-9]+$/.test(minutes)||BigInt(minutes)<1n||BigInt(minutes)>9223372036854775807n){
+    setError("Informe um número inteiro de minutos a partir de 1, para cada tipo de documento.");return;
+   }
+   if(s.enabled&&!String(s.destinationDirectory||"").trim()){
+    setError("Preencha a pasta de destino para todos os tipos com Captura ativa.");return;
+   }
+  }
+  setScheduleSaving(prev=>({...prev,[companyId]:true}));setError("");
+  try{
+    const resp=await invoke(`/api/capture/schedules/${companyId}`,entries.map(s=>({...s,intervalMinutes:String(s.intervalMinutes).trim()})));
+    setScheduleSettings(prev=>({...prev,[companyId]:resp.map(s=>({...s,intervalMinutes:String(s.intervalMinutes)}))}));
+    setScheduleNotice(prev=>({...prev,[companyId]:"Configuração salva. O serviço automático ainda não está instalado; a captura não iniciará até essa etapa."}));
+  }catch(e){setError(e.message);}
+  finally{setScheduleSaving(prev=>({...prev,[companyId]:false}));}
  }
  async function downloadCte(company){
   const id=company.companyId;
@@ -271,6 +300,25 @@ function App(){
                <div className="font-semibold">{connected.reachable?"Conexão HTTPS com a SEFAZ confirmada":connected.message}</div>
                {!connected.reachable&&<div className="mt-1 text-xs">Etapa: {connected.stage||"não identificada"} · Código: {connected.code||"indisponível"}{connected.causes?.length>0?` · ${connected.causes.join(" → ")}`:""}</div>}
              </Notice></div>}
+             <div className="mt-5 rounded-lg border border-slate-200 p-4 space-y-3">
+               <h4 className="font-semibold text-sm">Configuração de captura automática</h4>
+               <p className="text-xs text-slate-500">Intervalo livre em minutos (mínimo 1). A frequência efetiva respeitará o intervalo obrigatório de cada serviço fiscal. As configurações ficam salvas, mas o Worker automático ainda será implementado.</p>
+               {(scheduleSettings[company.companyId]||[]).map(s=><div key={s.documentType} className="rounded-lg bg-slate-50 p-3">
+                 <div className="flex flex-wrap items-center justify-between gap-3">
+                   <label className="flex items-center gap-2 text-sm font-semibold"><input type="checkbox" checked={s.enabled} onChange={e=>setScheduleField(company.companyId,s.documentType,"enabled",e.target.checked)}/>Captura ativa — {s.documentType==="NFE"?"NF-e":s.documentType==="CTE"?"CT-e":"NFS-e"}</label>
+                   <div className="flex items-center gap-2">
+                     <label className="text-xs text-slate-600">Intervalo (min)</label>
+                     <input type="text" inputMode="numeric" pattern="[0-9]*" className="w-32 rounded-md border border-slate-300 bg-white p-2 text-sm" value={s.intervalMinutes} onChange={e=>setScheduleField(company.companyId,s.documentType,"intervalMinutes",e.target.value)} />
+                   </div>
+                 </div>
+                 <div className="mt-3">
+                   <label className="mb-1 block text-xs text-slate-600">Pasta dos XMLs</label>
+                   <input type="text" className="w-full rounded-md border border-slate-300 p-2 text-sm disabled:bg-slate-100 disabled:text-slate-400" placeholder="Ex.: C:\\NexFiscal\\XML" value={s.destinationDirectory||""} disabled={!s.enabled} onChange={e=>setScheduleField(company.companyId,s.documentType,"destinationDirectory",e.target.value)}/>
+                 </div>
+               </div>)}
+               <Button variant="outline" disabled={!scheduleSettings[company.companyId]||scheduleSaving[company.companyId]} onClick={()=>saveSchedule(company.companyId)}>{scheduleSaving[company.companyId]?"Salvando...":"Salvar configurações de captura"}</Button>
+               {scheduleNotice[company.companyId]&&<p className="text-xs text-amber-800">{scheduleNotice[company.companyId]}</p>}
+             </div>
              <div className="mt-5">
                <Label>Pasta de destino dos XMLs (no computador/servidor NexFiscal)</Label>
                <Input placeholder="Ex.: C:\\NexFiscal\\XML" value={destinationDirs[company.companyId]||""}

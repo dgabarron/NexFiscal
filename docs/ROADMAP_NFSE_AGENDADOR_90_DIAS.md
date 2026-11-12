@@ -72,3 +72,18 @@ Nenhuma API de ADN foi acionada nem agendamento/recuperação de 90 dias foi ini
 - Para consultar manualmente, marcar `Captura ativa`, configurar a pasta e clicar em `Salvar configurações de captura`. Isto **não** ativa por si só o Worker, ainda não implementado.
 - As rotas `POST /api/capture/download` e `POST /api/cte/download` recebem apenas `companyId` e `previousConsumerStopped`, e resolvem a pasta exclusivamente na configuração persistida; o cliente não pode indicar pasta alternativa.
 - O backend mantém a validação de pasta existente e acessível antes de iniciar uma consulta fiscal.
+
+## Próximo teste definido — Reconsulta pontual por data-limite e NSU antigo (12/11/2026)
+
+**Objetivo:** recuperar um documento com NSU já conhecido, relativo ao período retroativo de até 90 dias, sem retroceder o `ultNSU` da captura contínua. A data-limite é um **filtro local**, e não um parâmetro de pesquisa por data suportado por `NFeDistribuicaoDFe`.
+
+1. O operador seleciona tipo de documento (primeiro NF-e), data-limite e (quando conhecido) NSU/chave de acesso de um documento faltante.
+2. O sistema pesquisa primeiramente o XML ou ZIP bruto já armazenado, os registros/NSUs conhecidos e os documentos sem XML completo.
+3. Com NSU individual conhecido, usa `consNSU` da NF-e, se permitido e ainda dentro da disponibilidade de até 90 dias. Se houver chave, avaliar `consChNFe`. **Não** consultar `distNSU` com NSU antigo nem alterar checkpoint de produção.
+4. Validar `procNFe`, chave + protocolo e hash antes de salvar o XML na pasta de NF-e configurada. Relatar `recuperado`, `já existe`, `fora de prazo`, `sem permissão`, `resumo/evento`, `bloqueado` e `não encontrado`.
+5. Respeitar máximo publicado de **20 consultas pontuais por hora por CNPJ** e cooldown de `656`; não prometer recuperação universal.
+6. CT-e e NFS-e: confirmar os métodos pontuais efetivamente documentados e seus limites específicos antes de ativar a mesma experiência; não assumir que `consNSU` e 90 dias funcionam identicamente nos três órgãos.
+
+**Referência NF-e:** [NT 2014.002, portal oficial](https://www.nfe.fazenda.gov.br/Portal/exibirArquivo.aspx?conteudo=VgPuhtPApQo%3D). A NT distingue `distNSU` sequencial de `consNSU` pontual. Somente a consulta pontual pode referenciar um NSU antigo sem modificar a sequência principal, sujeito às regras do serviço.
+
+**Situação:** roteiro do teste registrado. Ainda não foi desenvolvido endpoint `consNSU`, o botão de data-limite nem executada chamada real de recuperação.

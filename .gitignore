@@ -33,3 +33,6 @@ frontend/.nexfiscal-build.log
 
 # Estado local e cota de consultas pontuais de recuperação
 **/.nexfiscal-recovery/
+
+# Estado local da recuperação histórica, não versionar informações fiscais
+**/.nexfiscal-historical/

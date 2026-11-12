@@ -37,6 +37,10 @@ function App(){
  const [scheduleSettings,setScheduleSettings]=useState({});
  const [scheduleSaving,setScheduleSaving]=useState({});
  const [scheduleNotice,setScheduleNotice]=useState({});
+ const [recoveryDates,setRecoveryDates]=useState({});
+ const [recoveryPreviews,setRecoveryPreviews]=useState({});
+ const [recoveryResult,setRecoveryResult]=useState({});
+ const [recoveryBusy,setRecoveryBusy]=useState({});
  const [connectivity,setConnectivity]=useState({});
  const [clockNow,setClockNow]=useState(Date.now());
  useEffect(()=>{
@@ -172,6 +176,33 @@ function App(){
     setScheduleNotice(prev=>({...prev,[companyId]:"Configuração salva. O serviço automático ainda não está instalado; a captura não iniciará até essa etapa."}));
   }catch(e){setError(e.message);}
   finally{setScheduleSaving(prev=>({...prev,[companyId]:false}));}
+ }
+ function recoveryFrom(companyId){
+   const chosen=recoveryDates[companyId];
+   const date=chosen||new Date(Date.now()-89*86400000).toISOString().slice(0,10);
+   return new Date(date+"T00:00:00Z").toISOString();
+ }
+ async function previewNfeRecovery(companyId){
+   setRecoveryBusy(prev=>({...prev,[companyId]:true}));setError("");
+   try{
+     const resp=await fetch(`/api/recovery/nfe/preview/${companyId}?from=${encodeURIComponent(recoveryFrom(companyId))}`);
+     const data=await resp.json().catch(()=>({}));
+     if(!resp.ok)throw new Error(data.error||data.title||"Não foi possível identificar NSUs antigos.");
+     setRecoveryPreviews(prev=>({...prev,[companyId]:data}));
+   }catch(e){setError(e.message);}
+   finally{setRecoveryBusy(prev=>({...prev,[companyId]:false}));}
+ }
+ async function recoverOldNfe(companyId){
+   if(!window.confirm("Reconsultar UM NSU antigo identificado nos arquivos locais? A ação envia uma consulta REAL à SEFAZ. O checkpoint atual não será alterado."))return;
+   setRecoveryBusy(prev=>({...prev,[companyId]:true}));setError("");
+   try{
+     const data=await invoke("/api/recovery/nfe/one",{
+       companyId,from:recoveryFrom(companyId),previousConsumerStopped:true
+     });
+     setRecoveryResult(prev=>({...prev,[companyId]:data}));
+     await previewNfeRecovery(companyId);
+   }catch(e){setError(e.message);}
+   finally{setRecoveryBusy(prev=>({...prev,[companyId]:false}));}
  }
  async function downloadCte(company){
   const id=company.companyId;
@@ -321,6 +352,31 @@ function App(){
                </div>)}
                <Button variant="outline" disabled={!scheduleSettings[company.companyId]||scheduleSaving[company.companyId]} onClick={()=>saveSchedule(company.companyId)}>{scheduleSaving[company.companyId]?"Salvando...":"Salvar configurações de captura"}</Button>
                {scheduleNotice[company.companyId]&&<p className="text-xs text-amber-800">{scheduleNotice[company.companyId]}</p>}
+             </div>
+             <div className="mt-5 rounded-lg border border-slate-200 p-4 space-y-3">
+               <h4 className="font-semibold text-sm">Teste de recuperação de NF-e antigas</h4>
+               <p className="text-xs text-slate-500">Informe a data-limite (até 90 dias). O sistema procura NSUs automaticamente nos lotes ZIP já recebidos e mostra uma prévia sem acessar a SEFAZ. A recuperação consulta apenas um NSU por vez e não altera o checkpoint da captura normal.</p>
+               <div className="flex flex-wrap items-end gap-3">
+                 <div><label className="mb-1 block text-xs text-slate-600">Data-limite</label>
+                   <input type="date" className="rounded-md border border-slate-300 p-2 text-sm" value={recoveryDates[company.companyId]||new Date(Date.now()-89*86400000).toISOString().slice(0,10)}
+                     min={new Date(Date.now()-89*86400000).toISOString().slice(0,10)}
+                     max={new Date().toISOString().slice(0,10)}
+                     onChange={e=>{setRecoveryDates(prev=>({...prev,[company.companyId]:e.target.value}));setRecoveryPreviews(prev=>({...prev,[company.companyId]:null}));}}/>
+                 </div>
+                 <Button variant="outline" disabled={!!recoveryBusy[company.companyId]} onClick={()=>previewNfeRecovery(company.companyId)}>Identificar NSUs antigos</Button>
+                 <Button disabled={!!recoveryBusy[company.companyId]||!recoveryPreviews[company.companyId]?.documents?.some(d=>!d.complete&&!d.xmlPresent)}
+                   onClick={()=>recoverOldNfe(company.companyId)}>Reconsultar 1 NSU na SEFAZ</Button>
+               </div>
+               {recoveryPreviews[company.companyId]&&<div className="rounded-md bg-slate-50 p-3 text-sm">
+                 <div className="font-semibold">Documentos rastreados: {recoveryPreviews[company.companyId].candidates} · Já completos: {recoveryPreviews[company.companyId].alreadyComplete} · Sem data identificável: {recoveryPreviews[company.companyId].withoutDate}</div>
+                 <p className="mt-1 text-xs text-slate-500">{recoveryPreviews[company.companyId].warning}</p>
+                 <div className="mt-2 max-h-40 overflow-auto">{recoveryPreviews[company.companyId].documents?.slice(0,30).map(doc=>
+                   <div key={doc.nsu} className="border-t border-slate-200 py-1 text-xs font-mono">NSU {doc.nsu} · {doc.schema} · {doc.complete||doc.xmlPresent?"Completo":"Pendente"}</div>)}</div>
+               </div>}
+               {recoveryResult[company.companyId]&&<Notice type={recoveryResult[company.companyId].filesSaved>0?"success":"warning"}>
+                 {recoveryResult[company.companyId].message||recoveryResult[company.companyId].reason}
+                 {recoveryResult[company.companyId].attempted&&<div className="text-xs mt-1">NSU: {recoveryResult[company.companyId].nsu} · SEFAZ: {recoveryResult[company.companyId].status} · procNFe novos: {recoveryResult[company.companyId].filesSaved||0}</div>}
+               </Notice>}
              </div>
              <div className="mt-5 flex flex-wrap gap-3">
                <Button disabled={!company.certificateStored||captureBusy} onClick={()=>downloadNfe(company)}>

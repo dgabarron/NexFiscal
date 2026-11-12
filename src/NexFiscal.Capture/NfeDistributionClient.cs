@@ -74,6 +74,33 @@ public sealed class NfeDistributionClient
         return request.ToString(SaveOptions.DisableFormatting);
     }
 
+    /// <summary>Consulta pontual de NSU conhecido; não altera o cursor sequencial.</summary>
+    public static string BuildSpecificNsuRequest(string cnpj, long nsu, int environment, int? authorizerUf = null)
+    {
+        if (nsu is < 1 or > 999_999_999_999_999L)
+            throw new ArgumentOutOfRangeException(nameof(nsu));
+        // Reaproveita a construção com CNPJ, UF, tpAmb e XSD, trocando apenas
+        // distNSU pela escolha mutuamente exclusiva consNSU.
+        var request = XDocument.Parse(BuildRequest(cnpj, 0, environment, authorizerUf));
+        var dist = request.Descendants(NfeNs + "distNSU").Single();
+        dist.ReplaceWith(new XElement(NfeNs + "consNSU",
+            new XElement(NfeNs + "NSU", nsu.ToString("D15", CultureInfo.InvariantCulture))));
+        NfeRequestSchemaValidator.Validate(request.Descendants(NfeNs + "distDFeInt").Single());
+        return request.ToString(SaveOptions.DisableFormatting);
+    }
+
+    public async Task<NfeDistributionResult> QuerySpecificNsuAsync(
+        X509Certificate2 certificate, string cnpj, long nsu, int environment,
+        CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(certificate);
+        var state = A1CompanyCertificate.GetSubjectState(certificate);
+        int? uf = state is not null && StateCodes.TryGetValue(state, out var ibge)
+            ? ibge : null;
+        var xml = BuildSpecificNsuRequest(cnpj, nsu, environment, uf);
+        return await QueryXmlAsync(certificate, xml, environment, ct, nsu);
+    }
+
     public async Task<NfeDistributionResult> QueryAsync(
         X509Certificate2 certificate, string cnpj, long lastNsu, int environment,
         CancellationToken ct = default)
@@ -90,6 +117,16 @@ public sealed class NfeDistributionClient
         int? authorizerUf = state is not null && StateCodes.TryGetValue(state, out var ibge)
             ? ibge : null;
         var xml = BuildRequest(cnpj, lastNsu, environment, authorizerUf);
+        return await QueryXmlAsync(certificate, xml, environment, ct);
+    }
+
+    private static async Task<NfeDistributionResult> QueryXmlAsync(
+        X509Certificate2 certificate, string xml, int environment,
+        CancellationToken ct, long? pointNsu = null)
+    {
+        if (!certificate.HasPrivateKey || DateTimeOffset.UtcNow >= certificate.NotAfter.ToUniversalTime() ||
+            DateTimeOffset.UtcNow < certificate.NotBefore.ToUniversalTime())
+            throw new InvalidOperationException("Certificado A1 sem chave privada válida.");
         using var handler = new HttpClientHandler
         {
             ClientCertificateOptions = ClientCertificateOption.Manual,
@@ -121,10 +158,10 @@ public sealed class NfeDistributionClient
             if (limited.Length + n > 12_000_000) throw new InvalidDataException("Resposta SEFAZ excedeu o limite de 12 MB.");
             await limited.WriteAsync(buffer.AsMemory(0, n), ct);
         }
-        return ParseResponse(Encoding.UTF8.GetString(limited.ToArray()));
+        return ParseResponse(Encoding.UTF8.GetString(limited.ToArray()), pointNsu);
     }
 
-    public static NfeDistributionResult ParseResponse(string response)
+    public static NfeDistributionResult ParseResponse(string response, long? pointNsu = null)
     {
         ArgumentNullException.ThrowIfNull(response);
         if (response.Length > 12_000_000) throw new InvalidDataException("Retorno SOAP muito grande.");
@@ -172,7 +209,8 @@ public sealed class NfeDistributionClient
                 var schema = (string?)doc.Attribute("schema");
                 if (string.IsNullOrWhiteSpace(nsu) ||
                     !long.TryParse(nsu, NumberStyles.None, CultureInfo.InvariantCulture, out var docNsu) ||
-                    docNsu <= 0 || docNsu > last ||
+                    docNsu <= 0 || (pointNsu is null && docNsu > last) ||
+                    (pointNsu is not null && docNsu != pointNsu.Value) ||
                     string.IsNullOrWhiteSpace(schema) || schema.Length > 200 ||
                     !seenNsus.Add(docNsu))
                     throw new InvalidDataException("docZip sem metadados válidos.");

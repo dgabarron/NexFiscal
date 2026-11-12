@@ -183,7 +183,7 @@ function App(){
  }
  function recoveryFrom(companyId){
    const chosen=(recoveryDates[companyId]||defaultRecoveryDate()).trim();
-   const match=/^(\\d{2})\\/(\\d{2})\\/(\\d{4})$/.exec(chosen);
+   const match=/^(\d{2})\/(\d{2})\/(\d{4})$/.exec(chosen);
    if(!match)throw new Error("Informe a data no formato DD/MM/AAAA.");
    const day=Number(match[1]),month=Number(match[2]),year=Number(match[3]);
    const date=new Date(Date.UTC(year,month-1,day));
@@ -372,7 +372,7 @@ function App(){
                <div className="flex flex-wrap items-end gap-3">
                  <div><label className="mb-1 block text-xs text-slate-600">Data-limite</label>
                    <input type="text" inputMode="numeric" maxLength={10} placeholder="DD/MM/AAAA" aria-label="Data-limite no formato brasileiro" className="rounded-md border border-slate-300 p-2 text-sm w-36" value={recoveryDates[company.companyId]??defaultRecoveryDate()}
-                     onChange={e=>{const digits=e.target.value.replace(/\\D/g,"").slice(0,8);const formatted=digits.length>4?digits.slice(0,2)+"/"+digits.slice(2,4)+"/"+digits.slice(4):digits.length>2?digits.slice(0,2)+"/"+digits.slice(2):digits;setRecoveryDates(prev=>({...prev,[company.companyId]:formatted}));setRecoveryPreviews(prev=>({...prev,[company.companyId]:null}));}}/>
+                     onChange={e=>{const digits=e.target.value.replace(/\D/g,"").slice(0,8);const formatted=digits.length>4?digits.slice(0,2)+"/"+digits.slice(2,4)+"/"+digits.slice(4):digits.length>2?digits.slice(0,2)+"/"+digits.slice(2):digits;setRecoveryDates(prev=>({...prev,[company.companyId]:formatted}));setRecoveryPreviews(prev=>({...prev,[company.companyId]:null}));}}/>
                  </div>
                  <Button variant="outline" disabled={!!recoveryBusy[company.companyId]} onClick={()=>previewNfeRecovery(company.companyId)}>Conferir histórico salvo (sem SEFAZ)</Button>
                  <Button disabled={!!recoveryBusy[company.companyId]||!recoveryPreviews[company.companyId]?.documents?.some(d=>!d.complete&&!d.xmlPresent)}

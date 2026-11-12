@@ -1,4 +1,5 @@
 using System.Xml;
+using NexFiscal.Capture;
 using System.Text;
 using Xunit;
 
@@ -23,7 +24,7 @@ public sealed class NfeHistoricalBulkImportTests
     [Fact]
     public void HistoricalDocument_ExtractsDateAndKeyBeforeNinetyDayWindow()
     {
-        var doc = NfeHistoricalBulkImport.InspectProcNfe(Build());
+        var doc = NfeHistoricalDocumentInspector.Inspect(Build());
         Assert.NotNull(doc);
         Assert.Equal(Key, doc.Key);
         Assert.Equal(new DateOnly(2019, 8, 17), doc.IssueDate);
@@ -37,13 +38,13 @@ public sealed class NfeHistoricalBulkImportTests
         var xml = Encoding.UTF8.GetString(Build()).Replace("<chNFe>" + Key + "</chNFe>",
             "<chNFe>35260804854181000174550010000352481664948101</chNFe>");
         Assert.Throws<InvalidDataException>(() =>
-            NfeHistoricalBulkImport.InspectProcNfe(Encoding.UTF8.GetBytes(xml)));
+            NfeHistoricalDocumentInspector.Inspect(Encoding.UTF8.GetBytes(xml)));
     }
 
     [Fact]
     public void SummaryIsNotACompleteInvoice()
     {
-        Assert.Null(NfeHistoricalBulkImport.InspectProcNfe(
+        Assert.Null(NfeHistoricalDocumentInspector.Inspect(
             Encoding.UTF8.GetBytes("<resNFe xmlns='http://www.portalfiscal.inf.br/nfe'/>")));
     }
 
@@ -53,6 +54,6 @@ public sealed class NfeHistoricalBulkImportTests
         var xml = "<!DOCTYPE x [<!ENTITY ext SYSTEM 'file:///etc/passwd'>]>" +
                   "<nfeProc xmlns='http://www.portalfiscal.inf.br/nfe'>&ext;</nfeProc>";
         Assert.Throws<XmlException>(() =>
-            NfeHistoricalBulkImport.InspectProcNfe(Encoding.UTF8.GetBytes(xml)));
+            NfeHistoricalDocumentInspector.Inspect(Encoding.UTF8.GetBytes(xml)));
     }
 }

@@ -73,7 +73,7 @@ public sealed class CteDistributionClientTests
         Directory.CreateDirectory(path);
         try
         {
-            var xml = Encoding.UTF8.GetBytes("<cteProc xmlns=\"http://www.portalfiscal.inf.br/cte\"><CTe><infCte/></CTe><protCTe><infProt/></protCTe></cteProc>");
+            var xml = Encoding.UTF8.GetBytes("<cteProc xmlns=\"http://www.portalfiscal.inf.br/cte\"><CTe><infCte Id=\"CTe35161112222222000123570010000000011000000011\"/></CTe><protCTe><infProt><chCTe>35161112222222000123570010000000011000000011</chCTe></infProt></protCTe></cteProc>");
             var summary = Encoding.UTF8.GetBytes("<resCTe xmlns=\"http://www.portalfiscal.inf.br/cte\"/>");
             NfeDistributedDocument Doc(long nsu, string schema, byte[] data) =>
                 new(nsu, schema, data, Convert.ToHexString(SHA256.HashData(data)).ToLowerInvariant());
@@ -83,7 +83,7 @@ public sealed class CteDistributionClientTests
             var stored = await new NfeIndividualXmlStore().SaveAsync(path, batch, CancellationToken.None, "CTE");
             Assert.Equal(1, stored.Created);
             Assert.Equal(1, stored.SkippedNonProcNFe);
-            Assert.True(File.Exists(Path.Combine(path, "CTe_000000000000002.xml")));
+            Assert.True(File.Exists(Path.Combine(path, "35161112222222000123570010000000011000000011.xml")));
             Assert.False(File.Exists(Path.Combine(path, "CTe_000000000000001.xml")));
             Assert.Equal(xml, await File.ReadAllBytesAsync(Path.Combine(path, "CTe_000000000000002.xml")));
         }

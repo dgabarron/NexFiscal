@@ -329,13 +329,13 @@ app.MapPost("/api/cte/download", async (
 
 // Primeira distribuição NF-e: um clique, sem digitar NSU, somente no portal local.
 // Bloqueio de uma hora já reservado no HANA antes de acessar a SEFAZ.
-app.MapPost("/api/capture/download", async (CaptureDownloadRequest request,
+app.MapPost("/api/capture/download", async (CaptureTestRequest request,
     NfeFirstDownload capture, CaptureScheduleSettings settings, CancellationToken ct) =>
 {
     try
     {
         var folder = await settings.RequireDestinationAsync(request.CompanyId, "NFE", ct);
-        return Results.Ok(await capture.ExecuteAsync(request.CompanyId, request.PreviousConsumerStopped, folder, ct));
+        return Results.Ok(await capture.ExecuteAsync(request.CompanyId, folder, ct));
     }
     catch (ArgumentException ex) { return Results.BadRequest(new { error = ex.Message }); }
     catch (DirectoryNotFoundException ex) { return Results.BadRequest(new { error = ex.Message }); }

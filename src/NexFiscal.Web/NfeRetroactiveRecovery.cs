@@ -23,6 +23,8 @@ public sealed class NfeRetroactiveRecovery(
             throw new ArgumentException("Empresa inválida.");
         var id = guid.ToString("D");
         var destination = await schedules.RequireDestinationAsync(id, "NFE", ct);
+        if (!vault.IsStored(id))
+            throw new InvalidOperationException("Certificado A1 não encontrado.");
         // O gate é compartilhado com monitoramento/captura manual no processo.
         if (!await NfeFirstDownload.Gate.WaitAsync(0, ct))
             throw new InvalidOperationException("Outra consulta NF-e já está em execução.");
@@ -130,15 +132,8 @@ public sealed class NfeRetroactiveRecovery(
                 while (await reader.ReadAsync(ct))
                     attempted.Add(Convert.ToInt64(reader.GetValue(0)));
 
-            long? missing = null;
-            // Nunca gera consultas para NSUs anteriores ao primeiro envelope conhecido
-            // nem tenta sondar ilimitadamente a sequência.
-            for (var i = 1; i < known.Count && missing is null; i++)
-            {
-                for (var nsu = known[i - 1] + 1;
-                     nsu < known[i] && nsu - known[i - 1] <= 20000; nsu++)
-                    if (!attempted.Contains(nsu)) { missing = nsu; break; }
-            }
+            // Somente lacunas de envelopes já recebidos; nenhum reset de cursor.
+            var missing = NfeRecoveryCandidateSelector.FindNext(known, attempted);
             if (missing is null)
             {
                 await tx.CommitAsync(ct);

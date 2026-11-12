@@ -11,7 +11,7 @@ public sealed class NfeSefazCatchup(
     NfeFirstDownload capture, CaptureScheduleSettings settings,
     IHostApplicationLifetime lifetime, ILogger<NfeSefazCatchup> logger)
 {
-    public sealed record Request(string CompanyId, bool PreviousConsumerStopped);
+    public sealed record Request(string CompanyId);
     public sealed record Progress(string Status, int Batches, long Downloaded,
         long CompleteSaved, long AlreadyPresent, long IgnoredNonProcNFe,
         string? LastNsu, string? MaxNsu, int? LastSefazStatus,
@@ -27,8 +27,6 @@ public sealed class NfeSefazCatchup(
     public async Task<Progress> StartAsync(Request request, CancellationToken ct)
     {
         var company = ValidateId(request.CompanyId);
-        if (!request.PreviousConsumerStopped)
-            throw new InvalidOperationException("Confirme que não existe outro distribuidor consultando este CNPJ.");
         // Validação de destino ANTES de iniciar tarefa.
         var destination = await settings.RequireDestinationAsync(company, "NFE", ct);
         var starting = new Progress("running", 0, 0, 0, 0, 0,
@@ -54,12 +52,13 @@ public sealed class NfeSefazCatchup(
         long downloaded = 0, saved = 0, existing = 0, ignored = 0;
         string? last = null, max = null;
         int? sefaz = null;
+        long? previousNsu = null;
         try
         {
-            // O limite evita processos intermináveis: clique novamente depois
-            // para continuar do cursor HANA atual, sem reset.
-            const int maxBatches = 100;
-            while (batches < maxBatches)
+            // Percorre todos os lotes disponibilizados pela SEFAZ, sem teto
+            // artificial de NSUs ou quantidade de lotes. A persistência do
+            // checkpoint ocorre em cada lote, antes da próxima consulta.
+            while (true)
             {
                 ct.ThrowIfCancellationRequested();
                 // ExecuteAsync confirma certificado/CNPJ, reserva cota e consulta
@@ -108,15 +107,25 @@ public sealed class NfeSefazCatchup(
                 }
                 if (!long.TryParse(last, NumberStyles.None, CultureInfo.InvariantCulture, out var lastNumber) ||
                     !long.TryParse(max, NumberStyles.None, CultureInfo.InvariantCulture, out var maxNumber) ||
-                    lastNumber >= maxNumber)
+                    lastNumber > maxNumber)
+                {
+                    Publish("attention", "Resposta com NSU inválido: confira o log antes de continuar.");
+                    return;
+                }
+                if (lastNumber == maxNumber)
                 {
                     Publish("completed", "Todos os lotes atualmente disponibilizados pela SEFAZ foram consultados.");
                     return;
                 }
+                if (previousNsu.HasValue && lastNumber <= previousNsu.Value)
+                {
+                    Publish("attention", "O NSU não avançou entre os lotes; a captura foi interrompida para evitar consultas repetidas.");
+                    return;
+                }
+                previousNsu = lastNumber;
                 // Cursor HANA é atualizado somente após arquivo + lote persistidos.
                 Publish("running", "Lote recebido; consultando o próximo NSU disponível.");
             }
-            Publish("paused", "Limite de 100 lotes atingido. Execute novamente para continuar de onde parou.");
         }
         catch (OperationCanceledException)
         {

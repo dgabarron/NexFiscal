@@ -1,0 +1,30 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NexFiscal.Capture", "src\NexFiscal.Capture\NexFiscal.Capture.csproj", "{0B1927FE-C9CD-4ACD-9CB0-65DE43FF33C5}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NexFiscal.Web", "src\NexFiscal.Web\NexFiscal.Web.csproj", "{AB86E434-CF89-469F-96A0-85D2C5908F3D}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NexFiscal.Capture.Tests", "tests\NexFiscal.Capture.Tests\NexFiscal.Capture.Tests.csproj", "{F3B19C8B-2BF1-4C25-9685-4E2644F97CA6}"
+EndProject
+Global
+ GlobalSection(SolutionConfigurationPlatforms) = preSolution
+  Debug|Any CPU = Debug|Any CPU
+  Release|Any CPU = Release|Any CPU
+ EndGlobalSection
+ GlobalSection(ProjectConfigurationPlatforms) = postSolution
+  {0B1927FE-C9CD-4ACD-9CB0-65DE43FF33C5}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+  {0B1927FE-C9CD-4ACD-9CB0-65DE43FF33C5}.Debug|Any CPU.Build.0 = Debug|Any CPU
+  {0B1927FE-C9CD-4ACD-9CB0-65DE43FF33C5}.Release|Any CPU.ActiveCfg = Release|Any CPU
+  {0B1927FE-C9CD-4ACD-9CB0-65DE43FF33C5}.Release|Any CPU.Build.0 = Release|Any CPU
+  {AB86E434-CF89-469F-96A0-85D2C5908F3D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+  {AB86E434-CF89-469F-96A0-85D2C5908F3D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+  {AB86E434-CF89-469F-96A0-85D2C5908F3D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+  {AB86E434-CF89-469F-96A0-85D2C5908F3D}.Release|Any CPU.Build.0 = Release|Any CPU
+  {F3B19C8B-2BF1-4C25-9685-4E2644F97CA6}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+  {F3B19C8B-2BF1-4C25-9685-4E2644F97CA6}.Debug|Any CPU.Build.0 = Debug|Any CPU
+  {F3B19C8B-2BF1-4C25-9685-4E2644F97CA6}.Release|Any CPU.ActiveCfg = Release|Any CPU
+  {F3B19C8B-2BF1-4C25-9685-4E2644F97CA6}.Release|Any CPU.Build.0 = Release|Any CPU
+ EndGlobalSection
+EndGlobal

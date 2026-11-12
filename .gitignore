@@ -1,0 +1,38 @@
+**/bin/
+**/obj/
+**/.vs/
+**/node_modules/
+*.pfx
+*.p12
+*.pem
+*.key
+*.db
+*.sqlite
+*.sqlite3
+*.log
+.env
+.env.*
+!/.env.example
+secrets/
+
+**/.nexfiscal-hana.dat
+**/.nexfiscal-keys/
+
+**/.nexfiscal-certificates/
+
+frontend/.nexfiscal-build.log
+
+# XMLs fiscais baixados localmente (dados confidenciais, fora de wwwroot)
+**/.nexfiscal-downloads/
+
+# Checkpoint de distribuição CT-e local por CNPJ; nunca versionar
+**/.nexfiscal-cte/
+
+# Configurações locais da captura automática
+**/.nexfiscal-schedules/
+
+# Estado local e cota de consultas pontuais de recuperação
+**/.nexfiscal-recovery/
+
+# Estado local da recuperação histórica, não versionar informações fiscais
+**/.nexfiscal-historical/

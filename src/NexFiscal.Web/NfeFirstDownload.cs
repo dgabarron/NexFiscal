@@ -5,8 +5,8 @@ using System.Security.Cryptography.X509Certificates;
 using NexFiscal.Capture;
 
 /// <summary>
-/// Uma consulta manual distNSU por clique, após confirmação de que o consumidor
-/// anterior foi desligado. Inicia o cursor em 0 somente quando não há checkpoint.
+/// Uma consulta manual distNSU por clique para o CNPJ cadastrado.
+/// Inicia o cursor em 0 somente quando não há checkpoint.
 /// Reserva 1h antes de acessar a SEFAZ para não repetir uma chamada ambígua.
 /// Não é um agendador e não oferece NSU editável.
 /// </summary>
@@ -14,12 +14,10 @@ public sealed class NfeFirstDownload(HanaSetup hana, CompanyCertificateVault vau
 {
     private static readonly SemaphoreSlim Gate = new(1, 1);
 
-    public async Task<object> ExecuteAsync(string companyId, bool previousConsumerStopped, string? destinationDirectory, CancellationToken ct)
+    public async Task<object> ExecuteAsync(string companyId, string? destinationDirectory, CancellationToken ct)
     {
         if (!Guid.TryParse(companyId, out var guid))
             throw new ArgumentException("Empresa inválida.");
-        if (!previousConsumerStopped)
-            throw new InvalidOperationException("Confirme que o sistema anterior não consulta mais a SEFAZ para este CNPJ.");
         // Validar destino ANTES de reservar NSU ou fazer uma consulta fiscal.
         var validatedDestination = NfeIndividualXmlStore.ValidateDirectory(destinationDirectory);
         if (!await Gate.WaitAsync(0, ct))
@@ -233,7 +231,7 @@ public sealed class NfeFirstDownload(HanaSetup hana, CompanyCertificateVault vau
             await using (var log = Cmd(conn, tx,
                 "INSERT INTO \"BRAI_NEX\".\"BRAI_NEX_CaptureLog\" " +
                 "(\"AttemptId\",\"CompanyId\",\"DocumentType\",\"RequestedNsu\",\"Status\",\"Result\",\"Message\",\"StartedAtUtc\") " +
-                "VALUES (?,?,'NFE',?,NULL,'CONSULTA_INICIADA','Consulta manual; consumidor anterior declarado desligado',CURRENT_UTCTIMESTAMP)",
+                "VALUES (?,?,'NFE',?,NULL,'CONSULTA_INICIADA','Consulta distNSU para CNPJ cadastrado',CURRENT_UTCTIMESTAMP)",
                 Guid.NewGuid().ToString("D"), companyId, nsu))
                 await log.ExecuteNonQueryAsync(ct);
 

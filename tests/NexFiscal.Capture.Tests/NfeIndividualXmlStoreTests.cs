@@ -14,8 +14,8 @@ public sealed class NfeIndividualXmlStoreTests
         Directory.CreateDirectory(folder);
         try
         {
-            var first = Encoding.UTF8.GetBytes("<nfeProc xmlns=\"http://www.portalfiscal.inf.br/nfe\"><NFe><infNFe Id=\"NFe1\"/></NFe><protNFe><infProt/></protNFe></nfeProc>");
-            var second = Encoding.UTF8.GetBytes("<nfeProc xmlns=\"http://www.portalfiscal.inf.br/nfe\"><NFe><infNFe Id=\"NFe2\"/></NFe><protNFe><infProt/></protNFe></nfeProc>");
+            var first = Encoding.UTF8.GetBytes("<nfeProc xmlns=\"http://www.portalfiscal.inf.br/nfe\"><NFe><infNFe Id=\"NFe35161112222222000123550010000000011000000011\"/></NFe><protNFe><infProt><chNFe>35161112222222000123550010000000011000000011</chNFe></infProt></protNFe></nfeProc>");
+            var second = Encoding.UTF8.GetBytes("<nfeProc xmlns=\"http://www.portalfiscal.inf.br/nfe\"><NFe><infNFe Id=\"NFe35161112222222000123550010000000021000000022\"/></NFe><protNFe><infProt/></protNFe></nfeProc>");
             NfeDistributedDocument Doc(long nsu, byte[] bytes) => new(
                 nsu, "procNFe_v4.00.xsd", bytes,
                 Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant());
@@ -25,14 +25,14 @@ public sealed class NfeIndividualXmlStoreTests
             var saved = await store.SaveAsync(folder, response, CancellationToken.None);
             Assert.Equal(2, saved.Created);
             Assert.Equal(0, saved.AlreadyPresent);
-            Assert.Equal(first, await File.ReadAllBytesAsync(Path.Combine(folder, "000000000000001.xml")));
-            Assert.Equal(second, await File.ReadAllBytesAsync(Path.Combine(folder, "000000000000002.xml")));
+            Assert.Equal(first, await File.ReadAllBytesAsync(Path.Combine(folder, "35161112222222000123550010000000011000000011.xml")));
+            Assert.Equal(second, await File.ReadAllBytesAsync(Path.Combine(folder, "35161112222222000123550010000000021000000022.xml")));
 
             var repeated = await store.SaveAsync(folder, response, CancellationToken.None);
             Assert.Equal(0, repeated.Created);
             Assert.Equal(2, repeated.AlreadyPresent);
 
-            await File.WriteAllTextAsync(Path.Combine(folder, "000000000000001.xml"), "alterado");
+            await File.WriteAllTextAsync(Path.Combine(folder, "35161112222222000123550010000000011000000011.xml"), "alterado");
             await Assert.ThrowsAsync<IOException>(() =>
                 store.SaveAsync(folder, response, CancellationToken.None));
         }
@@ -47,7 +47,7 @@ public sealed class NfeIndividualXmlStoreTests
         try
         {
             var summary = Encoding.UTF8.GetBytes("<resNFe xmlns=\"http://www.portalfiscal.inf.br/nfe\"/>");
-            var complete = Encoding.UTF8.GetBytes("<nfeProc xmlns=\"http://www.portalfiscal.inf.br/nfe\"><NFe><infNFe/></NFe><protNFe><infProt/></protNFe></nfeProc>");
+            var complete = Encoding.UTF8.GetBytes("<nfeProc xmlns=\"http://www.portalfiscal.inf.br/nfe\"><NFe><infNFe Id=\"NFe35161112222222000123550010000000031000000033\"/></NFe><protNFe><infProt><chNFe>35161112222222000123550010000000031000000033</chNFe></infProt></protNFe></nfeProc>");
             var response = new NfeDistributionResult(138, "OK", 2, 2, [
                 new NfeDistributedDocument(1, "resNFe_v1.01.xsd", summary,
                     Convert.ToHexString(SHA256.HashData(summary)).ToLowerInvariant()),
@@ -57,8 +57,8 @@ public sealed class NfeIndividualXmlStoreTests
             var result = await new NfeIndividualXmlStore().SaveAsync(folder, response, CancellationToken.None);
             Assert.Equal(1, result.Created);
             Assert.Equal(1, result.SkippedNonProcNFe);
-            Assert.False(File.Exists(Path.Combine(folder, "000000000000001.xml")));
-            Assert.True(File.Exists(Path.Combine(folder, "000000000000002.xml")));
+            Assert.False(File.Exists(Path.Combine(folder, "35161112222222000123550010000000031000000033.xml")));
+            Assert.True(File.Exists(Path.Combine(folder, "35161112222222000123550010000000031000000033.xml")));
         }
         finally { Directory.Delete(folder, recursive: true); }
     }

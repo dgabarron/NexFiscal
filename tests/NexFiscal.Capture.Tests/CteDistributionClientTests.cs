@@ -85,7 +85,7 @@ public sealed class CteDistributionClientTests
             Assert.Equal(1, stored.SkippedNonProcNFe);
             Assert.True(File.Exists(Path.Combine(path, "35161112222222000123570010000000011000000011.xml")));
             Assert.False(File.Exists(Path.Combine(path, "CTe_000000000000001.xml")));
-            Assert.Equal(xml, await File.ReadAllBytesAsync(Path.Combine(path, "CTe_000000000000002.xml")));
+            Assert.Equal(xml, await File.ReadAllBytesAsync(Path.Combine(path, "35161112222222000123570010000000011000000011.xml")));
         }
         finally { Directory.Delete(path, true); }
     }

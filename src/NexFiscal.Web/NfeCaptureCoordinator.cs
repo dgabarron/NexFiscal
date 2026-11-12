@@ -46,7 +46,7 @@ public sealed class NfeCaptureCoordinator(
                 nextAllowedUtc = company.NextAllowedUtc,
             });
         }
-        return new { companies = result, automaticCaptureEnabled = false };
+        return new { companies = result, automaticCaptureEnabled = true };
     }
 
     /// <summary>

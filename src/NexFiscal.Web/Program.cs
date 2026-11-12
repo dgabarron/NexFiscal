@@ -245,10 +245,14 @@ app.MapGet("/api/cte/status/{companyId}", async (
 });
 
 app.MapPost("/api/cte/download", async (
-    CaptureDownloadRequest request, CteFirstDownload service, CancellationToken ct) =>
+    CaptureDownloadRequest request, CteFirstDownload service,
+    CaptureScheduleSettings settings, CancellationToken ct) =>
 {
-    try { return Results.Ok(await service.ExecuteAsync(
-        request.CompanyId, request.PreviousConsumerStopped, request.DestinationDirectory, ct)); }
+    try
+    {
+        var folder = await settings.RequireDestinationAsync(request.CompanyId, "CTE", ct);
+        return Results.Ok(await service.ExecuteAsync(request.CompanyId, request.PreviousConsumerStopped, folder, ct));
+    }
     catch (ArgumentException ex) { return Results.BadRequest(new { error = ex.Message }); }
     catch (DirectoryNotFoundException ex) { return Results.BadRequest(new { error = ex.Message }); }
     catch (InvalidOperationException ex) { return Results.Conflict(new { error = ex.Message }); }
@@ -263,9 +267,13 @@ app.MapPost("/api/cte/download", async (
 // Primeira distribuição NF-e: um clique, sem digitar NSU, somente no portal local.
 // Bloqueio de uma hora já reservado no HANA antes de acessar a SEFAZ.
 app.MapPost("/api/capture/download", async (CaptureDownloadRequest request,
-    NfeFirstDownload capture, CancellationToken ct) =>
+    NfeFirstDownload capture, CaptureScheduleSettings settings, CancellationToken ct) =>
 {
-    try { return Results.Ok(await capture.ExecuteAsync(request.CompanyId, request.PreviousConsumerStopped, request.DestinationDirectory, ct)); }
+    try
+    {
+        var folder = await settings.RequireDestinationAsync(request.CompanyId, "NFE", ct);
+        return Results.Ok(await capture.ExecuteAsync(request.CompanyId, request.PreviousConsumerStopped, folder, ct));
+    }
     catch (ArgumentException ex) { return Results.BadRequest(new { error = ex.Message }); }
     catch (DirectoryNotFoundException ex) { return Results.BadRequest(new { error = ex.Message }); }
     catch (InvalidOperationException ex) { return Results.Conflict(new { error = ex.Message }); }
@@ -318,4 +326,4 @@ public partial class Program { }
 
 public sealed record CaptureTestRequest(string CompanyId);
 
-public sealed record CaptureDownloadRequest(string CompanyId, bool PreviousConsumerStopped, string? DestinationDirectory);
+public sealed record CaptureDownloadRequest(string CompanyId, bool PreviousConsumerStopped);

@@ -72,8 +72,7 @@ public sealed class NfeIndividualXmlStoreTests
         {
             var key = "35161112222222000123550010000000011000000011";
             var wrong = "35161112222222000123550010000000021000000022";
-            var xml = Encoding.UTF8.GetBytes("<nfeProc xmlns=\\"http://www.portalfiscal.inf.br/nfe\\"><NFe><infNFe Id=\\"NFe" + key +
-                "\\"/></NFe><protNFe><infProt><chNFe>" + wrong + "</chNFe></infProt></protNFe></nfeProc>");
+            var xml = Encoding.UTF8.GetBytes("<nfeProc xmlns='http://www.portalfiscal.inf.br/nfe'><NFe><infNFe Id='NFe" + key + "'/></NFe><protNFe><infProt><chNFe>" + wrong + "</chNFe></infProt></protNFe></nfeProc>");
             var doc = new NfeDistributedDocument(1, "procNFe_v4.00.xsd", xml,
                 Convert.ToHexString(SHA256.HashData(xml)).ToLowerInvariant());
             await Assert.ThrowsAsync<InvalidDataException>(() =>

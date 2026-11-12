@@ -119,3 +119,15 @@ A interface **não exige digitar NSU**. O usuário escolhe a data-limite (90 dia
 ## Convenção definitiva para nomes XML
 
 O arquivo individual baixado para a pasta configurada usa **somente a chave fiscal de 44 dígitos + `.xml`** em NF-e (`NFe/infNFe/@Id` vs. `protNFe/infProt/chNFe`) e CT-e (`CTe/infCte/@Id` vs. `protCTe/infProt/chCTe`). NFS-e futura seguirá seu identificador oficial de chave, após validação de layout do ADN. O NSU permanece apenas para cursor e ZIP de diagnóstico. Chave ausente ou divergente impede gravar o arquivo; conteúdo conflitante com a mesma chave nunca é sobrescrito. Arquivos anteriores não são renomeados automaticamente.
+
+## Esclarecimento da necessidade real de conferência (12/11/2026)
+
+O operador não quer apenas identificar/reconsultar um NSU já conhecido. Quer definir **data inicial brasileira DD/MM/AAAA** e comparar **todos os documentos emitidos/recebidos no período até hoje** contra os XMLs baixados, para detectar documentos não recuperados.
+
+**Limitação fiscal:** os WS de distribuição da NF-e e do CT-e não expõem busca arbitrária por data. A NF-e usa `distNSU` sequencial e `consNSU` pontual para faltantes conhecidos; o conteúdo pode estar limitado a 90 dias e regras de manifestação/retenção. Retroceder `ultNSU` do consumidor que já consultou pode provocar `656`. Um único `resNFe` não equivale a `procNFe`.
+
+**O que o painel faz agora:** a seção passou a se chamar **Conferência de NF-e do período — teste**. Data em **DD/MM/AAAA**. O botão **Conferir histórico salvo (sem SEFAZ)** lê apenas os ZIPs locais e apresenta completo/pendente e a data. O botão **Tentar baixar 1 nota pendente** executa exatamente uma `consNSU` pontual, não uma varredura por data.
+
+**Para implementar auditoria efetivamente abrangente:** criar um controle de cobertura dos lotes `distNSU` recebidos, detectar intervalos de NSU sem persistência; confrontar todos os XMLs por **chave de acesso** e data; consultar candidatos identificáveis conforme limite fiscal; buscar lista independente de chaves/documentos a partir de dados fiscais autorizados (ERP, emissor/prestador, portal fiscal ou relatórios fiscais disponíveis). Se não existir lista externa nem histórico dos NSUs, a ferramenta **não pode declarar período totalmente coberto**. Relatório deverá marcar **cobertura desconhecida** em vez de 'nenhuma nota faltante'. Não reverter o cursor ativo nem reiniciar `distNSU` automaticamente.
+
+A interface nesta revisão só clarifica a diferença e muda a data para português brasileiro. A varredura completa, com reconciliação de fontes, **não está implementada**.

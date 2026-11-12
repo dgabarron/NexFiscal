@@ -64,6 +64,27 @@ public sealed class NfeIndividualXmlStoreTests
     }
 
     [Fact]
+    public async Task KeyMismatch_DoesNotWriteXml()
+    {
+        var folder = Path.Combine(Path.GetTempPath(), "nexfiscal-key-test-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(folder);
+        try
+        {
+            var key = "35161112222222000123550010000000011000000011";
+            var wrong = "35161112222222000123550010000000021000000022";
+            var xml = Encoding.UTF8.GetBytes("<nfeProc xmlns=\\"http://www.portalfiscal.inf.br/nfe\\"><NFe><infNFe Id=\\"NFe" + key +
+                "\\"/></NFe><protNFe><infProt><chNFe>" + wrong + "</chNFe></infProt></protNFe></nfeProc>");
+            var doc = new NfeDistributedDocument(1, "procNFe_v4.00.xsd", xml,
+                Convert.ToHexString(SHA256.HashData(xml)).ToLowerInvariant());
+            await Assert.ThrowsAsync<InvalidDataException>(() =>
+                new NfeIndividualXmlStore().SaveAsync(folder,
+                    new NfeDistributionResult(138, "OK", 1, 1, [doc]), CancellationToken.None));
+            Assert.Empty(Directory.GetFiles(folder));
+        }
+        finally { Directory.Delete(folder, recursive: true); }
+    }
+
+    [Fact]
     public void InvalidOrMissingDestination_StopsBeforeSeFaz()
     {
         Assert.Throws<ArgumentException>(() =>

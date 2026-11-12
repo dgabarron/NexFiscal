@@ -101,3 +101,17 @@ A interface **não exige digitar NSU**. O usuário escolhe a data-limite (90 dia
 **CT-e e NFS-e:** descoberta local análoga, mas verificar endpoints, retenção e limites oficiais específicos de cada ambiente; não presumir os mesmos métodos da NF-e.
 
 **Observação de implementação:** o botão primeiro gera uma prévia de documentos rastreáveis e data de referência; só depois executa consultas fiscais. Resultado inclui recuperados, já existentes, resumos pendentes, não disponíveis e sem cobertura comprovada. O checkpoint normal permanece intacto.
+
+## Versão de teste implementada — recuperação local NF-e e `consNSU`
+
+**Entregue na branch `feat/nfe-capture-core`:**
+
+- Painel: **Teste de recuperação de NF-e antigas**, campo **Data-limite**, botão **Identificar NSUs antigos** (somente leitura local) e botão **Reconsultar 1 NSU na SEFAZ**.
+- `GET /api/recovery/nfe/preview/{companyId}?from=<ISO8601>`: examina `manifest.json` + XML nos ZIPs existentes de `.nexfiscal-downloads/<CompanyId>`, valida SHA-256 e seleciona candidatos `resNFe` com `dhEmi` dentro do intervalo. Exclui CT-e, eventos sem data e XMLs completos já gravados. **Não envia requisição fiscal**.
+- `POST /api/recovery/nfe/one`: seleciona automaticamente um candidato ainda não tentado nos últimos 60 minutos, usa `consNSU` com certificado A1 e ambiente de produção; preserva a resposta bruta e só grava `procNFe` na pasta NF-e configurada. Nunca atualiza `BRAI_NEX_CaptureCursor`.
+- A cota local é limitada a **19 tentativas pontuais por hora**, abaixo do teto nominal de 20 para reduzir risco, e após `656` impede novas consultas por 1 hora. As tentativas e bloqueios ficam em `.nexfiscal-recovery/<CompanyId>.json`.
+- Os documentos sem `dhEmi` não podem ser classificados pela data e são relatados à parte. Arquivos sem ZIP bruto correspondente não são descobertos.
+- A recuperação é **experimental e manual**: não equivale a obter tudo por data ou prometer XML completo após reconsultar resumo. Se a SEFAZ só disponibilizar resumo por ausência de manifestação autorizada, o resultado será indicado e não haverá confirmação automática de operação.
+- O teste CT-e e a captura NFS-e/ADN retroativa não estão disponíveis nesta versão; cada serviço exige método próprio.
+
+**Como testar:** atualizar o projeto sem excluir `.nexfiscal-downloads`, `.nexfiscal-certificates`, `.nexfiscal-keys`, `.nexfiscal-cte`, `.nexfiscal-schedules` e o checkpoint HANA. No painel, marcar e salvar **Captura ativa — NF-e** e a pasta existente. Primeiro clicar **Identificar NSUs antigos**, verificar os candidatos. Depois, quando permitido, clicar **Reconsultar 1 NSU na SEFAZ**. Conferir status e arquivo. Não reexecutar manualmente após erro de conexão sem averiguar o estado.

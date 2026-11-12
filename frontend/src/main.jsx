@@ -177,15 +177,28 @@ function App(){
   }catch(e){setError(e.message);}
   finally{setScheduleSaving(prev=>({...prev,[companyId]:false}));}
  }
+ function defaultRecoveryDate(){
+   const date=new Date(Date.now()-89*86400000);
+   return new Intl.DateTimeFormat("pt-BR",{day:"2-digit",month:"2-digit",year:"numeric",timeZone:"UTC"}).format(date);
+ }
  function recoveryFrom(companyId){
-   const chosen=recoveryDates[companyId];
-   const date=chosen||new Date(Date.now()-89*86400000).toISOString().slice(0,10);
-   return new Date(date+"T00:00:00Z").toISOString();
+   const chosen=(recoveryDates[companyId]||defaultRecoveryDate()).trim();
+   const match=/^(\\d{2})\\/(\\d{2})\\/(\\d{4})$/.exec(chosen);
+   if(!match)throw new Error("Informe a data no formato DD/MM/AAAA.");
+   const day=Number(match[1]),month=Number(match[2]),year=Number(match[3]);
+   const date=new Date(Date.UTC(year,month-1,day));
+   if(date.getUTCFullYear()!==year||date.getUTCMonth()!==month-1||date.getUTCDate()!==day)
+     throw new Error("Data inválida. Use DD/MM/AAAA.");
+   const now=Date.now(),from=date.getTime();
+   if(from>now||from<Date.now()-90*86400000)
+     throw new Error("Escolha uma data dentro dos últimos 90 dias.");
+   return date.toISOString();
  }
  async function previewNfeRecovery(companyId){
    setRecoveryBusy(prev=>({...prev,[companyId]:true}));setError("");
    try{
-     const resp=await fetch(`/api/recovery/nfe/preview/${companyId}?from=${encodeURIComponent(recoveryFrom(companyId))}`);
+     const from=recoveryFrom(companyId);
+     const resp=await fetch(`/api/recovery/nfe/preview/${companyId}?from=${encodeURIComponent(from)}`);
      const data=await resp.json().catch(()=>({}));
      if(!resp.ok)throw new Error(data.error||data.title||"Não foi possível identificar NSUs antigos.");
      setRecoveryPreviews(prev=>({...prev,[companyId]:data}));
@@ -354,24 +367,22 @@ function App(){
                {scheduleNotice[company.companyId]&&<p className="text-xs text-amber-800">{scheduleNotice[company.companyId]}</p>}
              </div>
              <div className="mt-5 rounded-lg border border-slate-200 p-4 space-y-3">
-               <h4 className="font-semibold text-sm">Teste de recuperação de NF-e antigas</h4>
-               <p className="text-xs text-slate-500">Informe a data-limite (até 90 dias). O sistema procura NSUs automaticamente nos lotes ZIP já recebidos e mostra uma prévia sem acessar a SEFAZ. A recuperação consulta apenas um NSU por vez e não altera o checkpoint da captura normal.</p>
+               <h4 className="font-semibold text-sm">Conferência de NF-e do período — teste</h4>
+               <p className="text-xs text-slate-500">A primeira etapa confere apenas o histórico de lotes que o NexFiscal já recebeu. Não é uma busca de todas as notas emitidas na SEFAZ por data. Depois, é possível reconsultar um documento pendente por vez, sem mexer no histórico da captura normal.</p>
                <div className="flex flex-wrap items-end gap-3">
                  <div><label className="mb-1 block text-xs text-slate-600">Data-limite</label>
-                   <input type="date" className="rounded-md border border-slate-300 p-2 text-sm" value={recoveryDates[company.companyId]||new Date(Date.now()-89*86400000).toISOString().slice(0,10)}
-                     min={new Date(Date.now()-89*86400000).toISOString().slice(0,10)}
-                     max={new Date().toISOString().slice(0,10)}
-                     onChange={e=>{setRecoveryDates(prev=>({...prev,[company.companyId]:e.target.value}));setRecoveryPreviews(prev=>({...prev,[company.companyId]:null}));}}/>
+                   <input type="text" inputMode="numeric" maxLength={10} placeholder="DD/MM/AAAA" aria-label="Data-limite no formato brasileiro" className="rounded-md border border-slate-300 p-2 text-sm w-36" value={recoveryDates[company.companyId]??defaultRecoveryDate()}
+                     onChange={e=>{const digits=e.target.value.replace(/\\D/g,"").slice(0,8);const formatted=digits.length>4?digits.slice(0,2)+"/"+digits.slice(2,4)+"/"+digits.slice(4):digits.length>2?digits.slice(0,2)+"/"+digits.slice(2):digits;setRecoveryDates(prev=>({...prev,[company.companyId]:formatted}));setRecoveryPreviews(prev=>({...prev,[company.companyId]:null}));}}/>
                  </div>
-                 <Button variant="outline" disabled={!!recoveryBusy[company.companyId]} onClick={()=>previewNfeRecovery(company.companyId)}>Identificar NSUs antigos</Button>
+                 <Button variant="outline" disabled={!!recoveryBusy[company.companyId]} onClick={()=>previewNfeRecovery(company.companyId)}>Conferir histórico salvo (sem SEFAZ)</Button>
                  <Button disabled={!!recoveryBusy[company.companyId]||!recoveryPreviews[company.companyId]?.documents?.some(d=>!d.complete&&!d.xmlPresent)}
-                   onClick={()=>recoverOldNfe(company.companyId)}>Reconsultar 1 NSU na SEFAZ</Button>
+                   onClick={()=>recoverOldNfe(company.companyId)}>Tentar baixar 1 nota pendente</Button>
                </div>
                {recoveryPreviews[company.companyId]&&<div className="rounded-md bg-slate-50 p-3 text-sm">
-                 <div className="font-semibold">Documentos rastreados: {recoveryPreviews[company.companyId].candidates} · Já completos: {recoveryPreviews[company.companyId].alreadyComplete} · Sem data identificável: {recoveryPreviews[company.companyId].withoutDate}</div>
-                 <p className="mt-1 text-xs text-slate-500">{recoveryPreviews[company.companyId].warning}</p>
+                 <div className="font-semibold">Documentos identificados no histórico local: {recoveryPreviews[company.companyId].candidates} · XMLs completos: {recoveryPreviews[company.companyId].alreadyComplete} · Resumos pendentes: {recoveryPreviews[company.companyId].documents?.filter(d=>!d.complete&&!d.xmlPresent).length||0} · Sem data: {recoveryPreviews[company.companyId].withoutDate}</div>
+                 <p className="mt-1 text-xs text-amber-800">Esta lista não prova que todas as notas do período foram recebidas. Mostra somente os documentos encontrados nos arquivos já guardados.</p>
                  <div className="mt-2 max-h-40 overflow-auto">{recoveryPreviews[company.companyId].documents?.slice(0,30).map(doc=>
-                   <div key={doc.nsu} className="border-t border-slate-200 py-1 text-xs font-mono">NSU {doc.nsu} · {doc.schema} · {doc.complete||doc.xmlPresent?"Completo":"Pendente"}</div>)}</div>
+                   <div key={doc.nsu} className="border-t border-slate-200 py-1 text-xs font-mono">{doc.complete||doc.xmlPresent?"XML completo recebido":"Somente resumo — XML completo pendente"} · NSU {doc.nsu} · {doc.documentDate?new Date(doc.documentDate).toLocaleDateString("pt-BR"):"Sem data"}</div>)}</div>
                </div>}
                {recoveryResult[company.companyId]&&<Notice type={recoveryResult[company.companyId].filesSaved>0?"success":"warning"}>
                  {recoveryResult[company.companyId].message||recoveryResult[company.companyId].reason}

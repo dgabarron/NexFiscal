@@ -43,6 +43,8 @@ function App(){
  const [recoveryBusy,setRecoveryBusy]=useState({});
  const [sefazRuns,setSefazRuns]=useState({});
  const [sefazStarting,setSefazStarting]=useState({});
+ const [retroBusy,setRetroBusy]=useState({});
+ const [retroResult,setRetroResult]=useState({});
  const [connectivity,setConnectivity]=useState({});
  const [clockNow,setClockNow]=useState(Date.now());
  useEffect(()=>{
@@ -175,7 +177,7 @@ function App(){
   try{
     const resp=await invoke(`/api/capture/schedules/${companyId}`,entries.map(s=>({...s,intervalMinutes:String(s.intervalMinutes).trim()})));
     setScheduleSettings(prev=>({...prev,[companyId]:resp.map(s=>({...s,intervalMinutes:String(s.intervalMinutes)}))}));
-    setScheduleNotice(prev=>({...prev,[companyId]:"Configuração salva. O serviço automático ainda não está instalado; a captura não iniciará até essa etapa."}));
+    setScheduleNotice(prev=>({...prev,[companyId]:"Configuração salva. O monitoramento NF-e usa o Worker enquanto Captura ativa estiver marcada. CT-e e NFS-e ainda não têm Worker."}));
   }catch(e){setError(e.message);}
   finally{setScheduleSaving(prev=>({...prev,[companyId]:false}));}
  }
@@ -248,6 +250,16 @@ function App(){
    },3000);
    return ()=>clearInterval(timer);
  },[sefazRuns]);
+ async function retroagirNfe(companyId){
+   if(!window.confirm("Consultar pontualmente uma lacuna de NSU conhecida na SEFAZ? O checkpoint de monitoramento não será alterado. A SEFAZ pode não disponibilizar documentos antigos."))return;
+   setRetroBusy(prev=>({...prev,[companyId]:true}));setError("");setMessage("");
+   try{
+     const result=await invoke(`/api/recovery/nfe/sefaz/${companyId}`,{});
+     setRetroResult(prev=>({...prev,[companyId]:result}));
+     await refreshCapture();
+   }catch(e){setError(e.message);}
+   finally{setRetroBusy(prev=>({...prev,[companyId]:false}));}
+ }
  async function downloadCte(company){
   const id=company.companyId;
   const cteSchedule=(scheduleSettings[id]||[]).find(s=>s.documentType==="CTE");
@@ -380,7 +392,7 @@ function App(){
              </Notice></div>}
              <div className="mt-5 rounded-lg border border-slate-200 p-4 space-y-3">
                <h4 className="font-semibold text-sm">Configuração de captura por tipo</h4>
-               <p className="text-xs text-slate-500">Intervalo livre em minutos (mínimo 1). A frequência efetiva respeitará o intervalo obrigatório de cada serviço fiscal. Salve as configurações antes da consulta manual. O serviço automático ainda será implementado.</p>
+               <p className="text-xs text-slate-500">Intervalo livre em minutos (mínimo 1). A frequência efetiva respeitará o intervalo obrigatório de cada serviço fiscal. Salve as configurações antes da consulta manual. O monitoramento automático NF-e já utiliza o Worker; CT-e e NFS-e ainda não possuem agendador.</p>
                {(scheduleSettings[company.companyId]||[]).map(s=><div key={s.documentType} className="rounded-lg bg-slate-50 p-3">
                  <div className="flex flex-wrap items-center justify-between gap-3">
                    <label className="flex items-center gap-2 text-sm font-semibold"><input type="checkbox" checked={s.enabled} onChange={e=>setScheduleField(company.companyId,s.documentType,"enabled",e.target.checked)}/>Captura ativa — {s.documentType==="NFE"?"NF-e":s.documentType==="CTE"?"CT-e":"NFS-e"}</label>
@@ -398,8 +410,8 @@ function App(){
                {scheduleNotice[company.companyId]&&<p className="text-xs text-amber-800">{scheduleNotice[company.companyId]}</p>}
              </div>
              <div className="mt-5 rounded-lg border border-slate-200 p-4 space-y-3">
-               <h4 className="font-semibold text-sm">Capturar XMLs disponíveis na SEFAZ — NF-e</h4>
-               <p className="text-xs text-slate-600">Consulta a distribuição nacional da SEFAZ para o CNPJ cadastrado e baixa automaticamente todos os procNFe completos disponíveis, sem selecionar NSUs ou XMLs. Retoma do último NSU confirmado, respeitando os limites fiscais. Não consulta arquivos de outras empresas nem pastas históricas.</p>
+               <h4 className="font-semibold text-sm">Sincronização pontual NF-e (distNSU)</h4>
+               <p className="text-xs text-slate-600">Sincroniza os lotes disponibilizados ao CNPJ, avançando o cursor sequencial usado pelo monitoramento automático. Esta função é diferente da recuperação retroativa.</p>
                <p className="text-xs text-amber-800">A SEFAZ não disponibiliza todas as NF-e desde a abertura da empresa por essa API. Esta ação percorre os lotes atualmente disponíveis para o CNPJ, até o último NSU informado pela SEFAZ, sem limite interno de lotes. Resumos e eventos recebidos são preservados no registro de distribuição, mas não são salvos como NF-e completas na pasta.</p>
                <Button disabled={!company.certificateStored||!!sefazStarting[company.companyId]||!!captureBusy||sefazRuns[company.companyId]?.status==="running"||!!pendingWindow(company)}
                  onClick={()=>startSefazRecovery(company)}>
@@ -415,6 +427,12 @@ function App(){
                  </div>
                  <p className="text-xs text-slate-600">{sefazRuns[company.companyId].message}</p>
                </div>}
+             </div>
+             <div className="mt-5 rounded-lg border border-slate-200 p-4 space-y-3">
+               <h4 className="font-semibold text-sm">Recuperação retroativa NF-e (consNSU)</h4>
+               <p className="text-xs text-slate-600">Consulta lacunas conhecidas entre NSUs recebidos no SAP HANA, sem alterar o checkpoint do monitoramento. Não busca em ordem decrescente nem garante documentos anteriores ao primeiro NSU conhecido.</p>
+               <Button variant="outline" disabled={!company.certificateStored||!!retroBusy[company.companyId]||!!pendingWindow(company)||!!captureBusy||sefazRuns[company.companyId]?.status==="running"} onClick={()=>retroagirNfe(company.companyId)}>{retroBusy[company.companyId]?"Consultando lacuna...":"Recuperar NSU anterior disponível"}</Button>
+               {retroResult[company.companyId]&&<p className="text-xs text-slate-600">{retroResult[company.companyId].message} · NSU: {retroResult[company.companyId].requestedNsu||"não identificado"} · XMLs novos: {retroResult[company.companyId].xmlCreated||0}</p>}
              </div>
              <div className="mt-5 flex flex-wrap gap-3">
                <Button disabled={!company.certificateStored||captureBusy} onClick={()=>downloadNfe(company)}>

@@ -12,7 +12,7 @@ using NexFiscal.Capture;
 /// </summary>
 public sealed class NfeFirstDownload(HanaSetup hana, CompanyCertificateVault vault, NfeXmlArchive archive, NfeIndividualXmlStore individualStore)
 {
-    private static readonly SemaphoreSlim Gate = new(1, 1);
+    internal static readonly SemaphoreSlim Gate = new(1, 1);
 
     public async Task<object> ExecuteAsync(string companyId, string? destinationDirectory, CancellationToken ct)
     {

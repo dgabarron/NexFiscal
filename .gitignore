@@ -30,3 +30,6 @@ frontend/.nexfiscal-build.log
 
 # Configurações locais da captura automática
 **/.nexfiscal-schedules/
+
+# Estado local e cota de consultas pontuais de recuperação
+**/.nexfiscal-recovery/

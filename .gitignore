@@ -27,3 +27,6 @@ frontend/.nexfiscal-build.log
 
 # Checkpoint de distribuição CT-e local por CNPJ; nunca versionar
 **/.nexfiscal-cte/
+
+# Configurações locais da captura automática
+**/.nexfiscal-schedules/

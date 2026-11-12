@@ -44,7 +44,12 @@ public sealed class NfeHistoricalRecovery(
         // O diretório configurado é a fonte primária. Aceita arquivos nomeados
         // pela chave e arquivos antigos ainda nomeados pelo NSU.
         const int maxFiles = 100_000;
-        foreach (var file in Directory.EnumerateFiles(folder, "*.xml", SearchOption.TopDirectoryOnly))
+        foreach (var file in Directory.EnumerateFiles(folder, "*.xml", new EnumerationOptions
+        {
+            RecurseSubdirectories = true,
+            IgnoreInaccessible = false,
+            AttributesToSkip = FileAttributes.ReparsePoint
+        }))
         {
             ct.ThrowIfCancellationRequested();
             if (++individualFiles > maxFiles) { scanComplete = false; break; }

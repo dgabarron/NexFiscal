@@ -18,7 +18,7 @@ builder.Services.AddSingleton<NfeFirstDownload>();
 builder.Services.AddSingleton<CteFirstDownload>();
 builder.Services.AddSingleton<CaptureScheduleSettings>();
 builder.Services.AddSingleton<NfeHistoricalRecovery>();
-builder.Services.AddSingleton<NfeHistoricalBulkImport>();
+builder.Services.AddSingleton<NfeSefazCatchup>();
 builder.Services.AddSingleton<NfeXmlArchive>();
 builder.Services.AddSingleton<NfeIndividualXmlStore>();
 builder.Services.AddSingleton<NfeHandoffPreparation>();
@@ -241,11 +241,10 @@ app.MapPost("/api/recovery/nfe/restore", async (
     }
 });
 
-// Recuperação histórica de fontes autorizadas: arquivos individuais e ZIPs.
-// Não reinicia cursor SEFAZ e não inventa consulta por data.
-app.MapPost("/api/history/nfe/start", async (
-    NfeHistoricalBulkImport.StartRequest request, NfeHistoricalBulkImport service,
-    CancellationToken ct) =>
+// Consulta REAL à SEFAZ para a empresa cadastrada: percorre os lotes
+// disponíveis, usando o cursor de distribuição vigente e o mesmo controle fiscal.
+app.MapPost("/api/sefaz/nfe/catchup", async (
+    NfeSefazCatchup.Request request, NfeSefazCatchup service, CancellationToken ct) =>
 {
     try { return Results.Accepted(value: await service.StartAsync(request, ct)); }
     catch (ArgumentException ex) { return Results.BadRequest(new { error = ex.Message }); }
@@ -253,17 +252,17 @@ app.MapPost("/api/history/nfe/start", async (
     catch (InvalidOperationException ex) { return Results.Conflict(new { error = ex.Message }); }
     catch (Exception ex)
     {
-        app.Logger.LogError("Falha ao iniciar recuperação histórica: {Type}", ex.GetType().Name);
-        return Results.Problem("Não foi possível iniciar a recuperação histórica.", statusCode: 503);
+        app.Logger.LogError(ex, "Falha ao iniciar distribuição SEFAZ em lotes");
+        return Results.Problem("Não foi possível iniciar a captura SEFAZ.", statusCode: 503);
     }
 });
-app.MapGet("/api/history/nfe/status/{companyId}", (
-    string companyId, NfeHistoricalBulkImport service) =>
+app.MapGet("/api/sefaz/nfe/catchup/{companyId}", (
+    string companyId, NfeSefazCatchup service) =>
 {
     try
     {
         var status = service.Get(companyId);
-        return status is null ? Results.NotFound(new { error = "Ainda não há execução para esta empresa." }) : Results.Ok(status);
+        return status is null ? Results.NotFound() : Results.Ok(status);
     }
     catch (ArgumentException ex) { return Results.BadRequest(new { error = ex.Message }); }
 });

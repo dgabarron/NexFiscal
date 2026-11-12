@@ -355,7 +355,7 @@ function App(){
              </div>
              <div className="mt-5 rounded-lg border border-slate-200 p-4 space-y-3">
                <h4 className="font-semibold text-sm">Conferência de XMLs completos de NF-e</h4>
-               <p className="text-xs text-slate-500">Consulte os XMLs completos (procNFe) recebidos e armazenados pelo NexFiscal a partir da data escolhida. Esta conferência não faz nova consulta à SEFAZ e não garante que todas as notas emitidas no período foram recebidas.</p>
+               <p className="text-xs text-slate-500">Consulta os XMLs completos (procNFe) na pasta configurada e nos ZIPs de lotes recebidos, desde a data escolhida até hoje. Não faz nova consulta à SEFAZ e não comprova que todas as notas emitidas foram recebidas.</p>
                <div className="flex flex-wrap items-end gap-3">
                  <div><label className="mb-1 block text-xs text-slate-600">Data inicial (DD/MM/AAAA)</label>
                    <input type="text" inputMode="numeric" maxLength={10} placeholder="DD/MM/AAAA" aria-label="Data inicial no formato brasileiro" className="rounded-md border border-slate-300 p-2 text-sm w-36" value={recoveryDates[company.companyId]??defaultRecoveryDate()}
@@ -364,11 +364,11 @@ function App(){
                  <Button variant="outline" disabled={!!recoveryBusy[company.companyId]} onClick={()=>previewNfeRecovery(company.companyId)}>Conferir XMLs completos</Button>
                </div>
                {recoveryPreviews[company.companyId]&&<div className="rounded-md bg-slate-50 p-3 text-sm">
-                 <div className="font-semibold">NF-e completas encontradas no histórico: {recoveryPreviews[company.companyId].candidates}</div>
+                 <div className="font-semibold">NF-e completas encontradas: {recoveryPreviews[company.companyId].candidates} · Arquivos na pasta analisados: {recoveryPreviews[company.companyId].individualFiles} · XMLs de ZIP analisados no período: {recoveryPreviews[company.companyId].archiveDocuments}</div>
                  {recoveryPreviews[company.companyId].documents?.length>0?
                    <div className="mt-2 max-h-40 overflow-auto">{recoveryPreviews[company.companyId].documents.map(doc=>
-                     <div key={doc.nsu} className="border-t border-slate-200 py-1 text-xs">NF-e completa · {doc.documentDate?new Date(doc.documentDate).toLocaleDateString("pt-BR"):"Sem data"} · NSU {doc.nsu}</div>)}</div>
-                   :<p className="mt-2 text-xs text-slate-500">Nenhum procNFe foi identificado nos lotes salvos dentro do período. Isso não significa que nenhuma NF-e tenha sido emitida.</p>}
+                     <div key={doc.key} className="border-t border-slate-200 py-1 text-xs break-all">NF-e completa · {doc.documentDate?new Date(doc.documentDate).toLocaleDateString("pt-BR"):"Sem data"} · Chave {doc.key} · {doc.source}{!doc.xmlPresent?" (somente no ZIP)":""}</div>)}</div>
+                   :<p className="mt-2 text-xs text-slate-500">Nenhum procNFe foi identificado na pasta configurada ou nos ZIPs internos no período. Isso não significa que nenhuma NF-e tenha sido emitida.</p>}
                </div>}
              </div>
              <div className="mt-5 flex flex-wrap gap-3">

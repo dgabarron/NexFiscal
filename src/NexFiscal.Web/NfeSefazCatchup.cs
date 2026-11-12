@@ -63,13 +63,11 @@ public sealed class NfeSefazCatchup(
                 ct.ThrowIfCancellationRequested();
                 // ExecuteAsync confirma certificado/CNPJ, reserva cota e consulta
                 // o cursor HANA existente. Proíbe repetição durante cooldown.
-                var response = await capture.ExecuteAsync(company, true, folder, ct);
+                var response = await capture.ExecuteAsync(company, folder, ct);
                 using var json = JsonDocument.Parse(JsonSerializer.Serialize(response));
                 var x = json.RootElement;
                 int ReadInt(string key) => x.TryGetProperty(key, out var value) &&
                     value.ValueKind == JsonValueKind.Number ? value.GetInt32() : 0;
-                string? ReadString(string key) => x.TryGetProperty(key, out var value) &&
-                    value.ValueKind == JsonValueKind.String ? value.GetString() : null;
                 var status = ReadInt("status");
                 sefaz = status;
                 batches++;

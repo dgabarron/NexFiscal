@@ -18,6 +18,7 @@ builder.Services.AddSingleton<NfeFirstDownload>();
 builder.Services.AddSingleton<CteFirstDownload>();
 builder.Services.AddSingleton<CaptureScheduleSettings>();
 builder.Services.AddSingleton<NfeHistoricalRecovery>();
+builder.Services.AddSingleton<NfeHistoricalBulkImport>();
 builder.Services.AddSingleton<NfeXmlArchive>();
 builder.Services.AddSingleton<NfeIndividualXmlStore>();
 builder.Services.AddSingleton<NfeHandoffPreparation>();
@@ -238,6 +239,33 @@ app.MapPost("/api/recovery/nfe/restore", async (
         app.Logger.LogError(ex, "Falha ao restaurar XMLs de ZIP local");
         return Results.Problem("Falha de arquivo durante a restauração. Nenhum XML existente foi sobrescrito.", statusCode: 503);
     }
+});
+
+// Recuperação histórica de fontes autorizadas: arquivos individuais e ZIPs.
+// Não reinicia cursor SEFAZ e não inventa consulta por data.
+app.MapPost("/api/history/nfe/start", async (
+    NfeHistoricalBulkImport.StartRequest request, NfeHistoricalBulkImport service,
+    CancellationToken ct) =>
+{
+    try { return Results.Accepted(value: await service.StartAsync(request, ct)); }
+    catch (ArgumentException ex) { return Results.BadRequest(new { error = ex.Message }); }
+    catch (DirectoryNotFoundException ex) { return Results.BadRequest(new { error = ex.Message }); }
+    catch (InvalidOperationException ex) { return Results.Conflict(new { error = ex.Message }); }
+    catch (Exception ex)
+    {
+        app.Logger.LogError("Falha ao iniciar recuperação histórica: {Type}", ex.GetType().Name);
+        return Results.Problem("Não foi possível iniciar a recuperação histórica.", statusCode: 503);
+    }
+});
+app.MapGet("/api/history/nfe/status/{companyId}", (
+    string companyId, NfeHistoricalBulkImport service) =>
+{
+    try
+    {
+        var status = service.Get(companyId);
+        return status is null ? Results.NotFound(new { error = "Ainda não há execução para esta empresa." }) : Results.Ok(status);
+    }
+    catch (ArgumentException ex) { return Results.BadRequest(new { error = ex.Message }); }
 });
 
 // Configuração do futuro Worker: salvar não inicia consultas automáticas.

@@ -23,7 +23,7 @@ public sealed class NfeHistoricalBulkImport(
         int SourcesExamined, bool ScanComplete, string Message);
 
     private static readonly ConcurrentDictionary<string, Progress> Jobs = new();
-    private const long MaxXmlSize = 10_000_000L;
+    private const int MaxXmlSize = 10_000_000;
     private const int MaxSourceFiles = 200_000;
     private const int MaxZipEntries = 150_000;
     private string StateRoot => Path.Combine(host.ContentRootPath, ".nexfiscal-historical");

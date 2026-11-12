@@ -34,7 +34,6 @@ function App(){
  const [captureResult,setCaptureResult]=useState(null);
  const [cteResults,setCteResults]=useState({});
  const [cteStates,setCteStates]=useState({});
- const [destinationDirs,setDestinationDirs]=useState({});
  const [scheduleSettings,setScheduleSettings]=useState({});
  const [scheduleSaving,setScheduleSaving]=useState({});
  const [scheduleNotice,setScheduleNotice]=useState({});
@@ -131,12 +130,14 @@ function App(){
   const cooldown=pendingWindow(company);
   if(cooldown){setError("");setMessage(`Consulta temporariamente indisponível. Próxima tentativa após ${cooldown.time} (aproximadamente ${cooldown.minutes} min).`);return;}
   const companyId=company.companyId;
-  const destinationDirectory=(destinationDirs[companyId]||"").trim();
-  if(!destinationDirectory){setError("Informe a pasta X de destino dos XMLs no servidor NexFiscal.");return;}
+  const nfeSchedule=(scheduleSettings[companyId]||[]).find(s=>s.documentType==="NFE");
+  if(!nfeSchedule?.enabled||!nfeSchedule.destinationDirectory?.trim()){
+    setError("Ative a captura NF-e, informe a pasta de XMLs e salve a configuração.");return;
+  }
   if(!window.confirm("O sistema anterior de captura NF-e está desligado para este CNPJ? Esta ação enviará uma consulta REAL à SEFAZ. Se não existir checkpoint, o NexFiscal iniciará pelo NSU zero. Confirma?"))return;
   setCaptureBusy(true);setError("");setMessage("");setCaptureResult(null);
   try{
-    const result=await invoke("/api/capture/download",{companyId,previousConsumerStopped:true,destinationDirectory});
+    const result=await invoke("/api/capture/download",{companyId,previousConsumerStopped:true});
     setCaptureResult(result);
     if(result.saveSucceeded===false)setError(result.fileSaveError||"Falha ao salvar os arquivos XML.");
     else if(result.status===656)setError("SEFAZ 656 — consumo indevido. Aguarde pelo menos 1 hora antes de nova tentativa. "+result.reason);
@@ -174,14 +175,16 @@ function App(){
  }
  async function downloadCte(company){
   const id=company.companyId;
-  const destinationDirectory=(destinationDirs[id]||"").trim();
-  if(!destinationDirectory){setError("Informe a pasta X para NF-e e CT-e.");return;}
+  const cteSchedule=(scheduleSettings[id]||[]).find(s=>s.documentType==="CTE");
+  if(!cteSchedule?.enabled||!cteSchedule.destinationDirectory?.trim()){
+    setError("Ative a captura CT-e, informe a pasta de XMLs e salve a configuração.");return;
+  }
   const cooldown=pendingWindow(cteStates[id]||{});
   if(cooldown){setError("");setMessage(`CT-e: próxima consulta após ${cooldown.time} (${cooldown.minutes} min).`);return;}
   if(!window.confirm("Confirma que não existe outro capturador CT-e ativo para este CNPJ? A consulta será enviada à SEFAZ."))return;
   setCaptureBusy(true);setError("");setMessage("");
   try{
-    const result=await invoke("/api/cte/download",{companyId:id,previousConsumerStopped:true,destinationDirectory});
+    const result=await invoke("/api/cte/download",{companyId:id,previousConsumerStopped:true});
     setCteResults(prev=>({...prev,[id]:result}));
     if(result.saveSucceeded===false)setError(result.message||"Não foi possível concluir a captura CT-e.");
     else if(result.status===137)setMessage("CT-e: nenhum documento disponível.");
@@ -301,8 +304,8 @@ function App(){
                {!connected.reachable&&<div className="mt-1 text-xs">Etapa: {connected.stage||"não identificada"} · Código: {connected.code||"indisponível"}{connected.causes?.length>0?` · ${connected.causes.join(" → ")}`:""}</div>}
              </Notice></div>}
              <div className="mt-5 rounded-lg border border-slate-200 p-4 space-y-3">
-               <h4 className="font-semibold text-sm">Configuração de captura automática</h4>
-               <p className="text-xs text-slate-500">Intervalo livre em minutos (mínimo 1). A frequência efetiva respeitará o intervalo obrigatório de cada serviço fiscal. As configurações ficam salvas, mas o Worker automático ainda será implementado.</p>
+               <h4 className="font-semibold text-sm">Configuração de captura por tipo</h4>
+               <p className="text-xs text-slate-500">Intervalo livre em minutos (mínimo 1). A frequência efetiva respeitará o intervalo obrigatório de cada serviço fiscal. Salve as configurações antes da consulta manual. O serviço automático ainda será implementado.</p>
                {(scheduleSettings[company.companyId]||[]).map(s=><div key={s.documentType} className="rounded-lg bg-slate-50 p-3">
                  <div className="flex flex-wrap items-center justify-between gap-3">
                    <label className="flex items-center gap-2 text-sm font-semibold"><input type="checkbox" checked={s.enabled} onChange={e=>setScheduleField(company.companyId,s.documentType,"enabled",e.target.checked)}/>Captura ativa — {s.documentType==="NFE"?"NF-e":s.documentType==="CTE"?"CT-e":"NFS-e"}</label>
@@ -318,12 +321,6 @@ function App(){
                </div>)}
                <Button variant="outline" disabled={!scheduleSettings[company.companyId]||scheduleSaving[company.companyId]} onClick={()=>saveSchedule(company.companyId)}>{scheduleSaving[company.companyId]?"Salvando...":"Salvar configurações de captura"}</Button>
                {scheduleNotice[company.companyId]&&<p className="text-xs text-amber-800">{scheduleNotice[company.companyId]}</p>}
-             </div>
-             <div className="mt-5">
-               <Label>Pasta de destino dos XMLs (no computador/servidor NexFiscal)</Label>
-               <Input placeholder="Ex.: C:\\NexFiscal\\XML" value={destinationDirs[company.companyId]||""}
-                 onChange={e=>setDestinationDirs(prev=>({...prev,[company.companyId]:e.target.value}))}/>
-               <p className="mt-1 text-xs text-slate-500">A pasta precisa existir e permitir gravação pelo NexFiscal. Somente XMLs completos são gravados: NF-e pelo NSU e CT-e como CTe_000000000000001.xml. Resumos e eventos não são considerados downloads.</p>
              </div>
              <div className="mt-5 flex flex-wrap gap-3">
                <Button disabled={!company.certificateStored||captureBusy} onClick={()=>downloadNfe(company)}>

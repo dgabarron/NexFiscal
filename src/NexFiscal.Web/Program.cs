@@ -205,7 +205,7 @@ app.MapGet("/api/capture/archive/{companyId}/{archiveId}", (
         : Results.File(file, "application/zip", "NexFiscal_" + type + "_" + archiveId + ".zip");
 });
 
-// Recuperação pontual por data-limite: usa somente NSUs descobertos em lotes locais.
+// Conferência local: somente procNFe completos nos lotes já armazenados, sem SEFAZ.
 app.MapGet("/api/recovery/nfe/preview/{companyId}", async (
     string companyId, DateTimeOffset? from, NfeHistoricalRecovery recovery,
     CancellationToken ct) =>
@@ -222,25 +222,6 @@ app.MapGet("/api/recovery/nfe/preview/{companyId}", async (
     {
         app.Logger.LogError(ex, "Falha ao consultar candidatos de recuperação");
         return Results.Problem("Não foi possível ler os lotes de recuperação.", statusCode: 503);
-    }
-});
-
-app.MapPost("/api/recovery/nfe/one", async (
-    RecoveryOneRequest request, NfeHistoricalRecovery recovery, CancellationToken ct) =>
-{
-    try
-    {
-        return Results.Ok(await recovery.RecoverOneAsync(
-            request.CompanyId, request.From, request.PreviousConsumerStopped, ct));
-    }
-    catch (ArgumentException ex) { return Results.BadRequest(new { error = ex.Message }); }
-    catch (DirectoryNotFoundException ex) { return Results.BadRequest(new { error = ex.Message }); }
-    catch (InvalidOperationException ex) { return Results.Conflict(new { error = ex.Message }); }
-    catch (Exception ex)
-    {
-        var diagnostic = Guid.NewGuid().ToString("N")[..8];
-        app.Logger.LogError(ex, "Falha ao reconsultar NF-e pontual Diagnostico={Id}", diagnostic);
-        return Results.Json(new { error = "Reconsulta não concluída. Verifique o log e não repita imediatamente.", diagnostico = diagnostic }, statusCode: 503);
     }
 });
 
@@ -365,6 +346,5 @@ static async Task<(byte[] pfx, string password)> ReadCertificateAsync(HttpReques
 public partial class Program { }
 
 public sealed record CaptureTestRequest(string CompanyId);
-public sealed record RecoveryOneRequest(string CompanyId, DateTimeOffset From, bool PreviousConsumerStopped);
 
 public sealed record CaptureDownloadRequest(string CompanyId, bool PreviousConsumerStopped);

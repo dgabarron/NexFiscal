@@ -24,7 +24,7 @@ public sealed class NfeHistoricalRecovery(
     public sealed record Preview(DateTimeOffset From, DateTimeOffset To, int Candidates,
         int WithoutDate, int AlreadyComplete, IReadOnlyList<Candidate> Documents,
         string Warning);
-    private sealed record Attempts(DateTimeOffset? BlockedUntil, List<DateTimeOffset> Timestamps);
+    private sealed record Attempts(DateTimeOffset? BlockedUntil, List<DateTimeOffset> Timestamps, Dictionary<long, DateTimeOffset>? RecentNsus = null);
 
     public async Task<Preview> PreviewAsync(string companyId, DateTimeOffset from, CancellationToken ct)
     {
@@ -54,7 +54,9 @@ public sealed class NfeHistoricalRecovery(
                         !long.TryParse(nsuValue.GetString(), out var nsu) || nsu <= 0 ||
                         !entry.TryGetProperty("schema", out var schemaValue)) continue;
                     var schema = schemaValue.GetString() ?? "";
-                    if (schema.Length > 200 || !schema.EndsWith(".xsd", StringComparison.OrdinalIgnoreCase)) continue;
+                    if (schema.Length > 200 || !schema.EndsWith(".xsd", StringComparison.OrdinalIgnoreCase) ||
+                        !(schema.StartsWith("resNFe_v", StringComparison.OrdinalIgnoreCase) ||
+                          schema.StartsWith("procNFe_v", StringComparison.OrdinalIgnoreCase))) continue;
                     var xmlEntry = zip.GetEntry(nsu.ToString("D15", CultureInfo.InvariantCulture) + ".xml");
                     if (xmlEntry is null || xmlEntry.Length is < 1 or > 10_000_000) continue;
                     await using var input = xmlEntry.Open();
@@ -95,7 +97,14 @@ public sealed class NfeHistoricalRecovery(
         try
         {
             var preview = await PreviewAsync(company, from, ct);
-            var candidate = preview.Documents.FirstOrDefault(d => !d.Complete && !d.XmlPresent);
+            var statePath = Path.Combine(StateRoot, company + ".json");
+            Directory.CreateDirectory(StateRoot);
+            var attempts = await ReadAttemptsAsync(statePath, ct);
+            var now = DateTimeOffset.UtcNow;
+            var oldAttempts = attempts.RecentNsus ?? new Dictionary<long, DateTimeOffset>();
+            var candidate = preview.Documents.FirstOrDefault(d => !d.Complete && !d.XmlPresent &&
+                (!oldAttempts.TryGetValue(long.Parse(d.Nsu, CultureInfo.InvariantCulture), out var lastTry) ||
+                 lastTry < now.AddHours(-1)));
             if (candidate is null)
                 return new { status = 0, attempted = false,
                     message = "Nenhum NSU de resumo pendente identificado nos lotes armazenados dentro da data-limite.",
@@ -103,10 +112,6 @@ public sealed class NfeHistoricalRecovery(
 
             var folder = await settings.RequireDestinationAsync(company, "NFE", ct);
             var nsu = long.Parse(candidate.Nsu, CultureInfo.InvariantCulture);
-            var statePath = Path.Combine(StateRoot, company + ".json");
-            Directory.CreateDirectory(StateRoot);
-            var attempts = await ReadAttemptsAsync(statePath, ct);
-            var now = DateTimeOffset.UtcNow;
             if (attempts.BlockedUntil is { } until && until > now)
                 throw new InvalidOperationException("Reconsulta indisponível até " + until.ToString("dd/MM HH:mm 'UTC'") + ".");
             // Reservar cota com margem para ações feitas por outros programas.
@@ -114,7 +119,10 @@ public sealed class NfeHistoricalRecovery(
             if (recent.Count >= 19)
                 throw new InvalidOperationException("Limite local de segurança atingido (19 consultas pontuais/hora).");
             recent.Add(now);
-            await WriteAttemptsAsync(statePath, new Attempts(null, recent), ct);
+            var tried = oldAttempts.Where(x => x.Value > now.AddDays(-1))
+                .ToDictionary(x => x.Key, x => x.Value);
+            tried[nsu] = now;
+            await WriteAttemptsAsync(statePath, new Attempts(null, recent, tried), ct);
 
             if (!vault.IsStored(company))
                 throw new InvalidOperationException("Certificado A1 não encontrado.");
@@ -134,7 +142,7 @@ public sealed class NfeHistoricalRecovery(
                 var response = await new NfeDistributionClient()
                     .QuerySpecificNsuAsync(cert, identity.Cnpj, nsu, 1, ct);
                 if (response.Status == 656)
-                    await WriteAttemptsAsync(statePath, new Attempts(DateTimeOffset.UtcNow.AddHours(1), recent), ct);
+                    await WriteAttemptsAsync(statePath, new Attempts(DateTimeOffset.UtcNow.AddHours(1), recent, tried), ct);
                 if (response.Status != 138)
                     return new { status = response.Status, reason = response.Reason,
                         attempted = true, nsu = candidate.Nsu, filesSaved = 0,

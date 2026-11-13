@@ -4,22 +4,22 @@ Captura de XMLs de NF-e disponíveis na SEFAZ para empresas que utilizam SAP Bus
 
 **Versão documentada:** branch `qa/frontend-enxuto-20261113`, 13/11/2026. **Estado:** QA; compilação e testes automatizados executados, sem homologação operacional com SAP HANA e SEFAZ reais e sem implantação em produção.
 
-## Produto: somente duas operações
+## NF-e: duas operações; CT-e: consulta manual
 
 1. **Monitoramento automático de NF-e:** usuário configura um intervalo de X minutos, pasta de XMLs e habilitação; o serviço `NfeMonitoringWorker` consulta quando autorizado pela SEFAZ.
 2. **Consultar tudo disponível:** botão manual que inicia `POST /api/sefaz/nfe/catchup`, percorrendo os lotes que a SEFAZ disponibiliza, a partir do controle interno já armazenado. Pode ser usado com monitoramento automático desativado.
 
-**Consultar tudo disponível não significa recuperar toda a vida fiscal da empresa.** A disponibilidade de documentos completos (`procNFe`), os limites de consulta e a janela de distribuição são definidos pela SEFAZ. Consultas podem terminar, pausar ou exigir nova tentativa após o período permitido.
+**O botão de consulta manual NF-e fica clicável durante a espera fiscal:** nesse caso informa o horário de liberação, sem fazer chamada antecipada à SEFAZ. **Consultar tudo disponível não significa recuperar toda a vida fiscal da empresa.** A disponibilidade de documentos completos (`procNFe`), os limites de consulta e a janela de distribuição são definidos pela SEFAZ. Consultas podem terminar, pausar ou exigir nova tentativa após o período permitido.
 
 O usuário **não informa NSU, não escolhe NSU específico, não informa data nem recupera XMLs de ZIPs locais**. O NSU é utilizado exclusivamente pelo motor como checkpoint técnico da distribuição. Não existem ações de `consNSU` retroativo, restauração de ZIP ou busca por período no produto atual.
 
 ## Interface
 
-- **Operação:** empresa selecionada, status, monitoramento automático e botão de consulta de todos os XMLs disponíveis.
+- **Operação:** abas NF-e e CT-e. NF-e oferece monitoramento automático e consulta manual de tudo disponível; CT-e oferece consulta manual com configuração de pasta.
 - **Empresas:** cadastro pelo certificado digital A1 e identificação de CNPJ/razão social.
 - **Configuração técnica** (no cabeçalho): conexão SAP HANA e diagnóstico de conectividade.
 
-CT-e possui código/rotas legados no repositório, mas **não integra o Main deste escopo**; NFS-e também não foi disponibilizada. Qualquer ampliação precisa de decisão explícita, não do roadmap antigo.
+**CT-e está disponível na aba CT-e do Main, em modo manual**, com endpoint e checkpoint independentes de NF-e. Não existe Worker automático CT-e nesta versão. NFS-e não foi disponibilizada.
 
 ## Documentação vigente
 
@@ -28,7 +28,7 @@ CT-e possui código/rotas legados no repositório, mas **não integra o Main des
 - [Instalação e execução local](docs/PORTAL_LOCAL.md)
 - [Checklist de QA desta versão](docs/QA_ESCOPO_DUAS_FUNCOES_20261113.md)
 
-Os documentos `docs/PRIMEIRA_ENTREGA.md`, `docs/NFE_PROTOCOL_AUDIT.md`, `docs/CTE_DISTRIBUICAO.md` e `docs/ROADMAP_NFSE_AGENDADOR_90_DIAS.md` são **registros históricos**, não especificações válidas de funcionalidades atuais.
+Os documentos `docs/PRIMEIRA_ENTREGA.md`, `docs/NFE_PROTOCOL_AUDIT.md` e `docs/ROADMAP_NFSE_AGENDADOR_90_DIAS.md` são registros históricos. `docs/CTE_DISTRIBUICAO.md` descreve o mecanismo CT-e manual, com correções do escopo vigente no cabeçalho.
 
 ## Executar em desenvolvimento / QA
 

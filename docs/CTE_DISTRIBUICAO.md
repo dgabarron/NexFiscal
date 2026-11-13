@@ -1,4 +1,4 @@
-> **MÓDULO LEGADO FORA DO ESCOPO DO MAIN (13/11/2026).** Este documento conserva uma especificação/testes do CT-e que existem parcialmente no backend. A versão funcional atual de NexFiscal é **NF-e com apenas duas operações**; CT-e não é oferecido no Main, nem existe Worker CT-e desta entrega. Não tomar as instruções de CT-e abaixo como fluxo atual do usuário. Ver [escopo vigente](ESPECIFICACAO_FUNCIONAL_ATUAL.md) e [arquitetura](ARQUITETURA_E_APIS.md).
+> **CT-e MANUAL RESTAURADO NO MAIN (13/11/2026).** A aba CT-e permite configurar a pasta de XMLs, habilitar e realizar consulta manual. O controle fiscal é independente da NF-e e ainda não há Worker automático CT-e. O fluxo exige homologação real em QA. Referências: [escopo vigente](ESPECIFICACAO_FUNCIONAL_ATUAL.md) e [arquitetura](ARQUITETURA_E_APIS.md).
 
 ---
 

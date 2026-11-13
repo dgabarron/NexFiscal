@@ -6,7 +6,7 @@
 
 Permitir que uma empresa cadastrada consulte e armazene XMLs de NF-e **que estejam efetivamente disponíveis para o seu CNPJ no serviço nacional de distribuição da SEFAZ**, sem exigir que o usuário conheça o controle de NSU.
 
-## As duas funções do Main
+## NF-e: duas funções do Main
 
 ### 1. Monitoramento automático
 
@@ -22,12 +22,12 @@ Permitir que uma empresa cadastrada consulte e armazene XMLs de NF-e **que estej
 
 ### 2. Consultar tudo disponível
 
-**Entrada do usuário:** selecionar a empresa e clicar em **Consultar todos os XMLs disponíveis** (botão da Operação).
+**Entrada do usuário:** selecionar a empresa e clicar em **Consultar todos os XMLs disponíveis** (aba NF-e da Operação). O botão permanece clicável mesmo durante a espera fiscal, para informar o horário permitido.
 
 **Comportamento:**
 - O frontend envia `POST /api/sefaz/nfe/catchup` com o `companyId` da empresa selecionada. O backend consulta lotes de distribuição `distNSU` a partir do checkpoint interno, sem NSU fornecido pelo operador.
 - A execução ocorre em job no backend; o frontend acompanha seu estado com `GET /api/sefaz/nfe/catchup/{companyId}`.
-- A ação manual exige certificado A1 e pasta existente, mas **não** exige o toggle de monitoramento ligado.
+- A ação manual exige certificado A1 e pasta existente, mas **não** exige o toggle de monitoramento ligado. Se a janela fiscal ainda estiver bloqueada, clicar no botão informa a espera sem disparar uma consulta antecipada.
 - O job tenta percorrer a disponibilidade informada pela SEFAZ; pode **pausar** se houver bloqueio de uma hora, `cStat 656`, falha ou necessidade de reconciliar persistência. Não prometer que uma execução necessariamente baixará todo o histórico ou esgotará todos os lotes.
 - Não altera manualmente nem retrocede o checkpoint. Worker e consulta manual compartilham controle de NSU e não devem disparar consultas concorrentes.
 
@@ -36,6 +36,16 @@ Permitir que uma empresa cadastrada consulte e armazene XMLs de NF-e **que estej
 ### Semântica de documentos
 
 A SEFAZ pode retornar `procNFe` (NF-e completa), `resNFe` (resumo) ou eventos. **Somente `procNFe` válido é salvo como XML completo na pasta operacional**; os outros tipos não devem ser apresentados como notas completas capturadas. Duplicatas de mesmo conteúdo não geram arquivos novos. O backend também mantém lote bruto interno para diagnóstico e redução de risco de perda em falhas de gravação; isso **não** cria uma função de restauração de ZIP para usuário.
+
+## CT-e — consulta manual preservada
+
+- A aba **CT-e** foi restaurada no Main, sem modificar o escopo de duas funções NF-e.
+- O usuário pode habilitar a consulta manual CT-e, informar sua pasta de XMLs no servidor e salvar a configuração.
+- O botão **Consultar CT-e** usa `POST /api/cte/download`; o estado é consultado por `GET /api/cte/status/{companyId}`.
+- O CT-e possui checkpoint e janela fiscal independentes do NF-e. Ainda **não existe monitoramento automático CT-e**.
+- A consulta em cooldown informa o próximo horário sem enviar requisição antecipada.
+- O operador deve confirmar que não há outro consumidor CT-e ativo para o CNPJ.
+- O CT-e não tem consulta de NSU específico, busca histórica por data ou restauração de ZIP.
 
 ## Pré-requisitos de uso, não novas funções de captura
 
@@ -52,7 +62,7 @@ A área **Empresas** serve para cadastrar e conferir A1; **Configuração técni
 - Consulta por data de emissão, filtro de 90 dias, varredura histórica e reinicialização do cursor.
 - Importação ou restauração de ZIPs locais, interface de gerenciamento de lotes ZIP.
 - Uma terceira operação de captura NF-e "consultar um único lote" para o usuário.
-- CT-e e NFS-e no Main, Worker CT-e/NFS-e, importação direta de documentos no SAP Business One.
+- NFS-e no Main, Worker CT-e/NFS-e, importação direta de documentos no SAP Business One.
 - Disponibilização na rede, autenticação AD/LDAPS e homologação de produção.
 
 Código/endpoint legado para outros métodos poderá existir enquanto não houver uma limpeza técnica específica, mas **não define o produto**.
@@ -62,7 +72,7 @@ Código/endpoint legado para outros métodos poderá existir enquanto não houve
 - Exibir **somente monitoramento automático e botão de consulta de tudo disponível** na página Operação.
 - A empresa selecionada determina os dados e ações; seleção não deve misturar CNPJs.
 - Salvar pasta mesmo com monitoramento desligado e conseguir usá-la no botão manual.
-- Não exibir campos de NSU, data retroativa, restauração ZIP, CT-e ou NFS-e como operações principais.
+- Não exibir campos de NSU, data retroativa, restauração ZIP ou NFS-e. Preservar a aba CT-e de consulta manual.
 - Não iniciar consulta fiscal no teste HTTPS, na simples navegação ou ao salvar agendamento.
 - Consultas concorrentes e bloqueios fiscais retornam erro/pausa visível, não sucesso fictício.
 - Informar `137` (sem mais documentos), `138` (documentos), `656` (consumo indevido/bloqueado) sem prometer cobertura histórica total.

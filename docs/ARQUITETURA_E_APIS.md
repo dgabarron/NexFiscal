@@ -6,7 +6,7 @@
 
 | Componente | Responsabilidade |
 |---|---|
-| `frontend/` — React 18, Vite 5, Tailwind 4 | Operação com duas ações NF-e, cadastro de empresas e configuração técnica |
+| `frontend/` — React 18, Vite 5, Tailwind 4 | Abas NF-e (duas funções) e CT-e (consulta manual), empresas e configuração técnica |
 | `src/NexFiscal.Web/` — ASP.NET Core .NET 8 | API local, cofre A1, HANA, monitoramento e consulta sob demanda |
 | `NfeMonitoringWorker` | Avaliar agendamento configurado e consultar quando permitidos intervalo e janela fiscal |
 | `NfeSefazCatchup` | Job manual sequencial de distribuição disponível, com progresso |
@@ -33,6 +33,7 @@ O monitoramento verifica periodicamente o estado local, e **respeita** tanto o i
 - O backend interrompe ou pausa ao atingir o fim disponível, receber `137`/`656`, esbarrar no cooldown, perder persistência ou falhar.
 - O job é guardado em memória no processo (`ConcurrentDictionary`). Recarregar a página permite recuperar o progresso **enquanto o backend mantém o estado**; reiniciar o servidor não preserva o job em execução.
 - O manual e o automático compartilham destino, certificado e checkpoint, mas a opção `enabled` do agendamento controla **apenas o Worker**.
+- O botão de NF-e permanece clicável em cooldown: a interface informa a próxima janela sem iniciar consulta antecipada; o backend também respeita o bloqueio.
 - As respostas ``cStat`` devem distinguir documentos novos, arquivos já existentes, resumos/eventos e erros de persistência.
 
 ## Rotas usadas pelo produto atual
@@ -51,6 +52,10 @@ O monitoramento verifica periodicamente o estado local, e **respeita** tanto o i
 | POST | `/api/sefaz/nfe/catchup` | Iniciar consulta manual de tudo disponível (HTTP 202) |
 | GET | `/api/sefaz/nfe/catchup/{companyId}` | Consultar progresso do job; 404 se não existe estado |
 | POST | `/api/capture/test-connectivity` | Diagnóstico HTTPS com A1; não executa distribuição fiscal |
+
+### CT-e manual
+
+A aba CT-e usa `GET /api/cte/status/{companyId}`, `POST /api/cte/download` com `{"companyId":"<GUID>","previousConsumerStopped":true}` e o registro `CTE` no endpoint compartilhado de agendamentos. Não há Worker automático CT-e. O operador confirma que não há outro consumidor CT-e em execução. Checkpoint CT-e é independente do HANA e do cursor de NF-e.
 
 ### Formatos essenciais
 
@@ -78,7 +83,7 @@ A inspeção/cadastro A1 usa `multipart/form-data` com campos `certificate` (arq
 | `POST /api/capture/test-once` | Teste controlado legado; não usar como terceira função |
 | `POST /api/capture/prepare-handoff` | Rotina administrativa legada de checkpoint; **não é pré-requisito da navegação normal** |
 | `GET /api/capture/archive/{companyId}/{archiveId}` | Exportação técnica do lote já recebido; não restaura ZIP nem consulta SEFAZ |
-| `GET /api/cte/status/{companyId}` e `POST /api/cte/download` | CT-e manual legado, fora do Main e do escopo vigente |
+| `GET /api/cte/status/{companyId}` e `POST /api/cte/download` | CT-e manual na aba CT-e do Main, com cursor e janela fiscal próprios |
 
 **Ausentes da API de QA:** `POST /api/recovery/nfe/sefaz/{companyId}`, `GET /api/recovery/nfe/preview/{companyId}`, `POST /api/recovery/nfe/restore`. Não recriar esses endpoints sem nova definição de produto.
 

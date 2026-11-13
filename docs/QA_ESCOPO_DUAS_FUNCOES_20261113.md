@@ -5,11 +5,13 @@
 ## Operação
 
 - [ ] Menu exibe **Operação** e **Empresas**; Configuração técnica é acessível pelo cabeçalho.
-- [ ] Main exibe somente **Monitoramento automático NF-e** e **Consultar todos os XMLs disponíveis**.
+- [ ] Aba NF-e exibe **Monitoramento automático NF-e** e **Consultar todos os XMLs disponíveis**; aba CT-e exibe a consulta manual.
 - [ ] Configurar X minutos, pasta do servidor e salvar; verificar persistência após atualizar página.
 - [ ] Com Worker ativado, verificar que consulta segue intervalo e janela SEFAZ, sem múltiplas chamadas concorrentes.
 - [ ] Com Worker desativado, manter pasta salva e confirmar que o botão de consulta manual funciona.
 - [ ] Botão consulta por `companyId` e acompanha `GET /api/sefaz/nfe/catchup/{companyId}`; atualização da página recupera estado enquanto o backend estiver vivo.
+- [ ] Durante cooldown NF-e, botão permanece clicável e informa a espera, sem requisitar SEFAZ.
+- [ ] CT-e: habilitar, salvar pasta, consultar e verificar XMLs, erros e cooldown sem afetar cursor NF-e.
 - [ ] Trocar empresa: status, configuração e histórico do job continuam vinculados ao CNPJ correto.
 - [ ] Validar mensagens para `137`, `138`, `656`, checkpoint indisponível, pasta sem acesso, certificado ausente e falha HANA.
 - [ ] Resultado distingue `procNFe` completo, duplicata, resumo/evento; nenhum resultado de erro aparece como sucesso.
@@ -25,7 +27,7 @@
 
 ## Regra de escopo
 
-Fora do Main e das funções de captura atuais: `consNSU` por NSU específico, recuperação retroativa, ZIP local, busca por período, CT-e, NFS-e. O backend contém rotas técnicas legadas de CT-e e captura unitária, que não ampliam o escopo. Os endpoints de recuperação `/api/recovery/nfe/*` foram removidos na branch.
+Fora do Main: `consNSU` específico, recuperação retroativa, ZIP local, busca por período e NFS-e. **CT-e manual está disponível na aba CT-e**. CT-e automático ainda não foi implementado. Rotas técnicas de consulta unitária NF-e permanecem no backend sem constituir função do Main. Os endpoints de recuperação `/api/recovery/nfe/*` foram removidos na branch.
 
 ## Resultado de validação
 

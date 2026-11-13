@@ -32,7 +32,7 @@ Para desenvolvimento do frontend isolado, executar `cd frontend` e `npm run dev`
 2. **Empresa e A1:** escolher arquivo `.pfx`/`.p12`, informar senha, validar dados extraídos, conferir CNPJ/razão social e cadastrar. O cadastro não exige digitar NSU nem informar dados de fornecedor anterior.
 3. **Operação:** selecionar empresa; informar pasta de XMLs no servidor e salvar a configuração. O mesmo diretório serve ao monitoramento e à consulta manual.
 
-## As duas ações do Main
+## Operação: NF-e e CT-e
 
 ### Monitoramento automático NF-e
 
@@ -40,9 +40,9 @@ Ativar **Monitoramento automático**, informar o intervalo em minutos e salvar. 
 
 ### Consultar todos os XMLs disponíveis
 
-Clicar **Consultar todos os XMLs disponíveis**. A API inicia um job `distNSU` para aquele CNPJ; a tela mostra estado, lotes, XMLs novos e já presentes. O botão independe do monitoramento automático estar ativado, **mas exige pasta salva, A1 e janela fiscal disponível**. A SEFAZ pode pausar a operação; nem todo DF-e distribuído é uma NF-e completa `procNFe`, e a consulta não garante documentos anteriores à janela fiscal de disponibilidade.
+Clicar **Consultar todos os XMLs disponíveis**. A API inicia um job `distNSU` para aquele CNPJ; a tela mostra estado, lotes, XMLs novos e já presentes. O botão independe do monitoramento automático estar ativado, **mas exige pasta salva e A1**. Mesmo durante a espera fiscal, ele permanece clicável para informar a próxima janela, sem consultar a SEFAZ antecipadamente. A SEFAZ pode pausar a operação; nem todo DF-e distribuído é uma NF-e completa `procNFe`, e a consulta não garante documentos anteriores à janela fiscal de disponibilidade.
 
-Não há campos para NSU específico, data, consultas retroativas nem recuperação por ZIP.
+Na aba **CT-e**, configure a pasta, habilite a consulta manual e clique em **Consultar CT-e**. O CT-e usa seu próprio checkpoint fiscal, não existe Worker CT-e nesta versão e a consulta em espera apenas informa a próxima janela. Não há campos para NSU específico, data, consultas retroativas nem recuperação por ZIP.
 
 ## Diagnóstico e limitações
 

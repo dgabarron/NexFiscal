@@ -22,8 +22,15 @@ test("configurações preservam os três tipos e não ativam NFS-e por padrão",
   const saved = mergeSchedule([{ documentType: "CTE", enabled: true,
     intervalMinutes: 45, destinationDirectory: "C:\\NexFiscal\\CTE" }]);
   assert.equal(saved.find(s => s.documentType === "CTE").intervalMinutes, "45");
-  assert.equal(saved.find(s => s.documentType === "CTE").enabled, true);
+  // Configuração legada CT-e tinha Enabled para permitir consulta MANUAL.
+  // Não pode ativar o novo Worker sem confirmação explícita.
+  assert.equal(saved.find(s => s.documentType === "CTE").enabled, false);
   assert.equal(saved.find(s => s.documentType === "NFSE").enabled, false);
+
+  const confirmed = mergeSchedule([{ documentType: "CTE", enabled: true,
+    automaticConfirmed: true, intervalMinutes: 45, destinationDirectory: "C:\\NexFiscal\\CTE" }]);
+  assert.equal(confirmed.find(s => s.documentType === "CTE").enabled, true);
+  assert.equal(confirmed.find(s => s.documentType === "CTE").automaticConfirmed, true);
 });
 
 test("intervalo usa Int64 positivo e rejeita formato indevido", () => {

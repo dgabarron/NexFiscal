@@ -144,12 +144,10 @@ public sealed class CteSefazCatchup(
             ct.ThrowIfCancellationRequested();
             using var json = JsonDocument.Parse(JsonSerializer.Serialize(await capture.StatusAsync(company, ct)));
             var root = json.RootElement;
-            if (!root.TryGetProperty("nextAllowedUtc", out var value) ||
-                value.ValueKind != JsonValueKind.String ||
-                !DateTimeOffset.TryParse(value.GetString(), CultureInfo.InvariantCulture,
-                    DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out var allowed) ||
-                allowed <= DateTimeOffset.UtcNow)
+            var allowedAt = FiscalWindow.NextAllowedUtc(root);
+            if (allowedAt is null || allowedAt <= DateTimeOffset.UtcNow)
                 return;
+            var allowed = allowedAt.Value;
 
             var remaining = allowed - DateTimeOffset.UtcNow;
             publish("scheduled", "Captura CT-e agendada para após " +

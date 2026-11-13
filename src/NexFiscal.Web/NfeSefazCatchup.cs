@@ -148,7 +148,7 @@ public sealed class NfeSefazCatchup(
 
         void Publish(string status, string message) => Jobs[company] = new Progress(status,
             batches, downloaded, saved, existing, ignored, last, max, sefaz,
-            state.StartedAtUtc, status == "running" ? null : DateTimeOffset.UtcNow, message);
+            state.StartedAtUtc, status is "running" or "scheduled" ? null : DateTimeOffset.UtcNow, message);
     }
 
     // A consulta fica pendente no processo mesmo que o navegador seja fechado.
@@ -165,11 +165,7 @@ public sealed class NfeSefazCatchup(
             foreach (var current in json.RootElement.GetProperty("companies").EnumerateArray())
             {
                 if (current.GetProperty("companyId").GetString() != company) continue;
-                if (current.TryGetProperty("nextAllowedUtc", out var value) &&
-                    value.ValueKind == JsonValueKind.String &&
-                    DateTime.TryParse(value.GetString(), CultureInfo.InvariantCulture,
-                        DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out var parsed))
-                    allowedAt = new DateTimeOffset(parsed.ToUniversalTime());
+                allowedAt = FiscalWindow.NextAllowedUtc(current);
                 break;
             }
 

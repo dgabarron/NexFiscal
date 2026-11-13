@@ -48,10 +48,7 @@ public sealed class NfeMonitoringWorker(
 
                 // O próximo horário do HANA prevalece sobre qualquer intervalo
                 // menor configurado no frontend.
-                if (company.TryGetProperty("nextAllowedUtc", out var allowed) &&
-                    allowed.ValueKind == JsonValueKind.String &&
-                    DateTime.TryParse(allowed.GetString(), out var utc) &&
-                    DateTime.SpecifyKind(utc, DateTimeKind.Utc) > DateTime.UtcNow)
+                if (FiscalWindow.IsWaiting(company, DateTimeOffset.UtcNow))
                     continue;
 
                 var interval = TimeSpan.FromMinutes(Math.Max(1, Math.Min(schedule.IntervalMinutes, 525600)));

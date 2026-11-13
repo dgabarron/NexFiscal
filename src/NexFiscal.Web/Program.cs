@@ -14,6 +14,7 @@ if (OperatingSystem.IsWindows())
 builder.Services.AddSingleton<HanaSetup>();
 builder.Services.AddSingleton<CompanyCertificateVault>();
 builder.Services.AddSingleton<NfeCaptureCoordinator>();
+builder.Services.AddSingleton<NfeKeyDiagnostics>();
 builder.Services.AddSingleton<NfeFirstDownload>();
 builder.Services.AddSingleton<CteFirstDownload>();
 builder.Services.AddSingleton<CteSefazCatchup>();
@@ -166,6 +167,20 @@ app.MapGet("/api/capture/status", async (NfeCaptureCoordinator coordinator, Canc
     {
         app.Logger.LogError("Pré-voo NF-e falhou: {Type}", ex.GetType().Name);
         return Results.Problem("Não foi possível consultar o estado da captura no HANA.", statusCode: 503);
+    }
+});
+
+// Consulta exclusivamente dados locais para identificar NF-e ausentes; não chama SEFAZ.
+app.MapPost("/api/nfe/diagnostics/keys", async (
+    NfeKeyDiagnostics.Request request, NfeKeyDiagnostics diagnostics, CancellationToken ct) =>
+{
+    try { return Results.Ok(await diagnostics.CheckAsync(request, ct)); }
+    catch (ArgumentException ex) { return Results.BadRequest(new { error = ex.Message }); }
+    catch (InvalidOperationException ex) { return Results.Conflict(new { error = ex.Message }); }
+    catch (Exception ex)
+    {
+        app.Logger.LogError("Diagnóstico de NF-e locais falhou: {Type}", ex.GetType().Name);
+        return Results.Problem("Não foi possível verificar as NF-e no HANA e na pasta.", statusCode: 503);
     }
 });
 

@@ -44,7 +44,7 @@ public sealed class NfeMonitoringWorker(
                     continue;
                 if (_nextAttempt.TryGetValue(id, out var next) && next > DateTimeOffset.UtcNow)
                     continue;
-                if (onDemand.Get(id)?.Status == "running") continue;
+                if (onDemand.Get(id)?.Status is "running" or "scheduled") continue;
 
                 // O próximo horário do HANA prevalece sobre qualquer intervalo
                 // menor configurado no frontend.

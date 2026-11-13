@@ -8,6 +8,7 @@ import { Notice } from "../components/common/Notice";
 import { CompanyPicker } from "../components/operations/CompanyPicker";
 import { MonitorPanel } from "../components/operations/MonitorPanel";
 import { CatchupPanel } from "../components/operations/CatchupPanel";
+import { NfeKeyDiagnosticsPanel } from "../components/operations/NfeKeyDiagnosticsPanel";
 import { useCatchupPolling } from "../hooks/useCatchupPolling";
 import { pendingWindow, formatUtcAsLocal } from "../lib/capture-utils";
 import { formatCnpj } from "../lib/fiscal-format";
@@ -134,19 +135,7 @@ export function OverviewPage({
                     disabled={!hasCertificate || !nfeFolder}
                     onStart={(result) => setRuns((prev) => ({ ...prev, [company.companyId]: result }))}
                     onCompleted={onRefreshCapture} />
-                  <Card>
-                    <CardContent className="pt-5">
-                      <h3 className="font-semibold text-slate-900">Documentos que não foram encontrados</h3>
-                      <p className="mt-2 text-sm text-slate-600">
-                        A contagem do HANA não é uma lista de XMLs completos. Uma NF-e pode ter sido recebida
-                        apenas como resumo, ou seu arquivo pode não ter sido gravado.
-                      </p>
-                      <p className="mt-2 text-sm text-slate-600">
-                        Para conferir uma nota específica, use a chave de acesso de 44 dígitos e verifique
-                        seu registro e a pasta de destino. Esta versão ainda não dispõe de consulta individual por chave na interface.
-                      </p>
-                    </CardContent>
-                  </Card>
+                  <NfeKeyDiagnosticsPanel key={company.companyId} company={company} />
                 </div>
                 <MonitorPanel company={company} schedule={configured}
                   onScheduleField={scheduleField}

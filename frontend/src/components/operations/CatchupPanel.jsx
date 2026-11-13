@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { DownloadCloud, RefreshCw } from "lucide-react";
 import { Card, CardHeader, CardContent } from "../ui/card";
 import { Button } from "../ui/button";
@@ -7,18 +8,22 @@ import { api } from "../../lib/api";
 
 export function CatchupPanel({ company, cooldown, run, running, disabled, onStart, onCompleted }) {
   const { notify } = useNotices();
+  const [starting, setStarting] = useState(false);
   const isRunning = running || run?.status === "running";
 
   async function handleStart() {
+    if (starting || disabled || isRunning) return;
     if (!window.confirm(
       "Capturar todos os XMLs de NF-e disponíveis na SEFAZ para este CNPJ?\n\n" +
       "A consulta continuará do NSU salvo até alcançar o máximo informado pela SEFAZ. " +
       "Esta operação AVANÇA o cursor do monitoramento."
     )) return;
+    setStarting(true);
     try {
       const result = await api.post("/api/sefaz/nfe/catchup", { companyId: company.companyId });
       onStart?.(result);
     } catch (e) { notify.error(e.message); }
+    finally { setStarting(false); }
   }
 
   return (
@@ -39,9 +44,9 @@ export function CatchupPanel({ company, cooldown, run, running, disabled, onStar
           recebidos são preservados no registro de distribuição, mas não são gravados como NF-e
           completas na pasta.
         </Notice>
-        <Button className="mt-4" disabled={disabled || isRunning} onClick={handleStart}>
+        <Button className="mt-4" disabled={disabled || isRunning || starting} onClick={handleStart}>
           <DownloadCloud size={16} />
-          {isRunning ? "Captura na SEFAZ em andamento" : "Capturar todos os XMLs disponíveis"}
+          {isRunning ? "Captura na SEFAZ em andamento" : starting ? "Iniciando..." : "Capturar todos os XMLs disponíveis"}
         </Button>
         {run && (
           <div className="mt-4 rounded-lg bg-slate-50 p-3 text-sm">

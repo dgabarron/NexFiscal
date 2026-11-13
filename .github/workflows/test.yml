@@ -28,3 +28,21 @@ jobs:
       - name: Testar funções e contratos HTTP do frontend
         working-directory: frontend
         run: npm test
+      - name: Smoke test do portal local
+        run: |
+          set -euo pipefail
+          dotnet run --no-build -c Release --project src/NexFiscal.Web/NexFiscal.Web.csproj > /tmp/nexfiscal-smoke.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true; cat /tmp/nexfiscal-smoke.log' EXIT
+          ready=0
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent --show-error --max-time 2 http://127.0.0.1:5187/api/health > /tmp/nexfiscal-health.json; then
+              ready=1
+              break
+            fi
+            sleep 1
+          done
+          test "$ready" -eq 1
+          grep -q '"product":"NexFiscal"' /tmp/nexfiscal-health.json
+          curl --fail --silent --show-error --max-time 3 http://127.0.0.1:5187/ > /tmp/nexfiscal-home.html
+          grep -q 'NexFiscal' /tmp/nexfiscal-home.html

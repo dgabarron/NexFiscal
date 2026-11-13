@@ -84,8 +84,8 @@ jobs:
                 } catch { Start-Sleep -Seconds 1 }
               }
               if (-not $healthy) { throw "Backend Windows não inicializou: $workDir" }
-              $home = Invoke-WebRequest -Uri "http://127.0.0.1:5187/" -UseBasicParsing -TimeoutSec 3
-              if ($home.Content -notmatch "NexFiscal") { throw "Frontend não servido: $workDir" }
+              $homepage = Invoke-WebRequest -Uri "http://127.0.0.1:5187/" -UseBasicParsing -TimeoutSec 3
+              if ($homepage.Content -notmatch "NexFiscal") { throw "Frontend não servido: $workDir" }
             } finally {
               if (-not $process.HasExited) { Stop-Process -Id $process.Id -Force }
               Start-Sleep -Seconds 2

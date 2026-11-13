@@ -25,3 +25,6 @@ jobs:
         run: |
           npm install --no-audit --no-fund
           npm run build
+      - name: Testar funções e contratos HTTP do frontend
+        working-directory: frontend
+        run: npm test

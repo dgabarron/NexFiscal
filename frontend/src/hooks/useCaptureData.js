@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { api } from "../lib/api";
-import { defaultSchedule, mergeSchedule } from "../lib/capture-utils";
+import { mergeSchedule } from "../lib/capture-utils";
 
 export function useCaptureData() {
   const [companies, setCompanies] = useState([]);
@@ -17,12 +17,12 @@ export function useCaptureData() {
       setCompanies(list);
       const [cteEntries, scheduleEntries] = await Promise.all([
         Promise.all(list.map((c) => api.get(`/api/cte/status/${c.companyId}`).catch(() => null))),
-        Promise.all(list.map((c) => api.get(`/api/capture/schedules/${c.companyId}`).catch(() => null))),
+        Promise.all(list.map((c) => api.get(`/api/capture/schedules/${c.companyId}`))),
       ]);
       const nextCte = {}, nextSchedules = {};
       list.forEach((c, i) => {
         if (cteEntries[i]) nextCte[c.companyId] = cteEntries[i];
-        nextSchedules[c.companyId] = scheduleEntries[i] ? mergeSchedule(scheduleEntries[i]) : defaultSchedule();
+        nextSchedules[c.companyId] = mergeSchedule(scheduleEntries[i]);
       });
       setCteStates(nextCte);
       setSchedules(nextSchedules);

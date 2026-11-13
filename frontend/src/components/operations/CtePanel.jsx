@@ -25,7 +25,9 @@ export function CtePanel({ company, cteState, schedule, cooldown, result, onResu
     try {
       const r = await api.post("/api/cte/download", { companyId: company.companyId, previousConsumerStopped: true });
       onResult?.(r);
-      if (r.status === 137) notify.success("CT-e: nenhum documento disponível.");
+      if (r.saveSucceeded === false) notify.error(r.message || "Falha ao salvar os XMLs CT-e.");
+      else if (r.status === 656) notify.error("SEFAZ 656: consulta bloqueada. Aguarde o intervalo fiscal.");
+      else if (r.status === 137) notify.success("CT-e: nenhum documento disponível.");
       else notify.success(`CT-e: ${r.filesSaved ?? 0} XML(s) completos gravados.`);
     } catch (e) { notify.error(e.message); }
     finally { setBusy(false); }

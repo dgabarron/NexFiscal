@@ -16,9 +16,11 @@ builder.Services.AddSingleton<CompanyCertificateVault>();
 builder.Services.AddSingleton<NfeCaptureCoordinator>();
 builder.Services.AddSingleton<NfeFirstDownload>();
 builder.Services.AddSingleton<CteFirstDownload>();
+builder.Services.AddSingleton<CteSefazCatchup>();
 builder.Services.AddSingleton<CaptureScheduleSettings>();
 builder.Services.AddSingleton<NfeSefazCatchup>();
 builder.Services.AddHostedService<NfeMonitoringWorker>();
+builder.Services.AddHostedService<CteMonitoringWorker>();
 builder.Services.AddSingleton<NfeXmlArchive>();
 builder.Services.AddSingleton<NfeIndividualXmlStore>();
 builder.Services.AddSingleton<NfeHandoffPreparation>();
@@ -260,6 +262,30 @@ app.MapPost("/api/capture/schedules/{companyId}", async (
 });
 
 // CT-e tem distribuição e cursor próprios, independentes do NSU de NF-e.
+app.MapPost("/api/sefaz/cte/catchup", async (
+    CteSefazCatchup.Request request, CteSefazCatchup service, CancellationToken ct) =>
+{
+    try { return Results.Accepted(value: await service.StartAsync(request, ct)); }
+    catch (ArgumentException ex) { return Results.BadRequest(new { error = ex.Message }); }
+    catch (DirectoryNotFoundException ex) { return Results.BadRequest(new { error = ex.Message }); }
+    catch (InvalidOperationException ex) { return Results.Conflict(new { error = ex.Message }); }
+    catch (Exception ex)
+    {
+        app.Logger.LogError(ex, "Falha ao iniciar captura CT-e");
+        return Results.Problem("Não foi possível iniciar a captura CT-e.", statusCode: 503);
+    }
+});
+app.MapGet("/api/sefaz/cte/catchup/{companyId}", (
+    string companyId, CteSefazCatchup service) =>
+{
+    try
+    {
+        var status = service.Get(companyId);
+        return status is null ? Results.NotFound() : Results.Ok(status);
+    }
+    catch (ArgumentException ex) { return Results.BadRequest(new { error = ex.Message }); }
+});
+
 app.MapGet("/api/cte/status/{companyId}", async (
     string companyId, CteFirstDownload service, CancellationToken ct) =>
 {

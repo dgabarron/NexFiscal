@@ -9,6 +9,8 @@ import { Notice } from "../components/common/Notice";
 import { CompanyPicker } from "../components/operations/CompanyPicker";
 import { MonitorPanel } from "../components/operations/MonitorPanel";
 import { CatchupPanel } from "../components/operations/CatchupPanel";
+import { CtePanel } from "../components/operations/CtePanel";
+import { CteSchedulePanel } from "../components/operations/CteSchedulePanel";
 import { useCatchupPolling } from "../hooks/useCatchupPolling";
 import { pendingWindow, formatUtcAsLocal } from "../lib/capture-utils";
 import { formatCnpj } from "../lib/fiscal-format";
@@ -18,10 +20,12 @@ import { formatCnpj } from "../lib/fiscal-format";
  * consultar todos os lotes disponíveis. Sem consNSU ou restauração local.
  */
 export function OverviewPage({
-  companies, schedules, clockNow, selectedCompanyId, onSelectCompany,
+  companies, schedules, cteStates = {}, clockNow, selectedCompanyId, onSelectCompany,
   scheduleField, onScheduleSaved, onRefreshCapture, onNavigate,
 }) {
   const [runs, setRuns] = useState({});
+  const [activeType, setActiveType] = useState("NFE");
+  const [cteResults, setCteResults] = useState({});
   useCatchupPolling(runs, setRuns, companies);
 
   const company = useMemo(
@@ -43,7 +47,7 @@ export function OverviewPage({
   const hasCertificate = !!company.certificateStored;
   const destinationReady = !!nfe?.destinationDirectory?.trim();
   // IMPORTANTE: a consulta manual independe do toggle do Worker.
-  const manualDisabled = !hasCertificate || !destinationReady || !!cooldown || running;
+  const manualDisabled = !hasCertificate || !destinationReady;
   const monitorConfigured = !!nfe?.enabled;
   const label = !hasCertificate ? "Certificado ausente"
     : !destinationReady ? "Configure a pasta de XMLs"
@@ -62,6 +66,20 @@ export function OverviewPage({
         </p>
       </div>
       <CompanyPicker companies={companies} selectedId={company.companyId} onChange={onSelectCompany} />
+      <div role="tablist" aria-label="Documento fiscal" className="flex gap-2 border-b border-slate-200">
+        {[{ type: "NFE", label: "NF-e" }, { type: "CTE", label: "CT-e" }].map((item) => (
+          <button key={item.type} type="button" role="tab"
+            id={`operation-tab-${item.type}`} aria-selected={activeType === item.type}
+            aria-controls="operation-panel"
+            onClick={() => setActiveType(item.type)}
+            className={`border-b-2 px-4 py-3 text-sm font-semibold ${
+              activeType === item.type ? "border-blue-600 text-blue-700" : "border-transparent text-slate-600 hover:text-slate-900"
+            }`}>{item.label}</button>
+        ))}
+      </div>
+      <section id="operation-panel" role="tabpanel" aria-labelledby={`operation-tab-${activeType}`}
+        className="space-y-5">
+      {activeType === "NFE" && <>
       <Card>
         <CardHeader>
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -108,6 +126,29 @@ export function OverviewPage({
           )}
         </>
       )}
+      </>}
+      {activeType === "CTE" && (
+        <>
+          {!schedule.length ? (
+            <Notice type="error">Não foi possível carregar a configuração CT-e. Atualize os dados.</Notice>
+          ) : (
+            <>
+              <Notice type="info">Captura manual de CT-e. O controle fiscal e o armazenamento são independentes do NF-e; não há Worker CT-e nesta versão.</Notice>
+              <CteSchedulePanel company={company} schedules={schedule}
+                onField={scheduleField} onSaved={onScheduleSaved} />
+              <CtePanel key={company.companyId} company={company}
+                cteState={cteStates[company.companyId] || {}} schedule={schedule}
+                cooldown={pendingWindow(cteStates[company.companyId], clockNow)}
+                result={cteResults[company.companyId]}
+                onResult={async (result) => {
+                  setCteResults((previous) => ({ ...previous, [company.companyId]: result }));
+                  await onRefreshCapture?.();
+                }} />
+            </>
+          )}
+        </>
+      )}
+      </section>
     </div>
   );
 }

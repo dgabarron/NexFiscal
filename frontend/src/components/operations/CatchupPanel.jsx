@@ -12,7 +12,15 @@ export function CatchupPanel({ company, cooldown, run, running, disabled, onStar
   const isRunning = running || run?.status === "running";
 
   async function handleStart() {
-    if (starting || disabled || isRunning) return;
+    if (starting || isRunning) return;
+    if (disabled) {
+      notify.error("Configure uma pasta válida no servidor e um certificado A1 para consultar a SEFAZ.");
+      return;
+    }
+    if (cooldown) {
+      notify.success(`O botão está disponível. A SEFAZ permite a próxima consulta após ${cooldown.time} (${cooldown.minutes} min). Nenhuma consulta antecipada foi enviada.`);
+      return;
+    }
     if (!window.confirm(
       "Capturar todos os XMLs de NF-e disponíveis na SEFAZ para este CNPJ?\n\n" +
       "A consulta continuará do NSU salvo até alcançar o máximo informado pela SEFAZ. " +
@@ -32,8 +40,8 @@ export function CatchupPanel({ company, cooldown, run, running, disabled, onStar
         <div className="flex items-center gap-3">
           <div className="p-2.5 bg-blue-50 rounded-lg text-blue-600"><DownloadCloud size={20} /></div>
           <div>
-            <h3 className="text-base font-bold">Sincronização pontual (distNSU)</h3>
-            <p className="text-sm text-slate-500 mt-0.5">Consulta manual e pontual. Compartilha o cursor do monitoramento e não recua NSU.</p>
+            <h3 className="text-base font-bold">Consultar todos os XMLs disponíveis</h3>
+            <p className="text-sm text-slate-500 mt-0.5">Execute a verificação manual quando quiser. A espera fiscal é informada após o clique.</p>
           </div>
         </div>
       </CardHeader>
@@ -42,9 +50,9 @@ export function CatchupPanel({ company, cooldown, run, running, disabled, onStar
           Sincroniza os lotes disponíveis e avança o mesmo NSU do monitoramento.
           A disponibilidade histórica depende da SEFAZ.
         </Notice>
-        <Button className="mt-4" disabled={disabled || isRunning || starting} onClick={handleStart}>
+        <Button className="mt-4" disabled={isRunning || starting} onClick={handleStart}>
           <DownloadCloud size={16} />
-          {isRunning ? "Captura na SEFAZ em andamento" : starting ? "Iniciando..." : "Capturar todos os XMLs disponíveis"}
+          {isRunning ? "Captura na SEFAZ em andamento" : starting ? "Iniciando..." : "Consultar todos os XMLs disponíveis"}
         </Button>
         {run && (
           <div className="mt-4 rounded-lg bg-slate-50 p-3 text-sm">

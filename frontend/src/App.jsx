@@ -78,6 +78,7 @@ function AppInner() {
         <OverviewPage
           companies={capture.companies}
           schedules={capture.schedules}
+          cteStates={capture.cteStates}
           clockNow={clockNow}
           selectedCompanyId={effectiveCompanyId}
           onSelectCompany={setSelectedCompanyId}

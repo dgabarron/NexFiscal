@@ -31,7 +31,9 @@ public sealed class CteMonitoringWorker(
             {
                 var schedule = (await settings.GetAsync(id, ct))
                     .SingleOrDefault(s => s.DocumentType == "CTE");
-                if (schedule is not { Enabled: true } ||
+                // CT-e já tinha a flag Enabled para uso manual em versões antigas.
+                // Somente opt-in novo pode ligar chamadas fiscais automáticas.
+                if (schedule is not { Enabled: true, AutomaticConfirmed: true } ||
                     string.IsNullOrWhiteSpace(schedule.DestinationDirectory) ||
                     !company.GetProperty("certificateStored").GetBoolean())
                     continue;

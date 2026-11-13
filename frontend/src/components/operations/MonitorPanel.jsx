@@ -20,7 +20,9 @@ export function MonitorPanel({ company, schedule, onScheduleField, onSaved, docu
     if (nfe.enabled && !nfe.destinationDirectory.trim()) { notify.error("Preencha a pasta de destino para ativar a captura."); return; }
     setSaving(true);
     try {
-      const entries = schedule.map((s) => ({ ...s, intervalMinutes: String(s.intervalMinutes).trim() }));
+      const entries = schedule.map((s) => ({ ...s, intervalMinutes: String(s.intervalMinutes).trim(),
+        automaticConfirmed: s.documentType === "CTE" && documentType === "CTE"
+          ? !!s.enabled : !!s.automaticConfirmed }));
       const result = await api.post(`/api/capture/schedules/${company.companyId}`, entries);
       await onSaved?.(result);
       notify.success(nfe.enabled

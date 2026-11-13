@@ -39,7 +39,9 @@ export function mergeSchedule(raw) {
     const found = byType.get(documentType) || {};
     return {
       documentType,
-      enabled: !!found.enabled,
+      enabled: documentType === "CTE"
+        ? !!found.enabled && !!found.automaticConfirmed : !!found.enabled,
+      automaticConfirmed: !!found.automaticConfirmed,
       intervalMinutes: String(found.intervalMinutes ?? "60"),
       destinationDirectory: found.destinationDirectory ?? "",
     };

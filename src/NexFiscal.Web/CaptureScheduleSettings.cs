@@ -11,8 +11,8 @@ public sealed class CaptureScheduleSettings(IWebHostEnvironment environment)
     private readonly SemaphoreSlim gate = new(1, 1);
     private string Root => Path.Combine(environment.ContentRootPath, ".nexfiscal-schedules");
 
-    public sealed record Schedule(string DocumentType, bool Enabled, long IntervalMinutes, string? DestinationDirectory);
-    public sealed record ScheduleInput(string DocumentType, bool Enabled, string IntervalMinutes, string? DestinationDirectory);
+    public sealed record Schedule(string DocumentType, bool Enabled, long IntervalMinutes, string? DestinationDirectory, bool AutomaticConfirmed = false);
+    public sealed record ScheduleInput(string DocumentType, bool Enabled, string IntervalMinutes, string? DestinationDirectory, bool AutomaticConfirmed = false);
 
     public async Task<IReadOnlyList<Schedule>> GetAsync(string companyId, CancellationToken ct)
     {
@@ -67,7 +67,8 @@ public sealed class CaptureScheduleSettings(IWebHostEnvironment environment)
                 dir = NfeIndividualXmlStore.ValidateDirectory(s.DestinationDirectory);
             else if (!string.IsNullOrWhiteSpace(s.DestinationDirectory))
                 dir = s.DestinationDirectory.Trim();
-            return new Schedule(s.DocumentType, s.Enabled, interval, dir);
+            return new Schedule(s.DocumentType, s.Enabled, interval, dir,
+                s.DocumentType == "CTE" && s.Enabled && s.AutomaticConfirmed);
         }).OrderBy(s => s.DocumentType, StringComparer.Ordinal).ToArray();
 
         await gate.WaitAsync(ct);

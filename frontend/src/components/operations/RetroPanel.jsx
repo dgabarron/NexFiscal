@@ -43,7 +43,8 @@ export function RetroPanel({ company, cooldown, busy, result, disabled, onExecut
         </Button>
         {result && (
           <div className="mt-3 text-sm">
-            <Notice type={result.state === "completed" ? "success" : "info"}>
+            <Notice type={result.state === "completed" ? "success" :
+              result.state === "rejected" || result.state === "paused" ? "warning" : "info"}>
               {result.message} · NSU: {result.requestedNsu || "não identificado"} ·
               XMLs novos: {result.xmlCreated ?? 0} · Já existentes: {result.alreadyPresent ?? 0}
             </Notice>

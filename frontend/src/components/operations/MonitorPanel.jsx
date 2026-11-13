@@ -24,8 +24,8 @@ export function MonitorPanel({ company, schedule, onScheduleField, onSaved }) {
       const result = await api.post(`/api/capture/schedules/${company.companyId}`, entries);
       await onSaved?.(result);
       notify.success(nfe.enabled
-        ? "Monitoramento NF-e salvo. O Worker respeitará o intervalo e a janela fiscal."
-        : "Monitoramento NF-e desativado.");
+        ? "Monitoramento automático configurado."
+        : "Monitoramento automático desativado. A consulta manual continua disponível.");
     } catch (e) { notify.error(e.message); }
     finally { setSaving(false); }
   }
@@ -46,7 +46,7 @@ export function MonitorPanel({ company, schedule, onScheduleField, onSaved }) {
           <label className="flex items-center gap-2 text-sm font-semibold">
             <input type="checkbox" checked={nfe.enabled}
               onChange={(e) => onScheduleField(company.companyId, "NFE", "enabled", e.target.checked)} />
-            Captura ativa
+            Monitoramento automático ativo
           </label>
           <div className="flex items-center gap-2">
             <label htmlFor="nfe-interval" className="text-xs text-slate-600">Intervalo (min)</label>
@@ -57,11 +57,11 @@ export function MonitorPanel({ company, schedule, onScheduleField, onSaved }) {
           </div>
         </div>
         <div className="mt-3">
-          <label htmlFor="nfe-dir" className="mb-1 block text-xs text-slate-600">Pasta dos XMLs</label>
+          <label htmlFor="nfe-dir" className="mb-1 block text-xs text-slate-600">Pasta dos XMLs (monitoramento e consulta manual)</label>
           <input id="nfe-dir" type="text"
             className="w-full rounded-md border border-slate-300 p-2 text-sm disabled:bg-slate-100 disabled:text-slate-400"
             placeholder="Ex.: C:\\NexFiscal\\XML"
-            value={nfe.destinationDirectory} disabled={!nfe.enabled}
+            value={nfe.destinationDirectory}
             onChange={(e) => onScheduleField(company.companyId, "NFE", "destinationDirectory", e.target.value)} />
         </div>
         <Button className="mt-4" variant="outline" disabled={saving} onClick={save}>

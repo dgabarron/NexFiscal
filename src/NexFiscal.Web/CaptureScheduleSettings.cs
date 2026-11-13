@@ -30,17 +30,18 @@ public sealed class CaptureScheduleSettings(IWebHostEnvironment environment)
     }
 
     /// <summary>
-    /// A consulta manual e o futuro Worker usam a mesma configuração persistida.
+    /// O monitoramento usa Enabled; a consulta manual só exige pasta válida.
     /// Nunca aceitar caminho alternativo enviado na requisição de captura.
     /// </summary>
     public async Task<string> RequireDestinationAsync(
-        string companyId, string documentType, CancellationToken ct)
+        string companyId, string documentType, CancellationToken ct,
+        bool requireEnabled = true)
     {
         var schedules = await GetAsync(companyId, ct);
         var schedule = schedules.SingleOrDefault(s => s.DocumentType == documentType)
             ?? throw new InvalidOperationException("Configuração de captura não encontrada para " + documentType + ".");
-        if (!schedule.Enabled)
-            throw new InvalidOperationException("Marque Captura ativa em " + documentType + " e salve a configuração antes de consultar.");
+        if (requireEnabled && !schedule.Enabled)
+            throw new InvalidOperationException("Habilite o monitoramento em " + documentType + " antes de consultar.");
         if (string.IsNullOrWhiteSpace(schedule.DestinationDirectory))
             throw new InvalidOperationException("Configure a pasta de XMLs em " + documentType + " e salve antes de consultar.");
         return NfeIndividualXmlStore.ValidateDirectory(schedule.DestinationDirectory);

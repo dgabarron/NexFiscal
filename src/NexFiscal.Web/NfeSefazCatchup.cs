@@ -28,7 +28,7 @@ public sealed class NfeSefazCatchup(
     {
         var company = ValidateId(request.CompanyId);
         // Validação de destino ANTES de iniciar tarefa.
-        var destination = await settings.RequireDestinationAsync(company, "NFE", ct);
+        var destination = await settings.RequireDestinationAsync(company, "NFE", ct, requireEnabled: false);
         var starting = new Progress("running", 0, 0, 0, 0, 0,
             null, null, null, DateTimeOffset.UtcNow, null,
             "Consultando documentos disponíveis na SEFAZ para o CNPJ cadastrado.");

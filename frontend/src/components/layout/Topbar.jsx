@@ -1,7 +1,6 @@
 import { ChevronRight, RefreshCw, Settings, ArrowLeft } from "lucide-react";
 export const PAGE_LABELS = {
-  overview: "Painel", companies: "Empresas", captures: "Capturas",
-  recovery: "Recuperação", settings: "Configuração técnica",
+  overview: "Operação", companies: "Empresas", settings: "Configuração técnica",
 };
 export function Topbar({ page, onRefresh, onNavigate, refreshing }) {
   return (

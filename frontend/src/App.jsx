@@ -9,8 +9,6 @@ import { useClock } from "./hooks/useClock";
 import { SetupPage } from "./pages/SetupPage";
 import { OverviewPage } from "./pages/OverviewPage";
 import { CompaniesPage } from "./pages/CompaniesPage";
-import { CapturesPage } from "./pages/CapturesPage";
-import { RecoveryPage } from "./pages/RecoveryPage";
 import { SettingsPage } from "./pages/SettingsPage";
 
 export function App() {
@@ -79,23 +77,6 @@ function AppInner() {
       {page === "overview" && (
         <OverviewPage
           companies={capture.companies}
-          cteStates={capture.cteStates}
-          schedules={capture.schedules}
-          clockNow={clockNow}
-          onFocusCompany={setSelectedCompanyId}
-          onNavigate={setPage}
-        />
-      )}
-      {page === "companies" && (
-        <CompaniesPage
-          companies={capture.companies}
-          onCompanyAdded={() => capture.refresh()}
-        />
-      )}
-      {page === "captures" && (
-        <CapturesPage
-          companies={capture.companies}
-          cteStates={capture.cteStates}
           schedules={capture.schedules}
           clockNow={clockNow}
           selectedCompanyId={effectiveCompanyId}
@@ -108,15 +89,10 @@ function AppInner() {
           onRefreshCapture={capture.refresh}
         />
       )}
-      {page === "recovery" && (
-        <RecoveryPage
+      {page === "companies" && (
+        <CompaniesPage
           companies={capture.companies}
-          cteStates={capture.cteStates}
-          schedules={capture.schedules}
-          clockNow={clockNow}
-          selectedCompanyId={effectiveCompanyId}
-          onSelectCompany={setSelectedCompanyId}
-          onRefreshCapture={capture.refresh}
+          onCompanyAdded={() => capture.refresh()}
         />
       )}
       {page === "settings" && <SettingsPage hanaReady={bootstrap.hanaReady} companies={capture.companies} />}

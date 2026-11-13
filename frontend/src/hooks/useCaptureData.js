@@ -4,7 +4,6 @@ import { mergeSchedule } from "../lib/capture-utils";
 
 export function useCaptureData() {
   const [companies, setCompanies] = useState([]);
-  const [cteStates, setCteStates] = useState({});
   const [schedules, setSchedules] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -15,16 +14,13 @@ export function useCaptureData() {
       const capture = await api.get("/api/capture/status");
       const list = capture.companies || [];
       setCompanies(list);
-      const [cteEntries, scheduleEntries] = await Promise.all([
-        Promise.all(list.map((c) => api.get(`/api/cte/status/${c.companyId}`).catch(() => null))),
-        Promise.all(list.map((c) => api.get(`/api/capture/schedules/${c.companyId}`))),
-      ]);
-      const nextCte = {}, nextSchedules = {};
+      const scheduleEntries = await Promise.all(list.map(
+        (c) => api.get(`/api/capture/schedules/${c.companyId}`)
+      ));
+      const nextSchedules = {};
       list.forEach((c, i) => {
-        if (cteEntries[i]) nextCte[c.companyId] = cteEntries[i];
         nextSchedules[c.companyId] = mergeSchedule(scheduleEntries[i]);
       });
-      setCteStates(nextCte);
       setSchedules(nextSchedules);
     } catch (e) {
       setError(e.message);
@@ -52,5 +48,5 @@ export function useCaptureData() {
     setSchedules((prev) => ({ ...prev, [companyId]: mergeSchedule(list) }));
   }, []);
 
-  return { loading, companies, cteStates, schedules, error, refresh, setScheduleField, replaceSchedule };
+  return { loading, companies, schedules, error, refresh, setScheduleField, replaceSchedule };
 }

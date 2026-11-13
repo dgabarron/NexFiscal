@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   pendingWindow, parseUtcTimestamp, defaultSchedule, mergeSchedule,
-  isValidInterval, maskDateInput, defaultRecoveryDate, parseRecoveryDate,
+  isValidInterval,
 } from "./capture-utils.js";
 
 test("UTC sem Z é interpretado como UTC e janela fiscal é respeitada", () => {
@@ -30,13 +30,4 @@ test("intervalo usa Int64 positivo e rejeita formato indevido", () => {
   for (const valid of ["1", "60", "9223372036854775807"]) assert.equal(isValidInterval(valid), true);
   for (const invalid of ["0", "-1", "1.5", "texto", "", "9223372036854775808"])
     assert.equal(isValidInterval(invalid), false);
-});
-
-test("datas de ZIP continuam locais e não autorizam consulta SEFAZ", () => {
-  const input = defaultRecoveryDate();
-  assert.match(input, /^\d{2}\/\d{2}\/\d{4}$/);
-  assert.match(parseRecoveryDate(input), /^\d{4}-\d{2}-\d{2}T00:00:00.000Z$/);
-  assert.equal(maskDateInput("13112026"), "13/11/2026");
-  assert.throws(() => parseRecoveryDate("31/02/2026"), /Data inválida/);
-  assert.throws(() => parseRecoveryDate("01/01/2000"), /últimos 90 dias/);
 });

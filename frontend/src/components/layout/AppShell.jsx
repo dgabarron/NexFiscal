@@ -2,7 +2,7 @@ import { Sidebar } from "./Sidebar";
 import { Topbar, PAGE_LABELS } from "./Topbar";
 import { Notice } from "../common/Notice";
 import { useNotices } from "../common/NoticesContext";
-const NAV = ["overview", "companies", "captures", "recovery"];
+const NAV = ["overview", "companies"];
 export function AppShell({ page, onNavigate, hanaReady, refreshing, onRefresh, children }) {
   const { error, message, clear } = useNotices();
   return (

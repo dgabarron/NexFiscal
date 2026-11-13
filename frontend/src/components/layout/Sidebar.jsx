@@ -1,9 +1,7 @@
-import { FileText, LayoutDashboard, Building2, DownloadCloud, History } from "lucide-react";
+import { FileText, LayoutDashboard, Building2 } from "lucide-react";
 const NAV = [
-  { key: "overview", label: "Painel", icon: LayoutDashboard },
+  { key: "overview", label: "Operação", icon: LayoutDashboard },
   { key: "companies", label: "Empresas", icon: Building2 },
-  { key: "captures", label: "Capturas", icon: DownloadCloud },
-  { key: "recovery", label: "Recuperação", icon: History },
 ];
 export function Sidebar({ page, onNavigate, hanaReady }) {
   return (

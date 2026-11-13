@@ -33,7 +33,13 @@ export function HanaForm({ onSaved }) {
       if (!result.schemaReady) {
         throw new Error(`Faltam tabelas no HANA: ${result.tablesFound} de 5 tabelas BRAI_NEX. Use "Preparar estrutura".`);
       }
-      if (save) { notify.success("Conexão HANA validada e salva de forma protegida no servidor."); onSaved?.(); }
+      if (save) {
+        setHana((prev) => ({ ...prev, password: "" }));
+        setChecked(false);
+        setShowPass(false);
+        notify.success("Conexão HANA validada e salva de forma protegida no servidor.");
+        onSaved?.();
+      }
       else { notify.success("Conexão estabelecida. Schema BRAI_NEX e cinco tabelas verificados."); }
     } catch (e) { notify.error(e.message); }
     finally { setBusy(false); }

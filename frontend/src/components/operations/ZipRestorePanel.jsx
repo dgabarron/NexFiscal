@@ -58,10 +58,17 @@ export function ZipRestorePanel({ company }) {
         companyId: company.companyId, from,
       });
       setRestoreResult(result);
-      const next = await api.get(`/api/recovery/nfe/preview/${company.companyId}?from=${encodeURIComponent(from)}`);
-      setPreview(next);
-      setPreviewFrom(from);
       notify.success("Restauração local concluída.");
+      // A atualização da prévia é uma segunda operação. Sua falha não desfaz
+      // nem deve ocultar a confirmação de XMLs já restaurados.
+      try {
+        const next = await api.get(`/api/recovery/nfe/preview/${company.companyId}?from=${encodeURIComponent(from)}`);
+        setPreview(next);
+        setPreviewFrom(from);
+      } catch {
+        setPreview(null);
+        setPreviewFrom(null);
+      }
     } catch (e) {
       setPreview(null);
       setPreviewFrom(null);

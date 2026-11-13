@@ -28,17 +28,18 @@ function AppInner() {
   const clockNow = useClock();
   const [page, setPage] = useState("overview");
   const [selectedCompanyId, setSelectedCompanyId] = useState(null);
+  const [refreshing, setRefreshing] = useState(false);
 
   if (bootstrap.loading || capture.loading) {
     return <div className="min-h-screen bg-[#f5f7fb]"><LoadingBlock label="Carregando NexFiscal..." /></div>;
   }
 
-  if (bootstrap.error) {
+  if (bootstrap.error || (bootstrap.hanaReady && capture.error)) {
     return (
       <div className="min-h-screen bg-[#f5f7fb] flex items-center justify-center p-6">
         <div className="max-w-lg w-full">
           <Notice type="error" title="Falha ao inicializar">
-            {bootstrap.error}
+            {bootstrap.error || capture.error}
             <button className="mt-3 block text-xs underline text-red-900"
               onClick={() => { bootstrap.refresh(); capture.refresh(); }}>
               Tentar novamente
@@ -50,7 +51,7 @@ function AppInner() {
   }
 
   if (!bootstrap.hanaReady) {
-    return <SetupPage step={0} onHanaSaved={() => bootstrap.refresh()} />;
+    return <SetupPage step={0} onHanaSaved={async () => { await Promise.all([bootstrap.refresh(), capture.refresh()]); }} />;
   }
   if (capture.companies.length === 0) {
     return <SetupPage step={1} onCompanyRegistered={async () => {
@@ -59,10 +60,13 @@ function AppInner() {
     }} />;
   }
 
-  const effectiveCompanyId = selectedCompanyId || capture.companies[0]?.companyId || null;
+  const effectiveCompanyId = capture.companies.some(c => c.companyId === selectedCompanyId)
+    ? selectedCompanyId : capture.companies[0]?.companyId || null;
 
   async function refreshAll() {
-    await Promise.all([bootstrap.refresh(), capture.refresh()]);
+    setRefreshing(true);
+    try { await Promise.all([bootstrap.refresh(), capture.refresh()]); }
+    finally { setRefreshing(false); }
   }
 
   return (
@@ -70,13 +74,14 @@ function AppInner() {
       page={page}
       onNavigate={setPage}
       hanaReady={bootstrap.hanaReady}
-      refreshing={false}
+      refreshing={refreshing}
       onRefresh={refreshAll}
     >
       {page === "overview" && (
         <OverviewPage
           companies={capture.companies}
           cteStates={capture.cteStates}
+          schedules={capture.schedules}
           clockNow={clockNow}
           onFocusCompany={setSelectedCompanyId}
           onNavigate={setPage}
@@ -97,8 +102,8 @@ function AppInner() {
           selectedCompanyId={effectiveCompanyId}
           onSelectCompany={setSelectedCompanyId}
           scheduleField={capture.setScheduleField}
-          onScheduleSaved={async (result) => {
-            capture.replaceSchedule(effectiveCompanyId, result);
+          onScheduleSaved={async (companyId, result) => {
+            capture.replaceSchedule(companyId, result);
             await capture.refresh();
           }}
           onRefreshCapture={capture.refresh}
@@ -112,12 +117,19 @@ function AppInner() {
           clockNow={clockNow}
           selectedCompanyId={effectiveCompanyId}
           onSelectCompany={setSelectedCompanyId}
+          scheduleField={capture.setScheduleField}
+          onScheduleSaved={async (companyId, result) => {
+            capture.replaceSchedule(companyId, result);
+            await capture.refresh();
+          }}
+          onRefreshCapture={capture.refresh}
         />
       )}
       {page === "recovery" && (
         <RecoveryPage
           companies={capture.companies}
           cteStates={capture.cteStates}
+          schedules={capture.schedules}
           clockNow={clockNow}
           selectedCompanyId={effectiveCompanyId}
           onSelectCompany={setSelectedCompanyId}

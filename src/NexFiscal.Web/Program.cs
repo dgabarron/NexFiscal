@@ -43,6 +43,16 @@ if (Directory.Exists(staticRoot))
 }
 else app.Logger.LogWarning("Frontend não compilado. Execute npm run build em frontend.");
 
+// Rota explícita: a página deve funcionar mesmo quando o wwwroot é
+// gerado pelo Vite após o dotnet build, evitando dependência do manifesto estático.
+app.MapGet("/", () =>
+{
+    var file = Path.Combine(staticRoot, "index.html");
+    return File.Exists(file)
+        ? Results.File(file, "text/html; charset=utf-8")
+        : Results.Problem("Frontend não compilado. Execute npm run build em frontend.", statusCode: 503);
+});
+
 app.MapGet("/api/health", () => Results.Ok(new { product = "NexFiscal", version = "V1", stage = 1 }));
 
 app.MapGet("/api/setup/hana/status", async (HanaSetup hana, CancellationToken ct) =>

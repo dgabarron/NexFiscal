@@ -10,7 +10,7 @@ import { api } from "../lib/api";
 import { pendingWindow, formatUtcAsLocal } from "../lib/capture-utils";
 import { formatCnpj } from "../lib/fiscal-format";
 
-export function OverviewPage({ companies, cteStates, clockNow, onFocusCompany, onNavigate }) {
+export function OverviewPage({ companies, cteStates, schedules, clockNow, onFocusCompany, onNavigate }) {
   const { notify } = useNotices();
 
   async function testConnectivity(companyId) {
@@ -43,6 +43,8 @@ export function OverviewPage({ companies, cteStates, clockNow, onFocusCompany, o
         const cteState = cteStates[company.companyId] || {};
         const cteCooldown = pendingWindow(cteState, clockNow);
         const certOk = !!company.certificateStored;
+        const nfeSchedule = schedules?.[company.companyId]?.find((s) => s.documentType === "NFE");
+        const monitoringActive = !!nfeSchedule?.enabled;
         return (
           <Card key={company.companyId}>
             <CardHeader>
@@ -53,8 +55,9 @@ export function OverviewPage({ companies, cteStates, clockNow, onFocusCompany, o
                 </div>
                 <div className="flex items-center gap-2">
                   {!certOk ? <Badge tone="warning"><AlertTriangle size={13} />Certificado ausente</Badge>
+                    : !monitoringActive ? <Badge tone="neutral">Monitoramento desativado</Badge>
                     : cooldown ? <Badge tone="warning">Aguardando cooldown</Badge>
-                    : <Badge tone="success"><CheckCircle2 size={13} />Pronto</Badge>}
+                    : <Badge tone="success"><CheckCircle2 size={13} />Monitoramento configurado</Badge>}
                 </div>
               </div>
             </CardHeader>

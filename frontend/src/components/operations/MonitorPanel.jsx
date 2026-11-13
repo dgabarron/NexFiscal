@@ -6,10 +6,10 @@ import { useNotices } from "../common/NoticesContext";
 import { api } from "../../lib/api";
 import { isValidInterval } from "../../lib/capture-utils";
 
-export function MonitorPanel({ company, schedule, onScheduleField, onSaved }) {
+export function MonitorPanel({ company, schedule, onScheduleField, onSaved, documentType = "NFE" }) {
   const { notify } = useNotices();
   const [saving, setSaving] = useState(false);
-  const nfe = schedule.find((s) => s.documentType === "NFE");
+  const nfe = schedule.find((s) => s.documentType === documentType);
   if (!nfe) return null;
 
   async function save() {
@@ -36,7 +36,7 @@ export function MonitorPanel({ company, schedule, onScheduleField, onSaved }) {
         <div className="flex items-center gap-3">
           <div className="p-2.5 bg-emerald-50 rounded-lg text-emerald-600"><Activity size={20} /></div>
           <div>
-            <h3 className="text-base font-bold">Monitoramento automático</h3>
+            <h3 className="text-base font-bold">Monitoramento automático de {documentType === "CTE" ? "CT-e" : "NF-e"}</h3>
             <p className="mt-1 text-sm text-slate-500">Configure a captura recorrente e a pasta usada também na consulta manual.</p>
           </div>
         </div>
@@ -45,7 +45,7 @@ export function MonitorPanel({ company, schedule, onScheduleField, onSaved }) {
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-slate-50 p-3">
           <label className="flex items-center gap-2 text-sm font-semibold">
             <input type="checkbox" checked={nfe.enabled}
-              onChange={(e) => onScheduleField(company.companyId, "NFE", "enabled", e.target.checked)} />
+              onChange={(e) => onScheduleField(company.companyId, documentType, "enabled", e.target.checked)} />
             Ativar monitoramento
           </label>
           <div className="flex items-center gap-2">
@@ -53,7 +53,7 @@ export function MonitorPanel({ company, schedule, onScheduleField, onSaved }) {
             <input id="nfe-interval" type="text" inputMode="numeric" pattern="[0-9]*"
               className="w-24 rounded-md border border-slate-300 bg-white p-2 text-sm"
               value={nfe.intervalMinutes}
-              onChange={(e) => onScheduleField(company.companyId, "NFE", "intervalMinutes", e.target.value)} />
+              onChange={(e) => onScheduleField(company.companyId, documentType, "intervalMinutes", e.target.value)} />
           </div>
         </div>
         <div className="mt-3">
@@ -62,7 +62,7 @@ export function MonitorPanel({ company, schedule, onScheduleField, onSaved }) {
             className="w-full rounded-md border border-slate-300 p-2 text-sm disabled:bg-slate-100 disabled:text-slate-400"
             placeholder="Ex.: C:\\NexFiscal\\XML"
             value={nfe.destinationDirectory}
-            onChange={(e) => onScheduleField(company.companyId, "NFE", "destinationDirectory", e.target.value)} />
+            onChange={(e) => onScheduleField(company.companyId, documentType, "destinationDirectory", e.target.value)} />
         </div>
         <Button className="mt-4" variant="outline" disabled={saving} onClick={save}>
           <Save size={16} />{saving ? "Salvando..." : "Salvar configurações"}

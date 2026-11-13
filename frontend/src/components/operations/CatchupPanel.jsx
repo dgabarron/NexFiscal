@@ -6,9 +6,10 @@ import { Notice } from "../common/Notice";
 import { useNotices } from "../common/NoticesContext";
 import { api } from "../../lib/api";
 
-export function CatchupPanel({ company, cooldown, run, running, disabled, onStart, onCompleted }) {
+export function CatchupPanel({ company, cooldown, run, running, disabled, onStart, onCompleted, documentType = "NFE" }) {
   const { notify } = useNotices();
   const [starting, setStarting] = useState(false);
+  const isCte = documentType === "CTE";
   const isRunning = running || run?.status === "running" || run?.status === "scheduled";
 
   async function handleStart() {
@@ -19,7 +20,7 @@ export function CatchupPanel({ company, cooldown, run, running, disabled, onStar
     }
     setStarting(true);
     try {
-      const result = await api.post("/api/sefaz/nfe/catchup", { companyId: company.companyId });
+      const result = await api.post(isCte ? "/api/sefaz/cte/catchup" : "/api/sefaz/nfe/catchup", { companyId: company.companyId });
       onStart?.(result);
     } catch (e) { notify.error(e.message); }
     finally { setStarting(false); }
@@ -31,7 +32,7 @@ export function CatchupPanel({ company, cooldown, run, running, disabled, onStar
         <div className="flex items-center gap-3">
           <div className="p-2.5 bg-blue-50 rounded-lg text-blue-600"><DownloadCloud size={20} /></div>
           <div>
-            <h3 className="text-base font-bold">Capturar NF-e agora</h3>
+            <h3 className="text-base font-bold">Capturar {isCte ? "CT-e" : "NF-e"} agora</h3>
             <p className="mt-1 text-sm text-slate-500">Solicite a captura dos documentos disponibilizados para esta empresa.</p>
           </div>
         </div>
@@ -56,7 +57,7 @@ export function CatchupPanel({ company, cooldown, run, running, disabled, onStar
             </div>
             {run.message && <p className="mt-2 text-xs text-slate-600">{run.message}</p>}
             <p className="mt-2 text-xs text-slate-500">
-              Resumos e eventos que não são XMLs completos: {run.ignoredNonProcNFe ?? 0}.
+              Resumos e eventos que não são XMLs completos: {isCte ? run.ignoredNonProcCTe ?? 0 : run.ignoredNonProcNFe ?? 0}.
             </p>
             {run.status !== "running" && (
               <Button variant="ghost" size="sm" className="mt-2" onClick={() => onCompleted?.()}>

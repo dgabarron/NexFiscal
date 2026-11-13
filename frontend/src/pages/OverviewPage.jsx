@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Activity, AlertTriangle, Building2, CheckCircle2, FileCheck2, FolderOpen, History, Truck } from "lucide-react";
+import { Activity, AlertTriangle, Building2, CheckCircle2, FileCheck2, History, Truck } from "lucide-react";
 import { Card, CardContent } from "../components/ui/card";
 import { Button } from "../components/ui/button";
 import { Badge } from "../components/common/Badge";
@@ -8,8 +8,6 @@ import { Notice } from "../components/common/Notice";
 import { CompanyPicker } from "../components/operations/CompanyPicker";
 import { MonitorPanel } from "../components/operations/MonitorPanel";
 import { CatchupPanel } from "../components/operations/CatchupPanel";
-import { CtePanel } from "../components/operations/CtePanel";
-import { CteSchedulePanel } from "../components/operations/CteSchedulePanel";
 import { useCatchupPolling } from "../hooks/useCatchupPolling";
 import { pendingWindow, formatUtcAsLocal } from "../lib/capture-utils";
 import { formatCnpj } from "../lib/fiscal-format";
@@ -33,8 +31,9 @@ export function OverviewPage({
 }) {
   const [runs, setRuns] = useState({});
   const [documentType, setDocumentType] = useState("NFE");
-  const [cteResults, setCteResults] = useState({});
+  const [cteRuns, setCteRuns] = useState({});
   useCatchupPolling(runs, setRuns, companies);
+  useCatchupPolling(cteRuns, setCteRuns, companies, "CTE");
 
   const company = useMemo(
     () => companies.find((item) => item.companyId === selectedCompanyId) || companies[0],
@@ -53,14 +52,20 @@ export function OverviewPage({
   const cteState = cteStates[company.companyId] || {};
   const cteWindow = pendingWindow(cteState, clockNow);
   const run = runs[company.companyId];
+  const cteRun = cteRuns[company.companyId];
   const hasCertificate = !!company.certificateStored;
   const nfeFolder = !!nfe?.destinationDirectory?.trim();
+  const cteFolder = !!cte?.destinationDirectory?.trim();
 
   const status = !hasCertificate ? { label: "Certificado pendente", tone: "warning" }
     : documentType === "NFE" && !nfeFolder ? { label: "Configure a pasta", tone: "warning" }
     : documentType === "NFE" && run?.status === "scheduled" ? { label: "Consulta agendada", tone: "info" }
     : documentType === "NFE" && run?.status === "running" ? { label: "Capturando NF-e", tone: "info" }
     : documentType === "NFE" && nfeWindow ? { label: "Janela fiscal em espera", tone: "neutral" }
+    : documentType === "CTE" && !cteFolder ? { label: "Configure a pasta CT-e", tone: "warning" }
+    : documentType === "CTE" && cteRun?.status === "scheduled" ? { label: "Captura CT-e agendada", tone: "info" }
+    : documentType === "CTE" && cteRun?.status === "running" ? { label: "Capturando CT-e", tone: "info" }
+    : documentType === "CTE" && cteWindow ? { label: "Janela fiscal em espera", tone: "neutral" }
     : { label: "Pronto para operar", tone: "success" };
 
   return (
@@ -155,27 +160,29 @@ export function OverviewPage({
         ) : (
           <>
             <div className="grid gap-3 md:grid-cols-3">
-              <InfoMetric icon={Truck} label="Modalidade" value="Captura manual CT-e" />
-              <InfoMetric icon={History} label="Última tentativa"
-                value={formatUtcAsLocal(cteState.lastAttemptUtc)} />
-              <InfoMetric icon={FolderOpen} label="Destino no servidor"
-                value={cte?.destinationDirectory?.trim() || "Não configurado"} />
+              <InfoMetric icon={Truck} label="Monitoramento CT-e" value={cte?.enabled ? "Ativo" : "Desativado"} />
+              <InfoMetric icon={History} label="Última consulta" value={formatUtcAsLocal(cteState.lastAttemptUtc)} />
+              <InfoMetric icon={Activity} label="Janela de consulta"
+                value={cteWindow ? `Liberada após ${cteWindow.time}` : "Sem bloqueio informado"}
+                detail={cteWindow ? "Solicite agora para agendar automaticamente" : undefined} />
             </div>
             {!configured.length ? (
               <Notice type="error">Não foi possível carregar as configurações CT-e. Clique em Atualizar.</Notice>
             ) : (
               <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1.15fr)_minmax(340px,0.85fr)]">
-                <CtePanel key={company.companyId} company={company} cteState={cteState}
-                  schedule={configured} cooldown={cteWindow} result={cteResults[company.companyId]}
-                  onResult={async (result) => {
-                    setCteResults((prev) => ({ ...prev, [company.companyId]: result }));
-                    await onRefreshCapture?.();
-                  }} />
-                <CteSchedulePanel company={company} schedules={configured}
-                  onField={scheduleField} onSaved={onScheduleSaved} />
+                <CatchupPanel company={company} documentType="CTE" cooldown={cteWindow}
+                  run={cteRun} running={cteRun?.status === "running" || cteRun?.status === "scheduled"}
+                  disabled={!hasCertificate || !cteFolder}
+                  onStart={(result) => setCteRuns((prev) => ({ ...prev, [company.companyId]: result }))}
+                  onCompleted={onRefreshCapture} />
+                <MonitorPanel company={company} documentType="CTE" schedule={configured}
+                  onScheduleField={scheduleField}
+                  onSaved={(result) => onScheduleSaved?.(company.companyId, result)} />
               </div>
             )}
-            <Notice type="info">Nesta versão, CT-e é consultado manualmente. O monitoramento automático existente é exclusivo de NF-e.</Notice>
+            {!hasCertificate && <Notice type="warning">Cadastre o certificado A1 para consultar CT-e.</Notice>}
+            {!cteFolder && configured.length > 0 &&
+              <Notice type="info">Configure e salve a pasta dos XMLs CT-e para capturar.</Notice>}
           </>
         )}
       </section>

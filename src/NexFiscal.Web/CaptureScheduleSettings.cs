@@ -93,6 +93,12 @@ public sealed class CaptureScheduleSettings(IWebHostEnvironment environment)
         finally { gate.Release(); }
     }
 
+    public void DeleteUnused(string companyId)
+    {
+        var path = FilePath(companyId);
+        if (File.Exists(path)) File.Delete(path);
+    }
+
     private string FilePath(string companyId) =>
         Guid.TryParse(companyId, out var id)
             ? Path.Combine(Root, id.ToString("D") + ".json")

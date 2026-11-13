@@ -5,7 +5,8 @@ using System.Text.Json;
 /// <summary>Remove apenas cadastro inicial sem dados fiscais; nunca apaga checkpoint ou XML.</summary>
 public sealed class CompanyRegistrationRemoval(
     HanaSetup hana, CompanyCertificateVault vault, CaptureScheduleSettings schedules,
-    CteFirstDownload cte, NfeSefazCatchup nfeJobs, CteSefazCatchup cteJobs)
+    CteFirstDownload cte, NfeSefazCatchup nfeJobs, CteSefazCatchup cteJobs,
+    ILogger<CompanyRegistrationRemoval> logger)
 {
     public sealed record Request(string CnpjConfirmation);
 
@@ -19,7 +20,7 @@ public sealed class CompanyRegistrationRemoval(
             throw new InvalidOperationException("Há uma captura em andamento ou agendada. Aguarde sua conclusão.");
 
         var configured = await schedules.GetAsync(key, ct);
-        if (configured.Any(x => x.DocumentType is "NFE" or "CTE" && x.Enabled))
+        if (configured.Any(x => (x.DocumentType is "NFE" or "CTE") && x.Enabled))
             throw new InvalidOperationException("Desative e salve o monitoramento NF-e e CT-e antes de remover a empresa.");
         var cteState = await cte.StatusAsync(key, ct);
         using var cteJson = JsonDocument.Parse(JsonSerializer.Serialize(cteState));
@@ -63,8 +64,21 @@ public sealed class CompanyRegistrationRemoval(
             await tx.RollbackAsync(CancellationToken.None);
             throw;
         }
-        // Após commit: cofre protegido deixa de ter vínculo e não é apagado silenciosamente.
-        // Repositório local de configurações é preservado para auditoria.
+        // Limpeza apenas dos arquivos privados de configuração e certificado deste ID.
+        // Não toca em pastas de XML nem em checkpoint que possua histórico.
+        try
+        {
+            vault.DeleteUnused(key);
+            schedules.DeleteUnused(key);
+        }
+        catch (IOException ex)
+        {
+            logger.LogWarning("Cadastro removido, mas limpeza local pendente: {Type}", ex.GetType().Name);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            logger.LogWarning("Cadastro removido, mas limpeza local pendente: {Type}", ex.GetType().Name);
+        }
     }
 
     private static DbCommand Command(DbConnection connection, DbTransaction tx, string sql, object parameter)

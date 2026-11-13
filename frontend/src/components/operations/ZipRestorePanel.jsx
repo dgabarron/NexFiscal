@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Unarchive, Search } from "lucide-react";
+import { ArchiveRestore, Search } from "lucide-react";
 import { Card, CardHeader, CardContent } from "../ui/card";
 import { Button } from "../ui/button";
 import { Notice } from "../common/Notice";
@@ -73,7 +73,7 @@ export function ZipRestorePanel({ company }) {
     <Card>
       <CardHeader>
         <div className="flex items-center gap-3">
-          <div className="rounded-lg bg-slate-100 p-2.5 text-slate-600"><Unarchive size={20} /></div>
+          <div className="rounded-lg bg-slate-100 p-2.5 text-slate-600"><ArchiveRestore size={20} /></div>
           <div>
             <h3 className="text-base font-bold">Restauração de ZIPs locais</h3>
             <p className="mt-1 text-sm text-slate-500">
@@ -103,7 +103,7 @@ export function ZipRestorePanel({ company }) {
           {preview && (
             <Button disabled={busy || previewFrom !== parseRecoveryDate(dateInput) ||
               !preview.scanComplete || preview.invalidFiles > 0} onClick={restore}>
-              <Unarchive size={16} />Restaurar para pasta
+              <ArchiveRestore size={16} />Restaurar para pasta
             </Button>
           )}
         </div>

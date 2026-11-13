@@ -20,6 +20,7 @@ export function RecoveryPage({
   const active = useRef(new Set());
   const [retroResult, setRetroResult] = useState({});
   const [catchupStatus, setCatchupStatus] = useState({});
+  const [showZipTools, setShowZipTools] = useState(false);
 
   const companyId = company?.companyId;
   // Apenas GET de status: nenhuma chamada SEFAZ acontece no polling da interface.
@@ -72,8 +73,7 @@ export function RecoveryPage({
       <div>
         <h1 className="text-2xl font-bold text-slate-900">Recuperação NF-e</h1>
         <p className="mt-1 text-sm text-slate-500">
-          A consulta retroativa à SEFAZ e a restauração de ZIPs são ações independentes.
-          Nenhuma delas avança o checkpoint sequencial de monitoramento.
+          Recupere lacunas de NSU identificadas. A restauração local está nas opções avançadas.
         </p>
       </div>
       <CompanyPicker companies={companies} selectedId={company.companyId} onChange={onSelectCompany} />
@@ -84,7 +84,15 @@ export function RecoveryPage({
         disabled={!company.certificateStored || !!cooldown || catchupRunning ||
           !nfe?.enabled || !nfe.destinationDirectory?.trim()}
         onExecute={runRetro} />
-      <ZipRestorePanel key={company.companyId} company={company} />
+      <details className="rounded-lg border border-slate-200 bg-white p-4"
+        onToggle={(event) => setShowZipTools(event.currentTarget.open)}>
+        <summary className="cursor-pointer text-sm font-semibold text-slate-700">
+          Opções avançadas: restaurar XMLs de ZIPs locais
+        </summary>
+        {showZipTools && <div className="mt-4">
+          <ZipRestorePanel key={company.companyId} company={company} />
+        </div>}
+      </details>
     </div>
   );
 }

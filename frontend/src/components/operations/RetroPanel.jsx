@@ -28,9 +28,8 @@ export function RetroPanel({ company, cooldown, busy, result, disabled, onExecut
         </div>
       </CardHeader>
       <CardContent>
-        <Notice type="warning" title="Consulta específica, não varredura histórica">
-          Não busca todos os documentos desde a abertura da empresa. Não consulta NSUs anteriores
-          ao primeiro documento armazenado e respeita as limitações da SEFAZ.
+        <Notice type="info">
+          Consulta uma lacuna conhecida de NSU. A SEFAZ pode não disponibilizar documentos antigos.
         </Notice>
         {cooldown && <p className="mt-3 text-sm text-amber-800">
           Próxima consulta permitida após {cooldown.time} ({cooldown.minutes} min).

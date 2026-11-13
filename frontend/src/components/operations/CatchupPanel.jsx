@@ -38,11 +38,9 @@ export function CatchupPanel({ company, cooldown, run, running, disabled, onStar
         </div>
       </CardHeader>
       <CardContent>
-        <Notice type="warning">
-          A SEFAZ não disponibiliza todas as NF-e desde a abertura da empresa por esta API. Esta ação
-          percorre os lotes atualmente disponíveis, sem limite interno de lotes. Resumos e eventos
-          recebidos são preservados no registro de distribuição, mas não são gravados como NF-e
-          completas na pasta.
+        <Notice type="info">
+          Sincroniza os lotes disponíveis e avança o mesmo NSU do monitoramento.
+          A disponibilidade histórica depende da SEFAZ.
         </Notice>
         <Button className="mt-4" disabled={disabled || isRunning || starting} onClick={handleStart}>
           <DownloadCloud size={16} />
@@ -51,13 +49,17 @@ export function CatchupPanel({ company, cooldown, run, running, disabled, onStar
         {run && (
           <div className="mt-4 rounded-lg bg-slate-50 p-3 text-sm">
             <div className="font-semibold mb-2">Estado: {labelFor(run.status)} · Lotes: {run.batches ?? 0}</div>
-            <div className="grid grid-cols-2 gap-2 md:grid-cols-4 text-xs">
+            <div className="grid grid-cols-2 gap-2 text-xs">
               <span>XMLs novos: <strong>{run.completeSaved ?? 0}</strong></span>
               <span>Já existentes: <strong>{run.alreadyPresent ?? 0}</strong></span>
-              <span>Resumos/eventos ignorados: <strong>{run.ignoredNonProcNFe ?? 0}</strong></span>
-              <span>Último NSU: <strong>{run.lastNsu || "—"}</strong></span>
             </div>
             {run.message && <p className="mt-2 text-xs text-slate-600">{run.message}</p>}
+            <details className="mt-2 text-xs text-slate-600">
+              <summary className="cursor-pointer">Detalhes técnicos</summary>
+              <p className="mt-1">
+                Último NSU: {run.lastNsu || "—"} · Resumos/eventos: {run.ignoredNonProcNFe ?? 0}
+              </p>
+            </details>
             {run.status !== "running" && (
               <Button variant="ghost" size="sm" className="mt-2" onClick={() => onCompleted?.()}>
                 <RefreshCw size={14} />Atualizar lista de empresas

@@ -1,11 +1,13 @@
 using System.Net;
 using Microsoft.AspNetCore.DataProtection;
+using Microsoft.Extensions.FileProviders;
 
 var contentRoot = NexFiscalDataDirectory.ResolveContentRoot(AppContext.BaseDirectory);
 var builder = WebApplication.CreateBuilder(new WebApplicationOptions
 {
     Args = args,
-    ContentRootPath = contentRoot
+    ContentRootPath = contentRoot,
+    WebRootPath = Path.Combine(contentRoot, "wwwroot")
 });
 builder.WebHost.UseUrls("http://127.0.0.1:5187");
 var dataDirectory = new NexFiscalDataDirectory(
@@ -32,8 +34,14 @@ app.Use(async (context, next) =>
     context.Response.Headers["X-Frame-Options"] = "DENY";
     await next();
 });
-app.UseDefaultFiles();
-app.UseStaticFiles();
+var staticRoot = Path.Combine(contentRoot, "wwwroot");
+if (Directory.Exists(staticRoot))
+{
+    var files = new PhysicalFileProvider(staticRoot);
+    app.UseDefaultFiles(new DefaultFilesOptions { FileProvider = files });
+    app.UseStaticFiles(new StaticFileOptions { FileProvider = files });
+}
+else app.Logger.LogWarning("Frontend não compilado. Execute npm run build em frontend.");
 
 app.MapGet("/api/health", () => Results.Ok(new { product = "NexFiscal", version = "V1", stage = 1 }));
 

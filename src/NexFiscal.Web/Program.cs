@@ -1,7 +1,7 @@
 using System.Net;
 using Microsoft.AspNetCore.DataProtection;
 
-var contentRoot = Path.GetDirectoryName(typeof(Program).Assembly.Location)!;
+var contentRoot = NexFiscalDataDirectory.ResolveContentRoot(AppContext.BaseDirectory);
 var builder = WebApplication.CreateBuilder(new WebApplicationOptions
 {
     Args = args,

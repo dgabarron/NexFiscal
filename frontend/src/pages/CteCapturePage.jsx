@@ -1,4 +1,6 @@
 import { useMemo, useState } from "react";
+import { CteSchedulePanel } from "../components/operations/CteSchedulePanel";
+import { Notice } from "../components/common/Notice";
 import { Building2 } from "lucide-react";
 import { CompanyPicker } from "../components/operations/CompanyPicker";
 import { CtePanel } from "../components/operations/CtePanel";
@@ -7,9 +9,10 @@ import { EmptyState } from "../components/common/EmptyState";
 
 export function CteCapturePage({
   companies, cteStates, schedules, clockNow, selectedCompanyId, onSelectCompany,
+  scheduleField, onScheduleSaved, onRefreshCapture,
 }) {
   const [results, setResults] = useState({});
-  const [busy] = useState(false);
+
   const company = useMemo(
     () => companies.find((c) => c.companyId === selectedCompanyId) || companies[0],
     [companies, selectedCompanyId]
@@ -30,9 +33,15 @@ export function CteCapturePage({
         </p>
       </div>
       <CompanyPicker companies={companies} selectedId={company.companyId} onChange={onSelectCompany} />
+      {schedule.length === 0 ? <Notice type="error">Não foi possível carregar a configuração CT-e. Atualize os dados.</Notice>
+        : <CteSchedulePanel company={company} schedules={schedule}
+          onField={scheduleField} onSaved={onScheduleSaved} />}
       <CtePanel company={company} cteState={cteState} schedule={schedule} cooldown={cooldown}
-        busy={busy} result={results[company.companyId]}
-        onResult={(r) => setResults((prev) => ({ ...prev, [company.companyId]: r }))} />
+        result={results[company.companyId]}
+        onResult={async (r) => {
+          setResults((prev) => ({ ...prev, [company.companyId]: r }));
+          await onRefreshCapture?.();
+        }} />
     </div>
   );
 }

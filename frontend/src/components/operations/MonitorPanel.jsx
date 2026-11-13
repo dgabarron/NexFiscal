@@ -36,8 +36,8 @@ export function MonitorPanel({ company, schedule, onScheduleField, onSaved }) {
         <div className="flex items-center gap-3">
           <div className="p-2.5 bg-emerald-50 rounded-lg text-emerald-600"><Activity size={20} /></div>
           <div>
-            <h3 className="text-base font-bold">Monitoramento automático NF-e</h3>
-            <p className="text-sm text-slate-500 mt-0.5">O servidor consulta quando o intervalo e a janela SEFAZ permitem.</p>
+            <h3 className="text-base font-bold">Monitoramento automático</h3>
+            <p className="mt-1 text-sm text-slate-500">Configure a captura recorrente e a pasta usada também na consulta manual.</p>
           </div>
         </div>
       </CardHeader>
@@ -46,7 +46,7 @@ export function MonitorPanel({ company, schedule, onScheduleField, onSaved }) {
           <label className="flex items-center gap-2 text-sm font-semibold">
             <input type="checkbox" checked={nfe.enabled}
               onChange={(e) => onScheduleField(company.companyId, "NFE", "enabled", e.target.checked)} />
-            Monitoramento automático ativo
+            Ativar monitoramento
           </label>
           <div className="flex items-center gap-2">
             <label htmlFor="nfe-interval" className="text-xs text-slate-600">Intervalo (min)</label>
@@ -65,7 +65,7 @@ export function MonitorPanel({ company, schedule, onScheduleField, onSaved }) {
             onChange={(e) => onScheduleField(company.companyId, "NFE", "destinationDirectory", e.target.value)} />
         </div>
         <Button className="mt-4" variant="outline" disabled={saving} onClick={save}>
-          <Save size={16} />{saving ? "Salvando..." : "Salvar configuração do monitoramento"}
+          <Save size={16} />{saving ? "Salvando..." : "Salvar configurações"}
         </Button>
       </CardContent>
     </Card>

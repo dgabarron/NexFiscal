@@ -5,7 +5,6 @@ import { Button } from "../ui/button";
 import { Notice } from "../common/Notice";
 import { useNotices } from "../common/NoticesContext";
 import { api } from "../../lib/api";
-import { Stat } from "../common/Stat";
 
 export function CtePanel({ company, cteState, schedule, cooldown, result, onResult }) {
   const { notify } = useNotices();
@@ -18,7 +17,7 @@ export function CtePanel({ company, cteState, schedule, cooldown, result, onResu
       notify.error("Ative a captura CT-e, informe a pasta e salve a configuração."); return;
     }
     if (cooldown) {
-      notify.success(`A consulta CT-e estará permitida após ${cooldown.time} (${cooldown.minutes} min). Nenhuma chamada antecipada foi feita.`);
+      notify.error(`A SEFAZ permite a próxima consulta CT-e após ${cooldown.time}. Nenhuma consulta antecipada foi enviada.`);
       return;
     }
     if (!window.confirm("Confirma que não existe outro capturador CT-e ativo? A consulta será enviada à SEFAZ.")) return;
@@ -41,25 +40,19 @@ export function CtePanel({ company, cteState, schedule, cooldown, result, onResu
         <div className="flex items-center gap-3">
           <div className="p-2.5 bg-blue-50 rounded-lg text-blue-600"><Truck size={20} /></div>
           <div>
-            <h3 className="text-base font-bold">Consulta CT-e (manual)</h3>
-            <p className="text-sm text-slate-500 mt-0.5">Uma consulta por vez. Cursor CT-e é independente do cursor NF-e.</p>
+            <h3 className="text-base font-bold">Capturar CT-e</h3>
+            <p className="mt-1 text-sm text-slate-500">Consulte os conhecimentos disponíveis para esta empresa.</p>
           </div>
         </div>
       </CardHeader>
       <CardContent>
-        <details className="rounded-lg border border-slate-200 p-3">
-          <summary className="cursor-pointer text-xs font-semibold text-slate-600">Detalhes técnicos de NSU</summary>
-          <div className="mt-3 grid gap-3 sm:grid-cols-2">
-            <Stat label="Último NSU CT-e" value={cteState?.lastNsu || "Não inicializado"} mono />
-            <Stat label="Maior NSU informado CT-e" value={cteState?.maxNsu || "Ainda não informado"} mono />
-          </div>
-        </details>
+
         {cooldown && (
           <div className="mt-3"><Notice>Próxima consulta permitida após {cooldown.time} ({cooldown.minutes} min).</Notice></div>
         )}
         <div className="mt-4 flex flex-wrap gap-3">
           <Button disabled={busy || !company.certificateStored || !cteSchedule?.enabled || !cteSchedule?.destinationDirectory?.trim()} onClick={download}>
-            <DownloadCloud size={16} />{busy ? "Consultando..." : "Consultar CT-e"}
+            <DownloadCloud size={16} />{busy ? "Consultando..." : "Capturar CT-e disponível"}
           </Button>
 
         </div>

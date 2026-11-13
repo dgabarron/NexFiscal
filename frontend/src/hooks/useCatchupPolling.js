@@ -25,7 +25,7 @@ export function useCatchupPolling(runs, setRuns, companies = []) {
 
   useEffect(() => {
     const timer = setInterval(async () => {
-      const running = Object.entries(runsRef.current).filter(([, job]) => job?.status === "running");
+      const running = Object.entries(runsRef.current).filter(([, job]) => job?.status === "running" || job?.status === "scheduled");
       if (running.length === 0) return;
       const results = await Promise.all(
         running.map(([companyId]) =>

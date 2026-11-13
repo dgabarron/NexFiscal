@@ -9,7 +9,7 @@ import { api } from "../../lib/api";
 export function CatchupPanel({ company, cooldown, run, running, disabled, onStart, onCompleted }) {
   const { notify } = useNotices();
   const [starting, setStarting] = useState(false);
-  const isRunning = running || run?.status === "running";
+  const isRunning = running || run?.status === "running" || run?.status === "scheduled";
 
   async function handleStart() {
     if (starting || isRunning) return;
@@ -17,15 +17,6 @@ export function CatchupPanel({ company, cooldown, run, running, disabled, onStar
       notify.error("Configure uma pasta válida no servidor e um certificado A1 para consultar a SEFAZ.");
       return;
     }
-    if (cooldown) {
-      notify.success(`O botão está disponível. A SEFAZ permite a próxima consulta após ${cooldown.time} (${cooldown.minutes} min). Nenhuma consulta antecipada foi enviada.`);
-      return;
-    }
-    if (!window.confirm(
-      "Capturar todos os XMLs de NF-e disponíveis na SEFAZ para este CNPJ?\n\n" +
-      "A consulta continuará do NSU salvo até alcançar o máximo informado pela SEFAZ. " +
-      "Esta operação AVANÇA o cursor do monitoramento."
-    )) return;
     setStarting(true);
     try {
       const result = await api.post("/api/sefaz/nfe/catchup", { companyId: company.companyId });
@@ -40,34 +31,33 @@ export function CatchupPanel({ company, cooldown, run, running, disabled, onStar
         <div className="flex items-center gap-3">
           <div className="p-2.5 bg-blue-50 rounded-lg text-blue-600"><DownloadCloud size={20} /></div>
           <div>
-            <h3 className="text-base font-bold">Consultar todos os XMLs disponíveis</h3>
-            <p className="text-sm text-slate-500 mt-0.5">Execute a verificação manual quando quiser. A espera fiscal é informada após o clique.</p>
+            <h3 className="text-base font-bold">Capturar NF-e agora</h3>
+            <p className="mt-1 text-sm text-slate-500">Solicite a captura dos documentos disponibilizados para esta empresa.</p>
           </div>
         </div>
       </CardHeader>
       <CardContent>
-        <Notice type="info">
-          Sincroniza os lotes disponíveis e avança o mesmo NSU do monitoramento.
-          A disponibilidade histórica depende da SEFAZ.
-        </Notice>
+        {cooldown && (
+          <Notice type="info">
+            A SEFAZ exige aguardar até {cooldown.time}. Você pode solicitar a captura agora:
+            ela ficará agendada no servidor e começará quando for permitida.
+          </Notice>
+        )}
         <Button className="mt-4" disabled={isRunning || starting} onClick={handleStart}>
           <DownloadCloud size={16} />
-          {isRunning ? "Captura na SEFAZ em andamento" : starting ? "Iniciando..." : "Consultar todos os XMLs disponíveis"}
+          {run?.status === "scheduled" ? "Captura agendada" : isRunning ? "Capturando documentos..." : starting ? "Registrando solicitação..." : "Capturar XMLs disponíveis"}
         </Button>
         {run && (
-          <div className="mt-4 rounded-lg bg-slate-50 p-3 text-sm">
+          <div aria-live="polite" className="mt-4 rounded-lg bg-slate-50 p-4 text-sm">
             <div className="font-semibold mb-2">Estado: {labelFor(run.status)} · Lotes: {run.batches ?? 0}</div>
             <div className="grid grid-cols-2 gap-2 text-xs">
               <span>XMLs novos: <strong>{run.completeSaved ?? 0}</strong></span>
               <span>Já existentes: <strong>{run.alreadyPresent ?? 0}</strong></span>
             </div>
             {run.message && <p className="mt-2 text-xs text-slate-600">{run.message}</p>}
-            <details className="mt-2 text-xs text-slate-600">
-              <summary className="cursor-pointer">Detalhes técnicos</summary>
-              <p className="mt-1">
-                Último NSU: {run.lastNsu || "—"} · Resumos/eventos: {run.ignoredNonProcNFe ?? 0}
-              </p>
-            </details>
+            <p className="mt-2 text-xs text-slate-500">
+              Resumos e eventos que não são XMLs completos: {run.ignoredNonProcNFe ?? 0}.
+            </p>
             {run.status !== "running" && (
               <Button variant="ghost" size="sm" className="mt-2" onClick={() => onCompleted?.()}>
                 <RefreshCw size={14} />Atualizar lista de empresas
@@ -82,6 +72,6 @@ export function CatchupPanel({ company, cooldown, run, running, disabled, onStar
 
 function labelFor(status) {
   return ({ running: "Em execução", completed: "Consulta concluída",
-    paused: "Pausada", attention: "Requer verificação",
+    scheduled: "Agendada", paused: "Pausada", attention: "Requer verificação",
     failed: "Falhou", stopped: "Interrompida" })[status] || status || "—";
 }

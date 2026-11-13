@@ -39,9 +39,9 @@ export function CteSchedulePanel({ company, schedules, onField, onSaved }) {
         <div className="flex items-center gap-3">
           <Folder size={20} className="text-blue-600" />
           <div>
-            <h3 className="text-base font-bold">Configuração da captura CT-e</h3>
+            <h3 className="text-base font-bold">Configurar CT-e</h3>
             <p className="mt-1 text-sm text-slate-500">
-              Esta configuração permite consultas manuais. Não existe agendador CT-e nesta versão.
+              Defina a pasta onde os XMLs completos de CT-e serão salvos.
             </p>
           </div>
         </div>

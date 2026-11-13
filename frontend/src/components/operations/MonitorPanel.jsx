@@ -1,0 +1,66 @@
+import { Activity, Save } from "lucide-react";
+import { Card, CardHeader, CardContent } from "../ui/card";
+import { Button } from "../ui/button";
+import { useNotices } from "../common/NoticesContext";
+import { api } from "../../lib/api";
+import { isValidInterval } from "../../lib/capture-utils";
+
+export function MonitorPanel({ company, schedule, onScheduleField, onSaved }) {
+  const { notify } = useNotices();
+  const nfe = schedule.find((s) => s.documentType === "NFE");
+  if (!nfe) return null;
+
+  async function save() {
+    if (!isValidInterval(nfe.intervalMinutes)) { notify.error("Informe um número inteiro de minutos a partir de 1."); return; }
+    if (nfe.enabled && !nfe.destinationDirectory.trim()) { notify.error("Preencha a pasta de destino para ativar a captura."); return; }
+    try {
+      const entries = schedule.map((s) => s.documentType === "NFE" ? { ...s, intervalMinutes: String(s.intervalMinutes).trim() } : s);
+      const result = await api.post(`/api/capture/schedules/${company.companyId}`, entries);
+      onSaved?.(result);
+      notify.success(nfe.enabled
+        ? "Monitoramento NF-e salvo. O Worker respeitará o intervalo e a janela fiscal."
+        : "Monitoramento NF-e desativado.");
+    } catch (e) { notify.error(e.message); }
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center gap-3">
+          <div className="p-2.5 bg-emerald-50 rounded-lg text-emerald-600"><Activity size={20} /></div>
+          <div>
+            <h3 className="text-base font-bold">Monitoramento automático (Worker)</h3>
+            <p className="text-sm text-slate-500 mt-0.5">O servidor consulta a SEFAZ periodicamente. A captura só avança quando o intervalo e o cooldown permitirem.</p>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent>
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-slate-50 p-3">
+          <label className="flex items-center gap-2 text-sm font-semibold">
+            <input type="checkbox" checked={nfe.enabled}
+              onChange={(e) => onScheduleField(company.companyId, "NFE", "enabled", e.target.checked)} />
+            Captura ativa
+          </label>
+          <div className="flex items-center gap-2">
+            <label htmlFor="nfe-interval" className="text-xs text-slate-600">Intervalo (min)</label>
+            <input id="nfe-interval" type="text" inputMode="numeric" pattern="[0-9]*"
+              className="w-24 rounded-md border border-slate-300 bg-white p-2 text-sm"
+              value={nfe.intervalMinutes}
+              onChange={(e) => onScheduleField(company.companyId, "NFE", "intervalMinutes", e.target.value)} />
+          </div>
+        </div>
+        <div className="mt-3">
+          <label htmlFor="nfe-dir" className="mb-1 block text-xs text-slate-600">Pasta dos XMLs</label>
+          <input id="nfe-dir" type="text"
+            className="w-full rounded-md border border-slate-300 p-2 text-sm disabled:bg-slate-100 disabled:text-slate-400"
+            placeholder="Ex.: C:\\NexFiscal\\XML"
+            value={nfe.destinationDirectory} disabled={!nfe.enabled}
+            onChange={(e) => onScheduleField(company.companyId, "NFE", "destinationDirectory", e.target.value)} />
+        </div>
+        <Button className="mt-4" variant="outline" onClick={save}>
+          <Save size={16} />Salvar configuração do monitoramento
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}

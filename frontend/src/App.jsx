@@ -94,6 +94,7 @@ function AppInner() {
         <CompaniesPage
           companies={capture.companies}
           onCompanyAdded={() => capture.refresh()}
+          onCompanyChanged={() => capture.refresh()}
         />
       )}
       {page === "settings" && <SettingsPage hanaReady={bootstrap.hanaReady} companies={capture.companies} />}

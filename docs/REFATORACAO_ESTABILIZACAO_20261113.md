@@ -44,3 +44,7 @@ Esses testes **não** substituem a homologação Windows + SAP HANA + certificad
 Não sobrescreva a instalação antiga. Extraia a branch refatorada em outra pasta, mas **não copie apenas um arquivo de certificado ou apenas chaves**. Defina `NEXFISCAL_DATA_DIR` somente depois de verificar a raiz de estado original e fazer backup. A instalação pode usar o mesmo HANA; por isso não habilite dois consumidores simultaneamente para o mesmo CNPJ. Se os dados estiverem espalhados por duas raízes, interrompa a operação até reconciliá-los de forma controlada.
 
 **Estado:** versão candidata para QA, não homologada em produção.
+
+## 6. Validação adicional Windows
+
+O CI também executa uma compilação Windows e inicia o mesmo executável em dois diretórios de trabalho diferentes, verificando `/api/health` e o frontend na raiz. Isso testa a estabilidade do conteúdo web e o bootstrap com DPAPI configurado, mas não valida descriptografia de um A1 real, HANA nem SEFAZ.

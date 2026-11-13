@@ -13,6 +13,8 @@ if (OperatingSystem.IsWindows())
     protection.ProtectKeysWithDpapi();
 builder.Services.AddSingleton<HanaSetup>();
 builder.Services.AddSingleton<CompanyCertificateVault>();
+builder.Services.AddSingleton<CompanyCertificateRecovery>();
+builder.Services.AddSingleton<CompanyRegistrationRemoval>();
 builder.Services.AddSingleton<NfeCaptureCoordinator>();
 builder.Services.AddSingleton<NfeKeyDiagnostics>();
 builder.Services.AddSingleton<NfeFirstDownload>();
@@ -157,6 +159,47 @@ app.MapPost("/api/companies/register", async (HttpRequest req, CancellationToken
             statusCode: 500);
     }
 }).DisableAntiforgery();
+
+// Reinstalar o A1 de um cadastro existente que perdeu o arquivo protegido.
+app.MapPost("/api/companies/{companyId}/certificate", async (
+    string companyId, HttpRequest req, CompanyCertificateRecovery recovery, CancellationToken ct) =>
+{
+    try
+    {
+        var (pfx, password) = await ReadCertificateAsync(req, ct);
+        try { return Results.Ok(await recovery.RestoreAsync(companyId, pfx, password, ct)); }
+        finally { System.Security.Cryptography.CryptographicOperations.ZeroMemory(pfx); }
+    }
+    catch (ArgumentException ex) { return Results.BadRequest(new { error = ex.Message }); }
+    catch (InvalidDataException) { return Results.BadRequest(new { error = "Certificado ou senha inválidos." }); }
+    catch (System.Security.Cryptography.CryptographicException)
+    { return Results.BadRequest(new { error = "Certificado ou senha inválidos." }); }
+    catch (InvalidOperationException ex) { return Results.Conflict(new { error = ex.Message }); }
+    catch (Exception ex)
+    {
+        app.Logger.LogError("Falha ao reanexar certificado: {Type}", ex.GetType().Name);
+        return Results.Problem("Não foi possível salvar o certificado A1.", statusCode: 503);
+    }
+}).DisableAntiforgery();
+
+// Exclusão permitida somente para cadastros que não possuem histórico fiscal.
+app.MapPost("/api/companies/{companyId}/remove", async (
+    string companyId, CompanyRegistrationRemoval.Request req,
+    CompanyRegistrationRemoval removal, CancellationToken ct) =>
+{
+    try
+    {
+        await removal.RemoveAsync(companyId, req, ct);
+        return Results.Ok(new { removed = true, message = "Cadastro removido sem apagar documentos fiscais." });
+    }
+    catch (ArgumentException ex) { return Results.BadRequest(new { error = ex.Message }); }
+    catch (InvalidOperationException ex) { return Results.Conflict(new { error = ex.Message }); }
+    catch (Exception ex)
+    {
+        app.Logger.LogError("Falha ao remover cadastro: {Type}", ex.GetType().Name);
+        return Results.Problem("Não foi possível remover a empresa. Nenhum XML foi apagado.", statusCode: 503);
+    }
+});
 
 // Pré-voo somente leitura. Não chama SEFAZ, não cria NSU e não ativa empresas.
 app.MapGet("/api/capture/status", async (NfeCaptureCoordinator coordinator, CancellationToken ct) =>

@@ -11,5 +11,7 @@
     <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
     <ProjectReference Include="../../src/NexFiscal.Capture/NexFiscal.Capture.csproj" />
     <Compile Include="../../src/NexFiscal.Web/NfeIndividualXmlStore.cs" Link="NfeIndividualXmlStore.cs" />
+    <Compile Include="../../src/NexFiscal.Web/NexFiscalDataDirectory.cs" Link="NexFiscalDataDirectory.cs" />
+    <Compile Include="../../src/NexFiscal.Web/FiscalWindow.cs" Link="FiscalWindow.cs" />
   </ItemGroup>
 </Project>

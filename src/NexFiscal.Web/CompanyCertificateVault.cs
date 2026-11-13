@@ -9,10 +9,10 @@ using NexFiscal.Capture;
 /// Proteção at rest via ASP.NET Data Protection + DPAPI do usuário Windows.
 /// Arquivos identificados somente por CompanyId gerado pelo servidor.
 /// </summary>
-public sealed class CompanyCertificateVault(IDataProtectionProvider keys, IWebHostEnvironment host)
+public sealed class CompanyCertificateVault(IDataProtectionProvider keys, NexFiscalDataDirectory dataDirectory)
 {
     private readonly IDataProtector _protector = keys.CreateProtector("NexFiscal.CompanyA1.v1");
-    private string VaultPath => Path.Combine(host.ContentRootPath, ".nexfiscal-certificates");
+    private string VaultPath => dataDirectory.PathFor(".nexfiscal-certificates");
 
     private string PathFor(string companyId)
     {
@@ -87,6 +87,39 @@ public sealed class CompanyCertificateVault(IDataProtectionProvider keys, IWebHo
     }
 
     public bool IsStored(string companyId) => File.Exists(PathFor(companyId));
+
+    // Presença em disco não significa que o A1 pode ser aberto com as chaves
+    // Data Protection e o usuário Windows da instalação atual.
+    public string StorageStatus(string companyId)
+    {
+        var path = PathFor(companyId);
+        if (!File.Exists(path)) return "missing";
+        byte[]? encrypted = null;
+        byte[]? clear = null;
+        try
+        {
+            encrypted = File.ReadAllBytes(path);
+            clear = _protector.Unprotect(encrypted);
+            if (clear.Length < 9 || clear[0] != 1) return "unreadable";
+            var size = BinaryPrimitives.ReadInt32LittleEndian(clear.AsSpan(1, 4));
+            if (size is <= 0 or > 5_000_000 || clear.Length < 9 + size)
+                return "unreadable";
+            var passwordSize = BinaryPrimitives.ReadInt32LittleEndian(clear.AsSpan(5 + size, 4));
+            if (passwordSize <= 0 || passwordSize > 4096 ||
+                clear.Length != 9 + size + passwordSize) return "unreadable";
+            return "stored";
+        }
+        catch (Exception ex) when (ex is CryptographicException or IOException or UnauthorizedAccessException
+            or InvalidDataException)
+        {
+            return "unreadable";
+        }
+        finally
+        {
+            if (clear is not null) CryptographicOperations.ZeroMemory(clear);
+            if (encrypted is not null) CryptographicOperations.ZeroMemory(encrypted);
+        }
+    }
 
     // Limpeza autorizada somente após exclusão de cadastro sem histórico fiscal.
     public void DeleteUnused(string companyId)

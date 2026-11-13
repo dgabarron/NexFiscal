@@ -4,9 +4,9 @@ using NexFiscal.Capture;
 /// Entrega os XMLs do lote diretamente em um ZIP local, independente
 /// da persistência dos envelopes no HANA. Nunca aceita caminhos do cliente.
 /// </summary>
-public sealed class NfeXmlArchive(IWebHostEnvironment host)
+public sealed class NfeXmlArchive(NexFiscalDataDirectory dataDirectory)
 {
-    private string Root => Path.Combine(host.ContentRootPath, ".nexfiscal-downloads");
+    private string Root => dataDirectory.PathFor(".nexfiscal-downloads");
 
     public async Task<(string Id, int Count, string[] Schemas)> SaveAsync(
         string companyId, NfeDistributionResult result, CancellationToken ct)

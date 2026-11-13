@@ -43,10 +43,7 @@ public sealed class CteMonitoringWorker(
 
                 using var cursor = JsonDocument.Parse(JsonSerializer.Serialize(await capture.StatusAsync(id, ct)));
                 var root = cursor.RootElement;
-                if (root.TryGetProperty("nextAllowedUtc", out var allowed) &&
-                    allowed.ValueKind == JsonValueKind.String &&
-                    DateTime.TryParse(allowed.GetString(), out var utc) &&
-                    DateTime.SpecifyKind(utc, DateTimeKind.Utc) > DateTime.UtcNow)
+                if (FiscalWindow.IsWaiting(root, DateTimeOffset.UtcNow))
                     continue;
 
                 var interval = TimeSpan.FromMinutes(Math.Max(1, Math.Min(schedule.IntervalMinutes, 525600)));

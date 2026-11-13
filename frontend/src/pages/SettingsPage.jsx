@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Server, ShieldCheck, Info, RefreshCw, Settings2 } from "lucide-react";
+import { Server, ShieldCheck, Info, RefreshCw, Settings2, PlugZap } from "lucide-react";
 import { Card, CardHeader, CardContent } from "../components/ui/card";
 import { Button } from "../components/ui/button";
 import { Notice } from "../components/common/Notice";
@@ -8,11 +8,13 @@ import { useNotices } from "../components/common/NoticesContext";
 import { api } from "../lib/api";
 
 /** GET /api/health consulta apenas o estado. Provisionar exige credenciais explícitas. */
-export function SettingsPage({ hanaReady }) {
+export function SettingsPage({ hanaReady, companies = [] }) {
   const { notify } = useNotices();
   const [busy, setBusy] = useState(false);
   const [health, setHealth] = useState(null);
   const [showHanaForm, setShowHanaForm] = useState(false);
+  const [diagnosticCompanyId, setDiagnosticCompanyId] = useState("");
+  const [diagnosticBusy, setDiagnosticBusy] = useState(false);
 
   async function refresh() {
     if (busy) return;
@@ -25,11 +27,25 @@ export function SettingsPage({ hanaReady }) {
     finally { setBusy(false); }
   }
 
+  async function testSefaz() {
+    const id = companies.some(c => c.companyId === diagnosticCompanyId)
+      ? diagnosticCompanyId : companies[0]?.companyId;
+    if (!id || diagnosticBusy) return;
+    setDiagnosticBusy(true);
+    try {
+      const response = await api.post("/api/capture/test-connectivity", { companyId: id });
+      if (response.reachable)
+        notify.success("Conexão HTTPS com a SEFAZ confirmada. Isso não verifica autorização fiscal do CNPJ.");
+      else notify.error(response.message || "Não foi possível alcançar a SEFAZ.");
+    } catch (error) { notify.error(error.message); }
+    finally { setDiagnosticBusy(false); }
+  }
+
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-slate-900">Configurações</h1>
-        <p className="mt-1 text-sm text-slate-500">Administração da conexão fiscal e do ambiente local.</p>
+        <h1 className="text-2xl font-bold text-slate-900">Configuração técnica</h1>
+        <p className="mt-1 text-sm text-slate-500">Conexão HANA, diagnóstico e manutenção da instalação.</p>
       </div>
       <Card>
         <CardHeader>
@@ -78,6 +94,35 @@ export function SettingsPage({ hanaReady }) {
           <HanaForm onSaved={() => { setShowHanaForm(false); refresh(); }} />
         </div>
       )}
+      <Card>
+        <CardHeader>
+          <h3 className="text-base font-bold">Diagnóstico SEFAZ</h3>
+          <p className="mt-1 text-sm text-slate-500">
+            Verifica conectividade HTTPS e certificado, sem executar distribuição fiscal.
+          </p>
+        </CardHeader>
+        <CardContent>
+          {companies.length ? (
+            <div className="flex flex-wrap items-end gap-3">
+              <div className="flex min-w-0 flex-1 flex-col gap-1">
+                <label htmlFor="diag-company" className="text-xs font-semibold text-slate-700">Empresa</label>
+                <select id="diag-company"
+                  value={companies.some(c => c.companyId === diagnosticCompanyId)
+                    ? diagnosticCompanyId : companies[0].companyId}
+                  onChange={(event) => setDiagnosticCompanyId(event.target.value)}
+                  className="w-full rounded-lg border border-slate-300 bg-white p-2 text-sm">
+                  {companies.map(company => (
+                    <option key={company.companyId} value={company.companyId}>{company.legalName}</option>
+                  ))}
+                </select>
+              </div>
+              <Button variant="outline" onClick={testSefaz} disabled={diagnosticBusy}>
+                <PlugZap size={16} />{diagnosticBusy ? "Verificando..." : "Testar conexão"}
+              </Button>
+            </div>
+          ) : <p className="text-sm text-slate-600">Cadastre uma empresa para testar a conexão.</p>}
+        </CardContent>
+      </Card>
       <Card>
         <CardHeader><h3 className="text-base font-bold">Sobre esta instalação</h3></CardHeader>
         <CardContent>

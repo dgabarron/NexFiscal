@@ -1,3 +1,8 @@
+> **REGISTRO HISTÓRICO — NÃO VIGENTE (13/11/2026).** Este texto retrata a primeira etapa do código. Afirmações abaixo como “sem cliente SOAP real”, “sem HANA” ou “sem Worker” não descrevem o estado da branch de QA atual. Para instalar/operar, use [README](../README.md), [especificação funcional](ESPECIFICACAO_FUNCIONAL_ATUAL.md) e [arquitetura e API](ARQUITETURA_E_APIS.md). O escopo atual possui **somente monitoramento automático NF-e e consulta manual de tudo disponível**. Não implementar itens antigos sem novo aceite.
+
+---
+
+## Texto original de registro da primeira entrega (preservado)
 # NexFiscal — primeira entrega (em desenvolvimento)
 
 ## Implementado nesta branch

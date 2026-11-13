@@ -1,3 +1,8 @@
+> **AUDITORIA TÉCNICA HISTÓRICA — NÃO É MANUAL OPERACIONAL (13/11/2026).** Preservamos abaixo os achados e decisões da evolução do motor NF-e. A referência vigente de produto é [ESPECIFICACAO_FUNCIONAL_ATUAL.md](ESPECIFICACAO_FUNCIONAL_ATUAL.md) e a de contratos é [ARQUITETURA_E_APIS.md](ARQUITETURA_E_APIS.md). Na versão atual o Main oferece **apenas monitoramento automático e consulta de todos os XMLs disponíveis**. Arquivos `docZip` e lotes ZIP internos são detalhes de transporte/segurança, **não** significam função de recuperação de ZIP para usuário. Qualquer instrução antiga com UI, nome de arquivo ou fluxo divergente exige confronto com o código atual.
+
+---
+
+## Registro original da auditoria (preservado)
 # Auditoria do motor de distribuição NF-e — 11/11/2026
 
 ## Objetivo

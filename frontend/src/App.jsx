@@ -9,9 +9,6 @@ import { useClock } from "./hooks/useClock";
 import { SetupPage } from "./pages/SetupPage";
 import { OverviewPage } from "./pages/OverviewPage";
 import { CompaniesPage } from "./pages/CompaniesPage";
-import { NfeCapturePage } from "./pages/NfeCapturePage";
-import { CteCapturePage } from "./pages/CteCapturePage";
-import { RecoveryPage } from "./pages/RecoveryPage";
 import { SettingsPage } from "./pages/SettingsPage";
 
 export function App() {
@@ -80,63 +77,27 @@ function AppInner() {
       {page === "overview" && (
         <OverviewPage
           companies={capture.companies}
-          cteStates={capture.cteStates}
           schedules={capture.schedules}
+          cteStates={capture.cteStates}
           clockNow={clockNow}
-          onFocusCompany={setSelectedCompanyId}
-          onNavigate={setPage}
+          selectedCompanyId={effectiveCompanyId}
+          onSelectCompany={setSelectedCompanyId}
+          scheduleField={capture.setScheduleField}
+          onScheduleSaved={async (companyId, result) => {
+            capture.replaceSchedule(companyId, result);
+            await capture.refresh();
+          }}
+          onRefreshCapture={capture.refresh}
         />
       )}
       {page === "companies" && (
         <CompaniesPage
           companies={capture.companies}
           onCompanyAdded={() => capture.refresh()}
+          onCompanyChanged={() => capture.refresh()}
         />
       )}
-      {page === "nfe" && (
-        <NfeCapturePage
-          companies={capture.companies}
-          cteStates={capture.cteStates}
-          schedules={capture.schedules}
-          clockNow={clockNow}
-          selectedCompanyId={effectiveCompanyId}
-          onSelectCompany={setSelectedCompanyId}
-          scheduleField={capture.setScheduleField}
-          onScheduleSaved={async (companyId, result) => {
-            capture.replaceSchedule(companyId, result);
-            await capture.refresh();
-          }}
-          onRefreshCapture={capture.refresh}
-        />
-      )}
-      {page === "cte" && (
-        <CteCapturePage
-          companies={capture.companies}
-          cteStates={capture.cteStates}
-          schedules={capture.schedules}
-          clockNow={clockNow}
-          selectedCompanyId={effectiveCompanyId}
-          onSelectCompany={setSelectedCompanyId}
-          scheduleField={capture.setScheduleField}
-          onScheduleSaved={async (companyId, result) => {
-            capture.replaceSchedule(companyId, result);
-            await capture.refresh();
-          }}
-          onRefreshCapture={capture.refresh}
-        />
-      )}
-      {page === "recovery" && (
-        <RecoveryPage
-          companies={capture.companies}
-          cteStates={capture.cteStates}
-          schedules={capture.schedules}
-          clockNow={clockNow}
-          selectedCompanyId={effectiveCompanyId}
-          onSelectCompany={setSelectedCompanyId}
-          onRefreshCapture={capture.refresh}
-        />
-      )}
-      {page === "settings" && <SettingsPage hanaReady={bootstrap.hanaReady} />}
+      {page === "settings" && <SettingsPage hanaReady={bootstrap.hanaReady} companies={capture.companies} />}
     </AppShell>
   );
 }

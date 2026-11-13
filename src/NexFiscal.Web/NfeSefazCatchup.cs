@@ -9,6 +9,7 @@ using System.Text.Json;
 /// </summary>
 public sealed class NfeSefazCatchup(
     NfeFirstDownload capture, CaptureScheduleSettings settings,
+    NfeCaptureCoordinator coordinator,
     IHostApplicationLifetime lifetime, ILogger<NfeSefazCatchup> logger)
 {
     public sealed record Request(string CompanyId);
@@ -28,14 +29,14 @@ public sealed class NfeSefazCatchup(
     {
         var company = ValidateId(request.CompanyId);
         // Validação de destino ANTES de iniciar tarefa.
-        var destination = await settings.RequireDestinationAsync(company, "NFE", ct);
+        var destination = await settings.RequireDestinationAsync(company, "NFE", ct, requireEnabled: false);
         var starting = new Progress("running", 0, 0, 0, 0, 0,
             null, null, null, DateTimeOffset.UtcNow, null,
             "Consultando documentos disponíveis na SEFAZ para o CNPJ cadastrado.");
         if (!Jobs.TryAdd(company, starting))
         {
             var previous = Jobs[company];
-            if (previous.Status == "running")
+            if (previous.Status is "running" or "scheduled")
                 throw new InvalidOperationException("A captura completa já está em execução para esta empresa.");
             if (!Jobs.TryUpdate(company, starting, previous))
                 throw new InvalidOperationException("Estado de execução alterado. Tente novamente.");
@@ -61,6 +62,11 @@ public sealed class NfeSefazCatchup(
             while (true)
             {
                 ct.ThrowIfCancellationRequested();
+                // Nunca antecipar uma consulta fiscal. A solicitação do operador
+                // permanece registrada enquanto houver intervalo de segurança.
+                // O Worker não compete com um job manual agendado.
+                await AwaitFiscalWindowAsync(company, Publish, ct);
+                Publish("running", "Consultando os XMLs disponíveis na SEFAZ.");
                 // ExecuteAsync confirma certificado/CNPJ, reserva cota e consulta
                 // o cursor HANA existente. Proíbe repetição durante cooldown.
                 var response = await capture.ExecuteAsync(company, folder, ct);
@@ -127,11 +133,11 @@ public sealed class NfeSefazCatchup(
         }
         catch (OperationCanceledException)
         {
-            Publish("interrupted", "Captura interrompida ao desligar o serviço.");
+            Publish("interrupted", "Solicitação interrompida ao desligar o servidor. É necessário reenviar o pedido.");
         }
         catch (InvalidOperationException ex)
         {
-            logger.LogWarning("Recuperação SEFAZ pausada: {ErrorType}", ex.GetType().Name);
+            logger.LogWarning("Consulta de XMLs da SEFAZ pausada: {ErrorType}", ex.GetType().Name);
             Publish("paused", "Consulta não autorizada no momento. Verifique o intervalo SEFAZ e o estado do checkpoint.");
         }
         catch (Exception ex)
@@ -143,6 +149,38 @@ public sealed class NfeSefazCatchup(
         void Publish(string status, string message) => Jobs[company] = new Progress(status,
             batches, downloaded, saved, existing, ignored, last, max, sefaz,
             state.StartedAtUtc, status == "running" ? null : DateTimeOffset.UtcNow, message);
+    }
+
+    // A consulta fica pendente no processo mesmo que o navegador seja fechado.
+    // A reserva e o checkpoint permanecem sob responsabilidade do HANA.
+    private async Task AwaitFiscalWindowAsync(
+        string company, Action<string, string> publish, CancellationToken ct)
+    {
+        while (true)
+        {
+            ct.ThrowIfCancellationRequested();
+            var result = await coordinator.StatusAsync(ct);
+            using var json = JsonDocument.Parse(JsonSerializer.Serialize(result));
+            DateTimeOffset? allowedAt = null;
+            foreach (var current in json.RootElement.GetProperty("companies").EnumerateArray())
+            {
+                if (current.GetProperty("companyId").GetString() != company) continue;
+                if (current.TryGetProperty("nextAllowedUtc", out var value) &&
+                    value.ValueKind == JsonValueKind.String &&
+                    DateTime.TryParse(value.GetString(), CultureInfo.InvariantCulture,
+                        DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out var parsed))
+                    allowedAt = new DateTimeOffset(parsed.ToUniversalTime());
+                break;
+            }
+
+            if (allowedAt is null || allowedAt <= DateTimeOffset.UtcNow) return;
+            var remaining = allowedAt.Value - DateTimeOffset.UtcNow;
+            var localTime = allowedAt.Value.ToLocalTime().ToString("HH:mm", CultureInfo.CurrentCulture);
+            publish("scheduled", "Solicitação recebida. Captura agendada para após " +
+                localTime + " (horário do servidor), respeitando a janela fiscal.");
+            await Task.Delay(remaining > TimeSpan.FromSeconds(30)
+                ? TimeSpan.FromSeconds(30) : remaining, ct);
+        }
     }
 
     private static string ValidateId(string value) =>

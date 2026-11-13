@@ -1,7 +1,8 @@
 import { useEffect, useRef } from "react";
 import { api } from "../lib/api";
 
-export function useCatchupPolling(runs, setRuns, companies = []) {
+export function useCatchupPolling(runs, setRuns, companies = [], documentType = "NFE") {
+  const route = documentType === "CTE" ? "/api/sefaz/cte/catchup" : "/api/sefaz/nfe/catchup";
   const companyKey = companies.map((c) => c.companyId).join(",");
   const runsRef = useRef(runs);
   runsRef.current = runs;
@@ -11,7 +12,7 @@ export function useCatchupPolling(runs, setRuns, companies = []) {
   useEffect(() => {
     let cancelled = false;
     const ids = companyKey ? companyKey.split(",") : [];
-    Promise.all(ids.map((id) => api.get(`/api/sefaz/nfe/catchup/${id}`).catch(() => null)))
+    Promise.all(ids.map((id) => api.get(`${route}/${id}`).catch(() => null)))
       .then((items) => {
         if (cancelled) return;
         setRuns((prev) => {
@@ -21,15 +22,15 @@ export function useCatchupPolling(runs, setRuns, companies = []) {
         });
       });
     return () => { cancelled = true; };
-  }, [companyKey, setRuns]);
+  }, [companyKey, setRuns, route]);
 
   useEffect(() => {
     const timer = setInterval(async () => {
-      const running = Object.entries(runsRef.current).filter(([, job]) => job?.status === "running");
+      const running = Object.entries(runsRef.current).filter(([, job]) => job?.status === "running" || job?.status === "scheduled");
       if (running.length === 0) return;
       const results = await Promise.all(
         running.map(([companyId]) =>
-          api.get(`/api/sefaz/nfe/catchup/${companyId}`).catch(() => null)
+          api.get(`${route}/${companyId}`).catch(() => null)
         )
       );
       setRuns((prev) => {
@@ -39,5 +40,5 @@ export function useCatchupPolling(runs, setRuns, companies = []) {
       });
     }, 3000);
     return () => clearInterval(timer);
-  }, [setRuns]);
+  }, [setRuns, route]);
 }

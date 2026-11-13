@@ -39,9 +39,9 @@ export function CteSchedulePanel({ company, schedules, onField, onSaved }) {
         <div className="flex items-center gap-3">
           <Folder size={20} className="text-blue-600" />
           <div>
-            <h3 className="text-base font-bold">Configuração da captura CT-e</h3>
+            <h3 className="text-base font-bold">Configurar CT-e</h3>
             <p className="mt-1 text-sm text-slate-500">
-              Esta configuração permite consultas manuais. Não existe agendador CT-e nesta versão.
+              Defina a pasta onde os XMLs completos de CT-e serão salvos.
             </p>
           </div>
         </div>
@@ -52,28 +52,17 @@ export function CteSchedulePanel({ company, schedules, onField, onSaved }) {
             onChange={(e) => onField(company.companyId, "CTE", "enabled", e.target.checked)} />
           Permitir captura manual de CT-e
         </label>
-        <div className="mt-4 grid gap-4 sm:grid-cols-[minmax(0,1fr)_130px]">
-          <div>
-            <label htmlFor="cte-directory" className="mb-1 block text-xs text-slate-600">
-              Pasta de XMLs no servidor
-            </label>
-            <input id="cte-directory" type="text" value={cte.destinationDirectory || ""}
-              placeholder="Ex.: C:\\NexFiscal\\CTE"
-              className="w-full rounded-md border border-slate-300 p-2 text-sm"
-              onChange={(e) => onField(company.companyId, "CTE", "destinationDirectory", e.target.value)} />
-          </div>
-          <div>
-            <label htmlFor="cte-interval" className="mb-1 block text-xs text-slate-600">
-              Intervalo (min)
-            </label>
-            <input id="cte-interval" type="text" inputMode="numeric" value={cte.intervalMinutes}
-              className="w-full rounded-md border border-slate-300 p-2 text-sm"
-              onChange={(e) => onField(company.companyId, "CTE", "intervalMinutes", e.target.value)} />
-          </div>
+        <div className="mt-4">
+          <label htmlFor="cte-directory" className="mb-1 block text-xs text-slate-600">
+            Pasta de XMLs no servidor
+          </label>
+          <input id="cte-directory" type="text" value={cte.destinationDirectory || ""}
+            placeholder="Ex.: C:\\NexFiscal\\CTE"
+            className="w-full rounded-md border border-slate-300 p-2 text-sm"
+            onChange={(event) => onField(company.companyId, "CTE", "destinationDirectory", event.target.value)} />
         </div>
         <p className="mt-2 text-xs text-slate-500">
-          A pasta precisa existir no servidor. O intervalo é mantido na configuração para uso futuro;
-          a janela efetiva de consultas manuais segue o controle fiscal do CT-e.
+          A pasta precisa existir no servidor. A janela de consultas é controlada pelo backend.
         </p>
         <Button className="mt-4" variant="outline" disabled={saving} onClick={save}>
           <Save size={16} />{saving ? "Salvando..." : "Salvar configuração CT-e"}

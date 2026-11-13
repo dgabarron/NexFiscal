@@ -87,4 +87,11 @@ public sealed class CompanyCertificateVault(IDataProtectionProvider keys, IWebHo
     }
 
     public bool IsStored(string companyId) => File.Exists(PathFor(companyId));
+
+    // Limpeza autorizada somente após exclusão de cadastro sem histórico fiscal.
+    public void DeleteUnused(string companyId)
+    {
+        var path = PathFor(companyId);
+        if (File.Exists(path)) File.Delete(path);
+    }
 }

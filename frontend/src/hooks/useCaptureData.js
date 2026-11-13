@@ -15,17 +15,17 @@ export function useCaptureData() {
       const capture = await api.get("/api/capture/status");
       const list = capture.companies || [];
       setCompanies(list);
-      const [cteEntries, scheduleEntries] = await Promise.all([
-        Promise.all(list.map((c) => api.get(`/api/cte/status/${c.companyId}`).catch(() => null))),
+      const [scheduleEntries, cteEntries] = await Promise.all([
         Promise.all(list.map((c) => api.get(`/api/capture/schedules/${c.companyId}`))),
+        Promise.all(list.map((c) => api.get(`/api/cte/status/${c.companyId}`).catch(() => null))),
       ]);
-      const nextCte = {}, nextSchedules = {};
+      const nextSchedules = {}, nextCteStates = {};
       list.forEach((c, i) => {
-        if (cteEntries[i]) nextCte[c.companyId] = cteEntries[i];
         nextSchedules[c.companyId] = mergeSchedule(scheduleEntries[i]);
+        if (cteEntries[i]) nextCteStates[c.companyId] = cteEntries[i];
       });
-      setCteStates(nextCte);
       setSchedules(nextSchedules);
+      setCteStates(nextCteStates);
     } catch (e) {
       setError(e.message);
     } finally {

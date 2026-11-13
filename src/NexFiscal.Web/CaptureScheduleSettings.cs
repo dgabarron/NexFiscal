@@ -11,8 +11,8 @@ public sealed class CaptureScheduleSettings(IWebHostEnvironment environment)
     private readonly SemaphoreSlim gate = new(1, 1);
     private string Root => Path.Combine(environment.ContentRootPath, ".nexfiscal-schedules");
 
-    public sealed record Schedule(string DocumentType, bool Enabled, long IntervalMinutes, string? DestinationDirectory);
-    public sealed record ScheduleInput(string DocumentType, bool Enabled, string IntervalMinutes, string? DestinationDirectory);
+    public sealed record Schedule(string DocumentType, bool Enabled, long IntervalMinutes, string? DestinationDirectory, bool AutomaticConfirmed = false);
+    public sealed record ScheduleInput(string DocumentType, bool Enabled, string IntervalMinutes, string? DestinationDirectory, bool AutomaticConfirmed = false);
 
     public async Task<IReadOnlyList<Schedule>> GetAsync(string companyId, CancellationToken ct)
     {
@@ -30,17 +30,18 @@ public sealed class CaptureScheduleSettings(IWebHostEnvironment environment)
     }
 
     /// <summary>
-    /// A consulta manual e o futuro Worker usam a mesma configuração persistida.
+    /// O monitoramento usa Enabled; a consulta manual só exige pasta válida.
     /// Nunca aceitar caminho alternativo enviado na requisição de captura.
     /// </summary>
     public async Task<string> RequireDestinationAsync(
-        string companyId, string documentType, CancellationToken ct)
+        string companyId, string documentType, CancellationToken ct,
+        bool requireEnabled = true)
     {
         var schedules = await GetAsync(companyId, ct);
         var schedule = schedules.SingleOrDefault(s => s.DocumentType == documentType)
             ?? throw new InvalidOperationException("Configuração de captura não encontrada para " + documentType + ".");
-        if (!schedule.Enabled)
-            throw new InvalidOperationException("Marque Captura ativa em " + documentType + " e salve a configuração antes de consultar.");
+        if (requireEnabled && !schedule.Enabled)
+            throw new InvalidOperationException("Habilite o monitoramento em " + documentType + " antes de consultar.");
         if (string.IsNullOrWhiteSpace(schedule.DestinationDirectory))
             throw new InvalidOperationException("Configure a pasta de XMLs em " + documentType + " e salve antes de consultar.");
         return NfeIndividualXmlStore.ValidateDirectory(schedule.DestinationDirectory);
@@ -66,7 +67,8 @@ public sealed class CaptureScheduleSettings(IWebHostEnvironment environment)
                 dir = NfeIndividualXmlStore.ValidateDirectory(s.DestinationDirectory);
             else if (!string.IsNullOrWhiteSpace(s.DestinationDirectory))
                 dir = s.DestinationDirectory.Trim();
-            return new Schedule(s.DocumentType, s.Enabled, interval, dir);
+            return new Schedule(s.DocumentType, s.Enabled, interval, dir,
+                s.DocumentType == "CTE" && s.Enabled && s.AutomaticConfirmed);
         }).OrderBy(s => s.DocumentType, StringComparer.Ordinal).ToArray();
 
         await gate.WaitAsync(ct);
@@ -89,6 +91,12 @@ public sealed class CaptureScheduleSettings(IWebHostEnvironment environment)
             return validated;
         }
         finally { gate.Release(); }
+    }
+
+    public void DeleteUnused(string companyId)
+    {
+        var path = FilePath(companyId);
+        if (File.Exists(path)) File.Delete(path);
     }
 
     private string FilePath(string companyId) =>

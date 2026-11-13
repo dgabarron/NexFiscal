@@ -13,14 +13,17 @@ if (OperatingSystem.IsWindows())
     protection.ProtectKeysWithDpapi();
 builder.Services.AddSingleton<HanaSetup>();
 builder.Services.AddSingleton<CompanyCertificateVault>();
+builder.Services.AddSingleton<CompanyCertificateRecovery>();
+builder.Services.AddSingleton<CompanyRegistrationRemoval>();
 builder.Services.AddSingleton<NfeCaptureCoordinator>();
+builder.Services.AddSingleton<NfeKeyDiagnostics>();
 builder.Services.AddSingleton<NfeFirstDownload>();
 builder.Services.AddSingleton<CteFirstDownload>();
+builder.Services.AddSingleton<CteSefazCatchup>();
 builder.Services.AddSingleton<CaptureScheduleSettings>();
-builder.Services.AddSingleton<NfeHistoricalRecovery>();
 builder.Services.AddSingleton<NfeSefazCatchup>();
-builder.Services.AddSingleton<NfeRetroactiveRecovery>();
 builder.Services.AddHostedService<NfeMonitoringWorker>();
+builder.Services.AddHostedService<CteMonitoringWorker>();
 builder.Services.AddSingleton<NfeXmlArchive>();
 builder.Services.AddSingleton<NfeIndividualXmlStore>();
 builder.Services.AddSingleton<NfeHandoffPreparation>();
@@ -157,6 +160,47 @@ app.MapPost("/api/companies/register", async (HttpRequest req, CancellationToken
     }
 }).DisableAntiforgery();
 
+// Reinstalar o A1 de um cadastro existente que perdeu o arquivo protegido.
+app.MapPost("/api/companies/{companyId}/certificate", async (
+    string companyId, HttpRequest req, CompanyCertificateRecovery recovery, CancellationToken ct) =>
+{
+    try
+    {
+        var (pfx, password) = await ReadCertificateAsync(req, ct);
+        try { return Results.Ok(await recovery.RestoreAsync(companyId, pfx, password, ct)); }
+        finally { System.Security.Cryptography.CryptographicOperations.ZeroMemory(pfx); }
+    }
+    catch (ArgumentException ex) { return Results.BadRequest(new { error = ex.Message }); }
+    catch (InvalidDataException) { return Results.BadRequest(new { error = "Certificado ou senha inválidos." }); }
+    catch (System.Security.Cryptography.CryptographicException)
+    { return Results.BadRequest(new { error = "Certificado ou senha inválidos." }); }
+    catch (InvalidOperationException ex) { return Results.Conflict(new { error = ex.Message }); }
+    catch (Exception ex)
+    {
+        app.Logger.LogError("Falha ao reanexar certificado: {Type}", ex.GetType().Name);
+        return Results.Problem("Não foi possível salvar o certificado A1.", statusCode: 503);
+    }
+}).DisableAntiforgery();
+
+// Exclusão permitida somente para cadastros que não possuem histórico fiscal.
+app.MapPost("/api/companies/{companyId}/remove", async (
+    string companyId, CompanyRegistrationRemoval.Request req,
+    CompanyRegistrationRemoval removal, CancellationToken ct) =>
+{
+    try
+    {
+        await removal.RemoveAsync(companyId, req, ct);
+        return Results.Ok(new { removed = true, message = "Cadastro removido sem apagar documentos fiscais." });
+    }
+    catch (ArgumentException ex) { return Results.BadRequest(new { error = ex.Message }); }
+    catch (InvalidOperationException ex) { return Results.Conflict(new { error = ex.Message }); }
+    catch (Exception ex)
+    {
+        app.Logger.LogError("Falha ao remover cadastro: {Type}", ex.GetType().Name);
+        return Results.Problem("Não foi possível remover a empresa. Nenhum XML foi apagado.", statusCode: 503);
+    }
+});
+
 // Pré-voo somente leitura. Não chama SEFAZ, não cria NSU e não ativa empresas.
 app.MapGet("/api/capture/status", async (NfeCaptureCoordinator coordinator, CancellationToken ct) =>
 {
@@ -166,6 +210,20 @@ app.MapGet("/api/capture/status", async (NfeCaptureCoordinator coordinator, Canc
     {
         app.Logger.LogError("Pré-voo NF-e falhou: {Type}", ex.GetType().Name);
         return Results.Problem("Não foi possível consultar o estado da captura no HANA.", statusCode: 503);
+    }
+});
+
+// Consulta exclusivamente dados locais para identificar NF-e ausentes; não chama SEFAZ.
+app.MapPost("/api/nfe/diagnostics/keys", async (
+    NfeKeyDiagnostics.Request request, NfeKeyDiagnostics diagnostics, CancellationToken ct) =>
+{
+    try { return Results.Ok(await diagnostics.CheckAsync(request, ct)); }
+    catch (ArgumentException ex) { return Results.BadRequest(new { error = ex.Message }); }
+    catch (InvalidOperationException ex) { return Results.Conflict(new { error = ex.Message }); }
+    catch (Exception ex)
+    {
+        app.Logger.LogError("Diagnóstico de NF-e locais falhou: {Type}", ex.GetType().Name);
+        return Results.Problem("Não foi possível verificar as NF-e no HANA e na pasta.", statusCode: 503);
     }
 });
 
@@ -208,41 +266,6 @@ app.MapGet("/api/capture/archive/{companyId}/{archiveId}", (
         : Results.File(file, "application/zip", "NexFiscal_" + type + "_" + archiveId + ".zip");
 });
 
-// Conferência local: somente procNFe completos nos lotes já armazenados, sem SEFAZ.
-app.MapGet("/api/recovery/nfe/preview/{companyId}", async (
-    string companyId, DateTimeOffset? from, NfeHistoricalRecovery recovery,
-    CancellationToken ct) =>
-{
-    try
-    {
-        var start = from ?? DateTimeOffset.UtcNow.AddDays(-90);
-        return Results.Ok(await recovery.PreviewAsync(companyId, start, ct));
-    }
-    catch (ArgumentException ex) { return Results.BadRequest(new { error = ex.Message }); }
-    catch (DirectoryNotFoundException ex) { return Results.BadRequest(new { error = ex.Message }); }
-    catch (InvalidOperationException ex) { return Results.Conflict(new { error = ex.Message }); }
-    catch (Exception ex)
-    {
-        app.Logger.LogError(ex, "Falha ao consultar candidatos de recuperação");
-        return Results.Problem("Não foi possível ler os lotes de recuperação.", statusCode: 503);
-    }
-});
-
-// Restaura procNFe já armazenados em ZIPs locais. Nenhuma consulta fiscal.
-app.MapPost("/api/recovery/nfe/restore", async (
-    RestoreNfeRequest request, NfeHistoricalRecovery recovery, CancellationToken ct) =>
-{
-    try { return Results.Ok(await recovery.RestoreAsync(request.CompanyId, request.From, ct)); }
-    catch (ArgumentException ex) { return Results.BadRequest(new { error = ex.Message }); }
-    catch (DirectoryNotFoundException ex) { return Results.BadRequest(new { error = ex.Message }); }
-    catch (InvalidOperationException ex) { return Results.Conflict(new { error = ex.Message }); }
-    catch (IOException ex)
-    {
-        app.Logger.LogError(ex, "Falha ao restaurar XMLs de ZIP local");
-        return Results.Problem("Falha de arquivo durante a restauração. Nenhum XML existente foi sobrescrito.", statusCode: 503);
-    }
-});
-
 // Consulta REAL à SEFAZ para a empresa cadastrada: percorre os lotes
 // disponíveis, usando o cursor de distribuição vigente e o mesmo controle fiscal.
 app.MapPost("/api/sefaz/nfe/catchup", async (
@@ -267,21 +290,6 @@ app.MapGet("/api/sefaz/nfe/catchup/{companyId}", (
         return status is null ? Results.NotFound() : Results.Ok(status);
     }
     catch (ArgumentException ex) { return Results.BadRequest(new { error = ex.Message }); }
-});
-
-// Recuperação independente: consNSU para lacunas conhecidas; não altera LastNsu.
-app.MapPost("/api/recovery/nfe/sefaz/{companyId}", async (
-    string companyId, NfeRetroactiveRecovery recovery, CancellationToken ct) =>
-{
-    try { return Results.Ok(await recovery.RunOnceAsync(companyId, ct)); }
-    catch (ArgumentException ex) { return Results.BadRequest(new { error = ex.Message }); }
-    catch (DirectoryNotFoundException ex) { return Results.BadRequest(new { error = ex.Message }); }
-    catch (InvalidOperationException ex) { return Results.Conflict(new { error = ex.Message }); }
-    catch (Exception ex)
-    {
-        app.Logger.LogError(ex, "Falha em recuperação pontual NF-e");
-        return Results.Problem("Não foi possível concluir a recuperação retroativa.", statusCode: 503);
-    }
 });
 
 // Agenda por tipo: o Worker ativo é o de NF-e.
@@ -312,6 +320,30 @@ app.MapPost("/api/capture/schedules/{companyId}", async (
 });
 
 // CT-e tem distribuição e cursor próprios, independentes do NSU de NF-e.
+app.MapPost("/api/sefaz/cte/catchup", async (
+    CteSefazCatchup.Request request, CteSefazCatchup service, CancellationToken ct) =>
+{
+    try { return Results.Accepted(value: await service.StartAsync(request, ct)); }
+    catch (ArgumentException ex) { return Results.BadRequest(new { error = ex.Message }); }
+    catch (DirectoryNotFoundException ex) { return Results.BadRequest(new { error = ex.Message }); }
+    catch (InvalidOperationException ex) { return Results.Conflict(new { error = ex.Message }); }
+    catch (Exception ex)
+    {
+        app.Logger.LogError(ex, "Falha ao iniciar captura CT-e");
+        return Results.Problem("Não foi possível iniciar a captura CT-e.", statusCode: 503);
+    }
+});
+app.MapGet("/api/sefaz/cte/catchup/{companyId}", (
+    string companyId, CteSefazCatchup service) =>
+{
+    try
+    {
+        var status = service.Get(companyId);
+        return status is null ? Results.NotFound() : Results.Ok(status);
+    }
+    catch (ArgumentException ex) { return Results.BadRequest(new { error = ex.Message }); }
+});
+
 app.MapGet("/api/cte/status/{companyId}", async (
     string companyId, CteFirstDownload service, CancellationToken ct) =>
 {
@@ -408,4 +440,3 @@ public sealed record CaptureTestRequest(string CompanyId);
 
 public sealed record CaptureDownloadRequest(string CompanyId, bool PreviousConsumerStopped);
 
-public sealed record RestoreNfeRequest(string CompanyId, DateTimeOffset From);

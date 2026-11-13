@@ -1,3 +1,8 @@
+> **ROADMAP ANTERIOR SUBSTITUÍDO — NÃO IMPLEMENTAR (13/11/2026).** As propostas abaixo de três botões “recuperar 90 dias”, `consNSU` por NSU conhecido, recuperação de ZIP local, NFS-e no Main e novos agendadores **não foram aprovadas para o produto atual**. Não existem como requisitos vigentes, nem como backlog autorizado. O usuário confirmou **somente monitoramento automático NF-e por X minutos e botão “Consultar todos os XMLs disponíveis”**. Este arquivo permanece apenas como histórico de ideias; futuras expansões precisam de nova definição explícita. Fonte vigente: [especificação funcional](ESPECIFICACAO_FUNCIONAL_ATUAL.md).
+
+---
+
+## Proposta antiga, não vigente (preservada para contexto histórico)
 # NexFiscal — Próximas entregas: NFS-e ADN, agendador e recuperação 90 dias
 
 Data: 2026-11-12. Status: **especificação funcional/técnica**, não implementação em produção.

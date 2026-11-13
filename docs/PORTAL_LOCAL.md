@@ -1,101 +1,106 @@
-# NexFiscal — portal local de configuração
+# NexFiscal — instalar e operar o portal local (versão QA)
+
+**Vigente na branch:** `qa/frontend-enxuto-20261113`, 13/11/2026. Esta versão substitui as instruções antigas de handoff obrigatório, teste unitário no Main e ausência de Worker. Leia [escopo funcional](ESPECIFICACAO_FUNCIONAL_ATUAL.md) e [arquitetura/API](ARQUITETURA_E_APIS.md).
 
 ## Requisitos
-- Windows com Visual Studio 2022 e workload ASP.NET Core ou .NET SDK 8.
-- Node.js 20 ou superior (frontend React + shadcn/ui + Tailwind CSS).
-- O portal usa o pacote SAP oficial `Sap.Data.Hana.Net.v8.0` para .NET 8. Validar compatibilidade do driver e a conexão com o HANA utilizado.
-- Por segurança, a primeira versão de configuração responde **somente em loopback** (127.0.0.1). Não publique na rede.
 
-## Rodar no Visual Studio
-1. Clone `https://github.com/dgabarron/NexFiscal.git` e selecione `feat/nfe-capture-core`.
-2. Abra `NexFiscal.sln` no Visual Studio.
-3. No terminal do Visual Studio, rode `powershell -ExecutionPolicy Bypass -File scripts/Run-NexFiscalLocal.ps1`.
-4. Acesse `http://127.0.0.1:5187`.
-5. Para depurar, defina `NexFiscal.Web` como projeto de inicialização e pressione **F5**. O MSBuild executa `npm install` somente na primeira vez ou quando `frontend/package.json` mudar e executa `npm run build` automaticamente antes do backend. Não é necessário abrir PowerShell.
+- Windows com .NET SDK 8, Visual Studio 2022 opcional e Node.js 20+.
+- Acesso ao SAP HANA (schema `BRAI_NEX`; provider SAP `Sap.Data.Hana.Net.v8.0`).
+- Certificado A1 `.pfx` ou `.p12` da empresa com senha e permissão de uso.
+- Diretório de destino **no servidor** acessível à conta que executa o NexFiscal.
+- Rede local e saídas HTTPS/TLS compatíveis com a validação ICP-Brasil e SEFAZ.
 
-## Capacidades atuais
-- Assistente na ordem: **HANA → Empresa/Certificado A1 → Operação**. O HANA é validado e configurado antes do cadastro.
-- Valida arquivo A1 e senha e exibe CNPJ, razão social, UF quando presente no Subject ST, emissão/validade e emissor.
-- O endpoint `POST /api/certificates/inspect` não salva o A1 nem a senha.
-- O endpoint `POST /api/companies/register` recebe somente certificado e senha; cria a empresa **pausada** no HANA após configurar provider e connection string. Não aceita NSU nem ambiente enviado pelo usuário. O ambiente padrão da versão inicial é produção.
-- O XML, o certificado e a senha não devem ser comitados em Git.
+**Atenção:** o projeto é on-premises, mas este portal de bootstrap é **somente loopback**. Ainda não há login AD, LDAPS, permissões por usuário ou publicação segura em rede. Não usar em produção sem QA e revisão de segurança.
 
-## Configuração HANA
-1. Abrir o NexFiscal em http://127.0.0.1:5187.
-2. Informar servidor, porta SQL, usuário técnico e senha no primeiro passo do assistente.
-3. Selecionar **Testar conexão**; o servidor abre uma conexão real e confere as cinco tabelas do schema `BRAI_NEX`.
-4. Selecionar **Salvar e continuar**; a configuração é protegida pelo ASP.NET Core Data Protection e armazenada no servidor, fora do repositório.
-5. O arquivo protegido `.nexfiscal-hana.dat` e as chaves `.nexfiscal-keys/` são dados locais de instalação: **não copiar para Git**, não excluir ao atualizar o ZIP e manter com acesso restrito. No Windows, as chaves são protegidas por DPAPI, vinculadas ao contexto da instalação.
-6. O cadastro da empresa só fica disponível depois da configuração HANA.
+## Iniciar no ambiente de desenvolvimento/QA
 
-Pode-se manter a variável de ambiente `NexFiscal__HanaConnectionString` como fallback de administração avançada. A conexão usa o driver oficial e não exige mais configurar um factory manualmente.
+1. Clonar o repositório e selecionar a branch `qa/frontend-enxuto-20261113`.
+2. Na raiz do repositório, executar:
 
-**Não foi testada uma conexão no HANA da sua empresa**; os testes de CI verificam a compilação, não substituem o teste real. O portal permanece somente em loopback. Não há validação completa ICP-Brasil, CRL/OCSP nem comunicação real com a SEFAZ nesta etapa.
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/Run-NexFiscalLocal.ps1
+```
 
-## Próximas etapas
-- Persistência segura de A1 e rotação do certificado sem perder NSU.
-- Cliente SOAP de NFeDistribuicaoDFe.
-- Autenticação e HTTPS antes de habilitar acesso pela rede.
-- Homologação da DDL e dos comandos com HANA real.
+3. O script instala dependências Node, compila React/Vite para `src/NexFiscal.Web/wwwroot` e inicia a API ASP.NET Core.
+4. Abrir `http://127.0.0.1:5187` no próprio servidor. O endereço vem de `NexFiscal:ListenUrl` em `src/NexFiscal.Web/appsettings.json`.
 
-## Controle interno de NSU
-O cadastro **não cria um checkpoint fictício**, e não consulta a SEFAZ. A ausência de linha em `BRAI_NEX_CaptureCursor` significa captura não inicializada. Uma empresa já cadastrada não tem seu NSU substituído; a tentativa de cadastro duplicado retorna erro sem alteração. `Enabled=0` impede o orquestrador de iniciar captura.
+Para desenvolvimento do frontend isolado, executar `cd frontend` e `npm run dev`; `frontend/vite.config.js` encaminha `/api` para `127.0.0.1:5187`. A API precisa estar em execução no backend local.
 
-A próxima implementação deve identificar checkpoint anterior de fonte confiável ou executar inicialização controlada pela SEFAZ, após disponibilizar cliente SOAP A1 e persistência protegida. Se não houver prova de exclusividade do consumidor NSU, manter o estado aguardando e notificar administrador em diagnóstico técnico (sem expor NSU no cadastro normal). Não é possível descobrir com garantia absoluta o NSU vigente apenas lendo o A1.
+## Instalação pelo assistente
 
-## Instalação automática e cofre de certificados A1
+1. **SAP HANA:** preencher host, porta, usuário e senha. Usar **Testar conexão**. Se as cinco tabelas não existirem, usar **Preparar estrutura** com credenciais que tenham permissão DDL, repetir a validação e salvar. A conexão é protegida no servidor.
+2. **Empresa e A1:** escolher arquivo `.pfx`/`.p12`, informar senha, validar dados extraídos, conferir CNPJ/razão social e cadastrar. O cadastro não exige digitar NSU nem informar dados de fornecedor anterior.
+3. **Operação:** selecionar empresa; informar pasta de XMLs no servidor e salvar a configuração. O mesmo diretório serve ao monitoramento e à consulta manual.
 
-- **Etapa 1:** após informar HANA e clicar em **Testar conexão**, se faltarem tabelas o assistente oferece **Preparar estrutura automaticamente**. Essa ação explícita executa a migração SQL embarcada, cria o schema/tabelas ausentes, sem remover nem sobrescrever dados existentes. Requer usuário com privilégios DDL na primeira instalação; use uma credencial operacional restrita após o provisionamento.
-- A migração de instalação é versionada por `BRAI_NEX_SchemaVersion`. A versão inicial cria cinco tabelas, idempotentemente em nível de existência dos objetos. Ainda não substitui migrações de alteração de colunas em versões futuras: alterações de estrutura exigirão migrations incrementais.
-- **Etapa 2:** o A1 é validado e, após cadastrar a empresa pausada, os bytes PKCS#12 e a senha são cifrados em um arquivo `.a1enc` por `CompanyId` dentro da pasta `.nexfiscal-certificates`, fora de `wwwroot`. A chave de proteção do ASP.NET Data Protection é protegida com **Windows DPAPI escopo do usuário que executa o serviço**. A chave privada não é instalada no repositório de certificados Windows nem persiste desprotegida em disco.
-- O HANA guarda metadados da empresa; o PFX fica cifrado somente no servidor do NexFiscal. O operador não faz novas consultas manuais no banco para criar tabelas.
-- Pastas `.nexfiscal-certificates` e `.nexfiscal-keys` e arquivo `.nexfiscal-hana.dat` são **críticos**: não remover na atualização da aplicação, aplicar ACLs restritas ao usuário de serviço e manter backup seguro de todo o conjunto. Sem a chave DPAPI do mesmo perfil Windows, os dados cifrados **não são necessariamente recuperáveis em outro host/usuário**. Para migração de servidor, será necessário um procedimento próprio de reimportação A1 e configuração HANA; o backup sozinho não garante recuperação.
-- **Ainda não habilitar captura real automaticamente**: faltam cliente SOAP SEFAZ, verificação cadeia/revogação do certificado, renovação de A1, recuperação de falhas e isolamento de usuários na aplicação em rede.
-- O processo atual é somente local `127.0.0.1`, sem autenticação multiusuário. Não expor as rotas de setup a outros computadores.
+## Operação: NF-e e CT-e
 
-## Motor de comunicação NF-e — implementação inicial
+### Monitoramento automático NF-e
 
-- `src/NexFiscal.Capture/NfeDistributionClient.cs` contém transporte SOAP 1.2 mTLS para o endpoint oficial do AN, montagem do `distNSU` e leitura de `retDistDFeInt` (137/138/656), com `docZip` descompactado e SHA-256.
-- O cliente **não é invocado por nenhum endpoint nem agendamento**. Não liga a captura automaticamente, não define NSU inicial nem grava XML/NSU no HANA. Somente ativar depois de: validar cadeia/revogação ICP-Brasil, implementar persistência de lote + checkpoint de modo atômico, garantir lease por CNPJ e impedir dois consumidores de NSU.
-- O serviço existente de captura de outros fornecedores pode compartilhar o mesmo CNPJ. Não disparar solicitações reais de produção até planejar migração/coexistência.
-- Testes `NfeDistributionClientTests` cobrem a montagem SOAP, parsing de retornos 137, 138, 656 e a descompactação de XML; sem consulta SEFAZ em CI.
+Ativar **Monitoramento automático**, informar o intervalo em minutos e salvar. O `NfeMonitoringWorker` avalia as configurações e consulta periodicamente, **somente** quando o intervalo e a janela fiscal permitem. Desativar a opção interrompe novas tentativas automáticas; não exclui XMLs, configurações de pasta nem o checkpoint interno.
 
-### Persistência do primeiro lote no HANA
+### Consultar todos os XMLs disponíveis
 
-A classe `HanaNfeDistributionStore` recebe a resposta já validada e executa uma única transação: bloqueia `BRAI_NEX_CaptureCursor` com `FOR UPDATE`, compara o checkpoint com o NSU solicitado, grava os XMLs em `BRAI_NEX_Envelope` por NSU e SHA-256, e só então atualiza `LastNsu`. Uma falha provoca rollback. Status 137/656 nunca avançam o NSU; aplicam cooldown. Na falta de cursor preexistente, a gravação é recusada. **Ainda não há job, endpoint ou execução real habilitada.**
+Clicar **Consultar todos os XMLs disponíveis**. A API inicia um job `distNSU` para aquele CNPJ; a tela mostra estado, lotes, XMLs novos e já presentes. O botão independe do monitoramento automático estar ativado, **mas exige pasta salva e A1**. Mesmo durante a espera fiscal, ele permanece clicável para informar a próxima janela, sem consultar a SEFAZ antecipadamente. A SEFAZ pode pausar a operação; nem todo DF-e distribuído é uma NF-e completa `procNFe`, e a consulta não garante documentos anteriores à janela fiscal de disponibilidade.
 
-## Central de operação e teste de captura NF-e
+Na aba **CT-e**, configure a pasta, habilite a consulta manual e clique em **Consultar CT-e**. O CT-e usa seu próprio checkpoint fiscal, não existe Worker CT-e nesta versão e a consulta em espera apenas informa a próxima janela. Não há campos para NSU específico, data, consultas retroativas nem recuperação por ZIP.
 
-- `GET /api/capture/status`: consulta o HANA e informa empresas, A1 armazenado, checkpoint NF-e, quantidade de envelopes, última tentativa, cooldown e motivo de bloqueio, sem acessar a SEFAZ. A interface abre a Central de operação diretamente quando encontra empresas registradas.
-- `POST /api/capture/test-once`: recebe `{ "companyId": "<GUID>" }`, executa no máximo uma consulta e retorna código SEFAZ e quantidade de documentos novos. A captura não é automática e não cria NSU.
-- **Bloqueio padrão obrigatório:** requer simultaneamente empresa `Enabled=1`, cursor `BRAI_NEX_CaptureCursor` inicializado e ainda disponível, A1 no cofre, cadeia de certificados verificável e configuração de servidor `NexFiscal:Capture:AllowControlledQuery=true` + `NexFiscal:Capture:ExclusiveConsumerConfirmed=true` após validação administrativa de handoff. Enquanto não houver migração segura do consumidor atual, não ativar as flags nem habilitar empresas. A interface informa o motivo e mantém o botão desabilitado.
-- Para status 138, arquivos XML são armazenados por NSU e hash na transação que avança o cursor. Status 137/656 não avançam NSU, aplicam espera. Status de consulta são persistidos em `BRAI_NEX_CaptureLog` na mesma transação.
-- Limitação deliberada: o controle de concorrência de execução é local ao processo; para agendamento multi-instância, ainda será necessário lease distribuído. Não executar várias instâncias para o mesmo CNPJ.
-- Não existe processo administrativo completo de transferência de NSU entre fornecedores: esse procedimento e a validação de ambiente/credenciais devem ser concluídos antes do primeiro teste real.
+## Diagnóstico e limitações
 
-### Teste imediato na Central de operação (sem consumir NSU)
+- **Configuração técnica** fica no cabeçalho, fora da navegação principal. Ali é possível rever o HANA ou testar conectividade HTTPS SEFAZ para empresa cadastrada.
+- Teste de conectividade HTTPS 200/WSDL **não prova autorização SOAP de distribuição de NF-e**.
+- `/api/health` apenas informa estado da configuração: não comprova que todas as tabelas estão acessíveis.
+- `cStat 137` informa ausência de novos documentos naquele momento; `138` indica resposta com documentos; `656` exige respeito à janela de segurança. Não insistir em consultas durante cooldown.
+- Se falhar a gravação de arquivo ou checkpoint, **não repetir a consulta cegamente**. Conferir logs, persistência e lote bruto interno antes de agir; a API não disponibiliza restauração manual de ZIP.
+- Se a página abrir sem empresas por falha de HANA, verificar o erro retornado por `/api/capture/status`. Não cadastrar empresa novamente por engano.
 
-- Após atualizar o frontend via PowerShell com `npm run build` e executar `NexFiscal.Web` pelo Visual Studio, a Central de operação recupera empresas do HANA.
-- **Testar conexão SEFAZ** chama `POST /api/capture/test-connectivity`, usa o A1 cifrado, valida sua cadeia e consulta o WSDL por HTTPS. **Não envia uma consulta distNSU e não consome NSU.** Um HTTP 200 não garante autorização da SEFAZ para distribuir documentos.
-- **Testar consulta real** só fica habilitado depois de um handoff formal com confirmação de exclusividade, empresa habilitada e checkpoint previamente autorizado. Não habilitar apenas para forçar o teste: o NexFiscal não conhece o NSU do consumidor anterior.
+## Dados locais sensíveis e atualização
 
-### Diagnóstico corrigido — Schannel Windows `0x8009030E`
+Conservar protegidos e com backup seguro:
+- `.nexfiscal-hana.dat` (configuração HANA cifrada);
+- `.nexfiscal-keys/` (chaves Data Protection);
+- `.nexfiscal-certificates/` (cofre A1);
+- `.nexfiscal-schedules/` (configuração por empresa);
+- `.nexfiscal-downloads/` (lotes técnicos já recebidos e arquivados internamente).
 
-Em 11/11/2026, a comunicação HTTPS com A1 retornou `HttpRequestException → IOException → AuthenticationException → Win32Exception 0x8009030E` (SEC_E_NO_CREDENTIALS). A Microsoft documenta falha conhecida do Schannel com `X509KeyStorageFlags.EphemeralKeySet` na autenticação TLS cliente: https://learn.microsoft.com/en-us/dotnet/core/extensions/sslstream-troubleshooting#handshake-failed-with-ephemeral-keys . O `NfeCaptureCoordinator` foi atualizado para importar o A1 com `UserKeySet` no Windows, sem `PersistKeySet`, e mantê-lo disponível durante a negociação mTLS; Linux continua usando `EphemeralKeySet`. O cofre protegido original não foi alterado; a chave privada pode ter materialização temporária no perfil do usuário Windows durante a chamada, removida na liberação do certificado em .NET 8, por isso a conta que executa o serviço precisa ter perfil e permissões adequados. Não ativar consulta `distNSU` antes da migração segura do checkpoint.
+Esses itens não devem ser enviados ao Git nem apagados em atualização. No Windows, chaves protegidas com DPAPI são associadas ao contexto do serviço; **copiar apenas os arquivos pode não ser suficiente para migrar de servidor/usuário**.
 
-### Preparação do checkpoint NF-e pela Central de operação
+## Compilação e testes técnicos
 
-- Após validar HTTPS e confirmar que o fornecedor anterior deixou de consultar o mesmo CNPJ, o operador pode abrir **Preparar transferência do NSU**.
-- O formulário solicita origem do último NSU, valor de 15 dígitos conferido no sistema anterior, data/hora da última consulta, CNPJ e duas confirmações explícitas. Esses dados **não são inferidos** a partir do HTTP 200. Não inserir NSU zero, aleatório ou de outra empresa.
-- O endpoint local `POST /api/capture/prepare-handoff` cria uma única vez `BRAI_NEX_CaptureCursor` e grava `HANDOFF_PREPARED` na tabela `BRAI_NEX_CaptureLog` na mesma transação. Se já existe checkpoint, recusa sobrescrever. Se a empresa não está pausada ou o CNPJ não confere, recusa.
-- O cadastro continua com `Enabled=0`, as flags de consulta real permanecem desligadas e **não há requisição à SEFAZ**. A confirmação feita no formulário é uma declaração, não uma verificação automática da parada do fornecedor.
-- Uma autorização operacional futura ainda deve verificar a posse exclusiva do consumidor, a autenticidade do checkpoint e o intervalo desde a última consulta antes da primeira tentativa `distNSU`.
+```powershell
+dotnet test tests/NexFiscal.Capture.Tests/NexFiscal.Capture.Tests.csproj -c Release
+dotnet build src/NexFiscal.Web/NexFiscal.Web.csproj -c Release
+cd frontend
+npm install --no-audit --no-fund
+npm run build
+npm test
+```
 
-### Primeiro download manual de NF-e (11/11/2026)
+Os testes automatizados não substituem verificar com A1 autorizado e SAP HANA de QA a captura real, a integridade dos arquivos e o comportamento ao encerrar/reiniciar o servidor. Não foi realizado deploy em produção nesta atualização documental.
 
-- Com o consumidor anterior **desligado**, a Central de operação agora oferece **Baixar NF-e agora**. O navegador solicita confirmação explícita antes de enviar a requisição real; o usuário não informa NSU.
-- `POST /api/capture/download` executa **uma chamada SOAP distNSU** por clique. Se não houver checkpoint para a empresa, grava `LastNsu=0` automaticamente; caso contrário, retoma o último NSU persistido. A operação só roda no portal local (loopback) com A1 válido.
-- Para impedir consulta repetida após erro ou timeout, antes da chamada reserva `NextAllowedAtUtc=agora+1h` e registra uma tentativa em `BRAI_NEX_CaptureLog`. Se ocorrer falha de rede, **não tente novamente imediatamente**: aguarde o intervalo.
-- Em `138`, grava os XMLs em `BRAI_NEX_Envelope` e avança o NSU na mesma transação; em `137`/ `656`, respeita o intervalo de 1h. O status é mostrado ao operador. A aplicação não solicita captura automática nem recupera o histórico completo além do que a SEFAZ disponibilizar pelo serviço.
-- Esta liberação pressupõe que o sistema anterior foi desligado. Confirme novamente antes do clique. Não use se outro consumidor ainda estiver ativo para o mesmo CNPJ.
-- Não existe interface de exportação ZIP dos documentos ainda: **download** aqui significa buscar XMLs da SEFAZ e armazenar no HANA.
+## Ajustes da experiência de operação — 13/11/2026
+
+A tela principal apresenta a empresa selecionada e duas abas: **Notas fiscais (NF-e)** e **Conhecimentos (CT-e)**. A NF-e possui botão de captura manual, status do pedido, indicadores de registros recebidos e configuração do monitoramento por intervalo. CT-e preserva captura manual e configuração própria, sem Worker automático.
+
+**Solicitar captura durante a espera fiscal:** o clique registra um job de NF-e no backend e a interface mostra **Agendada**; o backend aguarda a próxima janela permitida e então tenta a captura automaticamente. O usuário não precisa clicar novamente. O Worker NF-e não concorre com esse job. **Limitação de QA:** a solicitação agendada fica somente em memória e é interrompida quando o processo da API reinicia; nesse caso, é necessário registrar uma nova solicitação. A contagem de registros HANA inclui resumos/eventos e não deve ser apresentada como quantidade de XMLs completos.
+
+**Notas com XML ausente:** o sistema ainda não tem serviço de consulta individual por chave; a análise exige chave de 44 dígitos para cruzar HANA, arquivo gravado e situação de disponibilização. Não prometer que o botão recupera todas as notas emitidas.
+
+## Escopo de CT-e alinhado à NF-e — 13/11/2026
+
+A partir desta revisão, **CT-e e NF-e apresentam a mesma experiência operacional**: monitoramento automático com intervalo configurável e pasta de XMLs, botão de captura manual de todos os lotes atualmente disponíveis, acompanhamento da execução e agendamento automático da solicitação durante a espera fiscal. A consulta CT-e usa `POST /api/sefaz/cte/catchup` e o progresso `GET /api/sefaz/cte/catchup/{companyId}`, com serviço `CteSefazCatchup` e Worker `CteMonitoringWorker`.
+
+O motor CT-e mantém distribuição fiscal, XML `procCTe`, checkpoint e janela SEFAZ próprios, independentes de NF-e. A configuração `CTE` do agendamento controla o monitoramento automático; a captura manual exige certificado A1 e pasta válida, não o monitoramento ativado. O CT-e tem armazenamento de checkpoint local em `.nexfiscal-cte/`, ao contrário do checkpoint NF-e no SAP HANA. **Não confundir equivalência de interface e fluxo com identidade de persistência.**
+
+O histórico anterior deste documento pode mencionar CT-e apenas manual: essa informação foi substituída nesta revisão. Não há restauração por ZIP, busca por data, consulta de NSU específico ou garantia de recuperar documentos fora da disponibilidade fiscal. Jobs manuais agendados continuam apenas em memória e não sobrevivem ao reinício da API. Homologação real com SEFAZ/CT-e ainda pendente.
+
+## Diagnóstico de NF-e ausentes por chave — QA
+
+Na aba NF-e, o bloco **Verificar XMLs não encontrados** permite colar de 1 a 50 chaves de 44 dígitos. Ele envia `POST /api/nfe/diagnostics/keys` com `{"companyId":"<GUID>","keys":["<chave>"]}` e faz verificação somente de leitura: procura o arquivo `<chave>.xml` na pasta de NF-e configurada, valida se é `nfeProc`, confere envelopes completos `procNFe`, resumos `resNFe` e eventos em `BRAI_NEX.BRAI_NEX_Envelope` para a empresa selecionada. O relatório distingue completo, XML ausente da pasta, somente resumo, somente evento, arquivo divergente, apenas na pasta, não localizado e inconclusivo. O cruzamento tem limite de 100.000 envelopes, sinalizando quando a análise é parcial. A operação **não executa consultas SEFAZ, não altera NSU nem restaura XMLs**. Os resultados só podem ser confirmados quando a API puder acessar o HANA e a pasta reais.
+
+Cinco notas informadas como ausentes na homologação, ainda sem resultado de consulta real: 738 (NRTECNAGEM), 10963 (JVC MATERIAIS), 32072 (MASTER TECNOLOGIA), 87228 (DIGIMEC), 1396817 (CASA MIMOSA), todas de novembro/2026. Suas chaves fornecidas possuem estrutura e dígito verificador corretos, mas isso não comprova disponibilização ou captura do XML.
+
+## Gestão de empresas e certificados A1 — QA 13/11/2026
+
+**Empresas e certificados** apresenta o estado de armazenamento do A1 de cada cadastro HANA. O certificado fica em arquivo protegido local `.nexfiscal-certificates/<CompanyId>.a1enc`, separado do registro no HANA. Por isso uma empresa pode estar cadastrada, mas ter o arquivo A1 ausente (por exemplo após executar outra instalação/instância sem migrar o cofre). A mensagem de interface foi corrigida para **Arquivo A1 não localizado no servidor**, sem confundir cadastro no HANA com presença de certificado. Para o caso ausente, usar **Reenviar A1** e carregar o certificado do mesmo CNPJ (endpoint `POST /api/companies/{companyId}/certificate` multipart); o sistema preserva o cadastro e cursor e não permite sobrescrever um A1 já armazenado.
+
+A ação **Remover empresa** exige digitar o CNPJ exato e usa `POST /api/companies/{companyId}/remove` com `{"cnpjConfirmation":"<14 dígitos>"}`. Por segurança, só remove cadastros **sem checkpoint, envelopes ou logs NF-e e sem histórico CT-e**; monitoramento NF-e e CT-e precisa estar desativado e nenhum job manual pode estar ativo. Depois da remoção bem-sucedida do cadastro HANA, remove apenas o arquivo A1 protegido e a agenda locais desse identificador, sem tocar nas pastas de XML. Se houver dados fiscais, retorna conflito em vez de apagar histórico. O serviço não oferece exclusão forçada de empresas com histórico; isso precisa de processo de arquivamento separado.

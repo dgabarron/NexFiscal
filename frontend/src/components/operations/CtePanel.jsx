@@ -5,7 +5,6 @@ import { Button } from "../ui/button";
 import { Notice } from "../common/Notice";
 import { useNotices } from "../common/NoticesContext";
 import { api } from "../../lib/api";
-import { Stat } from "../common/Stat";
 
 export function CtePanel({ company, cteState, schedule, cooldown, result, onResult }) {
   const { notify } = useNotices();
@@ -18,7 +17,8 @@ export function CtePanel({ company, cteState, schedule, cooldown, result, onResu
       notify.error("Ative a captura CT-e, informe a pasta e salve a configuração."); return;
     }
     if (cooldown) {
-      notify.success(`CT-e: próxima consulta após ${cooldown.time} (${cooldown.minutes} min).`); return;
+      notify.error(`A SEFAZ permite a próxima consulta CT-e após ${cooldown.time}. Nenhuma consulta antecipada foi enviada.`);
+      return;
     }
     if (!window.confirm("Confirma que não existe outro capturador CT-e ativo? A consulta será enviada à SEFAZ.")) return;
     setBusy(true);
@@ -40,22 +40,19 @@ export function CtePanel({ company, cteState, schedule, cooldown, result, onResu
         <div className="flex items-center gap-3">
           <div className="p-2.5 bg-blue-50 rounded-lg text-blue-600"><Truck size={20} /></div>
           <div>
-            <h3 className="text-base font-bold">Consulta CT-e (manual)</h3>
-            <p className="text-sm text-slate-500 mt-0.5">Uma consulta por vez. Cursor CT-e é independente do cursor NF-e.</p>
+            <h3 className="text-base font-bold">Capturar CT-e</h3>
+            <p className="mt-1 text-sm text-slate-500">Consulte os conhecimentos disponíveis para esta empresa.</p>
           </div>
         </div>
       </CardHeader>
       <CardContent>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <Stat label="CT-e · Último NSU" value={cteState?.lastNsu || "Não inicializado"} mono />
-          <Stat label="CT-e · Maior NSU informado" value={cteState?.maxNsu || "Ainda não informado"} mono />
-        </div>
+
         {cooldown && (
           <div className="mt-3"><Notice>Próxima consulta permitida após {cooldown.time} ({cooldown.minutes} min).</Notice></div>
         )}
         <div className="mt-4 flex flex-wrap gap-3">
-          <Button disabled={busy || !company.certificateStored || !cteSchedule?.enabled || !!cooldown} onClick={download}>
-            <DownloadCloud size={16} />{busy ? "Consultando..." : cooldown ? "Aguardando cooldown" : "Consultar CT-e"}
+          <Button disabled={busy || !company.certificateStored || !cteSchedule?.enabled || !cteSchedule?.destinationDirectory?.trim()} onClick={download}>
+            <DownloadCloud size={16} />{busy ? "Consultando..." : "Capturar CT-e disponível"}
           </Button>
 
         </div>
@@ -65,9 +62,6 @@ export function CtePanel({ company, cteState, schedule, cooldown, result, onResu
               : result.status === 137 || (result.filesSaved === 0 && result.filesAlreadyPresent === 0) ? "warning" : "success"}>
               CT-e {result.status}: {result.reason} · procCTe novos: {result.filesSaved ?? 0} ·
               {" "}Outros: {result.skippedNonProcCTe ?? 0}
-              {result.archiveUrl && (
-                <div className="mt-2"><a href={result.archiveUrl} className="underline">Baixar lote de recuperação CT-e</a></div>
-              )}
             </Notice>
           </div>
         )}

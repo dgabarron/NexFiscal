@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Activity, Save } from "lucide-react";
 import { Card, CardHeader, CardContent } from "../ui/card";
 import { Button } from "../ui/button";
@@ -7,20 +8,27 @@ import { isValidInterval } from "../../lib/capture-utils";
 
 export function MonitorPanel({ company, schedule, onScheduleField, onSaved }) {
   const { notify } = useNotices();
+  const [saving, setSaving] = useState(false);
   const nfe = schedule.find((s) => s.documentType === "NFE");
   if (!nfe) return null;
 
   async function save() {
+    if (saving) return;
+    if (!schedule.every(s => isValidInterval(s.intervalMinutes))) {
+      notify.error("Informe intervalos válidos em todos os tipos de documento."); return;
+    }
     if (!isValidInterval(nfe.intervalMinutes)) { notify.error("Informe um número inteiro de minutos a partir de 1."); return; }
     if (nfe.enabled && !nfe.destinationDirectory.trim()) { notify.error("Preencha a pasta de destino para ativar a captura."); return; }
+    setSaving(true);
     try {
-      const entries = schedule.map((s) => s.documentType === "NFE" ? { ...s, intervalMinutes: String(s.intervalMinutes).trim() } : s);
+      const entries = schedule.map((s) => ({ ...s, intervalMinutes: String(s.intervalMinutes).trim() }));
       const result = await api.post(`/api/capture/schedules/${company.companyId}`, entries);
-      onSaved?.(result);
+      await onSaved?.(result);
       notify.success(nfe.enabled
         ? "Monitoramento NF-e salvo. O Worker respeitará o intervalo e a janela fiscal."
         : "Monitoramento NF-e desativado.");
     } catch (e) { notify.error(e.message); }
+    finally { setSaving(false); }
   }
 
   return (
@@ -57,8 +65,8 @@ export function MonitorPanel({ company, schedule, onScheduleField, onSaved }) {
             value={nfe.destinationDirectory} disabled={!nfe.enabled}
             onChange={(e) => onScheduleField(company.companyId, "NFE", "destinationDirectory", e.target.value)} />
         </div>
-        <Button className="mt-4" variant="outline" onClick={save}>
-          <Save size={16} />Salvar configuração do monitoramento
+        <Button className="mt-4" variant="outline" disabled={saving} onClick={save}>
+          <Save size={16} />{saving ? "Salvando..." : "Salvar configuração do monitoramento"}
         </Button>
       </CardContent>
     </Card>

@@ -1,33 +1,34 @@
-# NexFiscal — Escopo funcional aprovado para QA
-Data: 13/11/2026
-Branch: qa/frontend-enxuto-20261113
+# NexFiscal — QA do escopo de duas operações
 
-## Apenas duas operações de captura NF-e
-1. **Monitoramento automático NF-e**: serviço permanente no servidor, `NfeMonitoringWorker`, respeita agendamento e janela SEFAZ; pode estar desativado sem impedir consultas manuais.
-2. **Consultar todos os XMLs disponíveis**: ação manual `POST /api/sefaz/nfe/catchup`, usa `distNSU` sequencial a partir do checkpoint armazenado, percorre os lotes disponíveis. É independente de `Enabled` do monitoramento e exige pasta válida/credencial A1. Não reinicia NSU.
+**Documento vigente:** 13/11/2026, branch `qa/frontend-enxuto-20261113`. Referência funcional: [ESPECIFICACAO_FUNCIONAL_ATUAL.md](ESPECIFICACAO_FUNCIONAL_ATUAL.md). Referência técnica: [ARQUITETURA_E_APIS.md](ARQUITETURA_E_APIS.md).
 
-O portal continua com duas áreas: **Operação** (ambas as funções) e **Empresas** (cadastro A1); HANA e conectividade ficam na configuração técnica do cabeçalho.
+## Operação
 
-## Explicitamente fora do produto
-- Recuperação retroativa `consNSU`, tentativa de preencher lacunas, ajuste manual de NSU.
-- Restauração local de ZIP, varredura por data, prévia e recuperação de XMLs de diretórios antigos.
-- CT-e e NFS-e não são opções do Main nesta etapa. Os serviços CT-e de backend são legados preservados separadamente nesta branch para evitar remoção destrutiva de módulos independentes.
+- [ ] Menu exibe **Operação** e **Empresas**; Configuração técnica é acessível pelo cabeçalho.
+- [ ] Main exibe somente **Monitoramento automático NF-e** e **Consultar todos os XMLs disponíveis**.
+- [ ] Configurar X minutos, pasta do servidor e salvar; verificar persistência após atualizar página.
+- [ ] Com Worker ativado, verificar que consulta segue intervalo e janela SEFAZ, sem múltiplas chamadas concorrentes.
+- [ ] Com Worker desativado, manter pasta salva e confirmar que o botão de consulta manual funciona.
+- [ ] Botão consulta por `companyId` e acompanha `GET /api/sefaz/nfe/catchup/{companyId}`; atualização da página recupera estado enquanto o backend estiver vivo.
+- [ ] Trocar empresa: status, configuração e histórico do job continuam vinculados ao CNPJ correto.
+- [ ] Validar mensagens para `137`, `138`, `656`, checkpoint indisponível, pasta sem acesso, certificado ausente e falha HANA.
+- [ ] Resultado distingue `procNFe` completo, duplicata, resumo/evento; nenhum resultado de erro aparece como sucesso.
+- [ ] Confirmar que não existem campos de NSU, data retroativa, restauração de ZIP ou consulta de um único lote para usuário.
 
-Removidos da API: `POST /api/recovery/nfe/sefaz/{companyId}`, `GET /api/recovery/nfe/preview/{companyId}`, `POST /api/recovery/nfe/restore`.
-Mantido `GET /api/capture/archive/{companyId}/{archiveId}` exclusivamente como diagnóstico técnico de um lote que o próprio NexFiscal recebeu; `NfeXmlArchive` continua como cópia de segurança, não como recurso de restauração do usuário.
+## Instalação e segurança
 
-## Regras que devem continuar verdadeiras
-- O manual consulta somente os lotes disponibilizados pela SEFAZ e **não garante XML desde a fundação** nem `procNFe` para cada evento/resumo.
-- XMLs individuais são gravados somente quando a SEFAZ retorna `procNFe` completo. O backend mantém arquivo bruto interno para evitar perda caso falhe a persistência.
-- `LastNsu` e janela fiscal permanecem compartilhados entre manual e Worker. Desligar Worker não apaga nem recua NSU.
-- HANA multiempresa e certificado A1 continuam obrigatórios; nenhuma exposição na rede ou deploy de produção.
-- `/api/capture/schedules/{companyId}` preserva contrato atual (NFE, CTE, NFSE) mas as configurações extras não aparecem na UI.
+- [ ] HANA: testar, provisionar cinco tabelas `BRAI_NEX`, salvar; rejeitar payload incompleto e validar erro de conexão.
+- [ ] A1: validar certificado, razão social, CNPJ, cadastrar empresa, sem persistir senha no navegador.
+- [ ] Diagnóstico HTTPS não dispara consulta SOAP nem altera checkpoint.
+- [ ] A aplicação rejeita conexão não loopback; não há autenticação multiusuário pronta.
+- [ ] Não remover arquivos protegidos (`.nexfiscal-keys`, `.nexfiscal-certificates` e `.nexfiscal-hana.dat`) nas atualizações.
 
-## Checklist QA
-- [ ] Monitoramento desligado: configurar diretório, salvar e executar consulta manual com sucesso.
-- [ ] Monitoramento ligado: consultar em intervalo; manual compartilha `LastNsu` e cooldown.
-- [ ] Recarregar página durante sincronização: restaurar o status do job em execução.
-- [ ] Ausência de ações ZIP, consNSU, CT-e, NFS-e na interface principal.
-- [ ] `POST /api/recovery/nfe/sefaz/{companyId}`, preview e restore não registrados na API.
-- [ ] Persistência de arquivos HANA/pasta, certificados e comportamento de `137`, `138`, `656`.
-- [ ] Testar SAP HANA, certificado A1 e SEFAZ **em ambiente de QA** antes de liberar instalação.
+## Regra de escopo
+
+Fora do Main e das funções de captura atuais: `consNSU` por NSU específico, recuperação retroativa, ZIP local, busca por período, CT-e, NFS-e. O backend contém rotas técnicas legadas de CT-e e captura unitária, que não ampliam o escopo. Os endpoints de recuperação `/api/recovery/nfe/*` foram removidos na branch.
+
+## Resultado de validação
+
+- Build da API .NET, build Vite e testes automatizados devem continuar passando.
+- **Homologação real com SAP HANA + A1 + SEFAZ: pendente.**
+- **Produção: não alterada; não realizar merge/implantação até concluir QA funcional.**

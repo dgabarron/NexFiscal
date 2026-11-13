@@ -3,7 +3,11 @@ using System.Net;
 using Microsoft.AspNetCore.DataProtection;
 using NexFiscal.Capture;
 
-var builder = WebApplication.CreateBuilder(args);
+var builder = WebApplication.CreateBuilder(new WebApplicationOptions
+{
+    Args = args,
+    ContentRootPath = NexFiscalDataDirectory.ResolveContentRoot(AppContext.BaseDirectory)
+});
 builder.WebHost.UseUrls(builder.Configuration["NexFiscal:ListenUrl"] ?? "http://127.0.0.1:5187");
 builder.WebHost.ConfigureKestrel(k => k.Limits.MaxRequestBodySize = 5_500_000);
 // Uma única raiz de estado local: não depende do diretório atual do processo.

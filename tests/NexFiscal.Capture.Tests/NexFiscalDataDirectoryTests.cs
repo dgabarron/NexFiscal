@@ -17,6 +17,14 @@ public sealed class NexFiscalDataDirectoryTests
     }
 
     [Fact]
+    public void ConteudoWebUsaPastaDoProjetoIndependenteDoDiretorioAtual()
+    {
+        using var fixture = new Fixture();
+        Assert.Equal(fixture.Project,
+            NexFiscalDataDirectory.ResolveContentRoot(fixture.Binaries));
+    }
+
+    [Fact]
     public void SemDadosAnterioresUsaPastaDoProjeto()
     {
         using var fixture = new Fixture();
@@ -78,5 +86,6 @@ public sealed class NexFiscalDataDirectoryTests
         var publish = Path.Combine(fixture.Root, "published");
         Directory.CreateDirectory(publish);
         Assert.Equal(publish, NexFiscalDataDirectory.Resolve(publish));
+        Assert.Equal(publish, NexFiscalDataDirectory.ResolveContentRoot(publish));
     }
 }

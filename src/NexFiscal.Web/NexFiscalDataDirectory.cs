@@ -21,6 +21,13 @@ public sealed class NexFiscalDataDirectory
 
     public string PathFor(string name) => Path.Combine(Root, name);
 
+    // Servir wwwroot do mesmo lugar no F5 e no dotnet run da solução.
+    public static string ResolveContentRoot(string assemblyBaseDirectory)
+    {
+        var binaryDirectory = Path.GetFullPath(assemblyBaseDirectory);
+        return LocateProjectDirectory(binaryDirectory) ?? binaryDirectory;
+    }
+
     public static string Resolve(string assemblyBaseDirectory, string? explicitDirectory = null)
     {
         if (!string.IsNullOrWhiteSpace(explicitDirectory))

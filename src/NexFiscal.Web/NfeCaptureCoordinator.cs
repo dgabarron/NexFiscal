@@ -24,8 +24,12 @@ public sealed class NfeCaptureCoordinator(
         var result = new List<object>();
         foreach (var company in companies)
         {
-            var certificateStored = vault.IsStored(company.Id);
-            var reason = !certificateStored ? "Certificado A1 não está armazenado."
+            var certificateStatus = vault.StorageStatus(company.Id);
+            var certificateStored = certificateStatus == "stored";
+            var reason = certificateStatus == "missing"
+                ? "Arquivo A1 não localizado nesta instalação."
+                : certificateStatus == "unreadable"
+                    ? "O arquivo A1 existe, mas não pode ser aberto. Preserve as chaves e verifique o usuário Windows que executa o serviço."
                 : company.NextAllowedUtc is not null && company.NextAllowedUtc > DateTime.UtcNow
                     ? "Consulta anterior registrada. Aguarde o intervalo obrigatório antes de tentar novamente."
                 : !company.CursorConfigured ? "Pronto para a primeira consulta. O NSU inicial será criado automaticamente ao clicar em Baixar NF-e."
@@ -34,7 +38,7 @@ public sealed class NfeCaptureCoordinator(
             result.Add(new
             {
                 companyId = company.Id, cnpj = company.Cnpj,
-                legalName = company.Name, company.Enabled, certificateStored,
+                legalName = company.Name, company.Enabled, certificateStored, certificateStatus,
                 company.CursorConfigured,
                 lastNsu = company.LastNsu?.ToString("D15"),
                 maxNsu = (string?)null, // maxNSU ainda não é persistido pelo cursor HANA NF-e.

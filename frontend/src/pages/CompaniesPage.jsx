@@ -15,6 +15,7 @@ function CompanyCard({ company, onChanged }) {
   const [certificate, setCertificate] = useState(null);
   const [password, setPassword] = useState("");
   const hasCertificate = company.certificateStored === true;
+  const unreadableCertificate = company.certificateStatus === "unreadable";
   const expected = String(company.cnpj).replace(/\D/g, "");
 
   async function remove() {
@@ -54,18 +55,20 @@ function CompanyCard({ company, onChanged }) {
               {hasCertificate ? (
                 <><CheckCircle2 size={15} className="text-emerald-600" /><span className="text-emerald-800">A1 armazenado no servidor</span></>
               ) : (
-                <><AlertCircle size={15} className="text-amber-600" /><span className="text-amber-800">Arquivo A1 não localizado no servidor</span></>
+                <><AlertCircle size={15} className="text-amber-600" /><span className="text-amber-800">{unreadableCertificate ? "A1 armazenado, mas inacessível" : "Arquivo A1 não localizado no servidor"}</span></>
               )}
             </div>
             <p className="mt-2 text-xs text-slate-500">
               {hasCertificate
-                ? "Arquivo protegido localizado. A validade e a autorização SEFAZ são verificadas separadamente."
-                : "A empresa está cadastrada no HANA, mas o A1 não foi localizado. Reenvie o certificado para este cadastro sem alterar o CNPJ."}
+                ? "Arquivo protegido acessível. A validade e a autorização SEFAZ são verificadas separadamente."
+                : unreadableCertificate
+                  ? "O arquivo existe, mas não pode ser aberto com as chaves desta instalação. Preserve o cofre e as chaves originais; não recadastre a empresa."
+                  : "A empresa está cadastrada no HANA, mas o A1 não foi localizado. Reenvie o certificado para este cadastro sem alterar o CNPJ."}
             </p>
           </div>
         </div>
         <div className="mt-4 flex flex-wrap gap-2">
-          {!hasCertificate && (
+          {!hasCertificate && !unreadableCertificate && (
             <Button variant="outline" size="sm" onClick={() => { setMode(mode === "certificate" ? "" : "certificate"); setError(""); }}>
               <ShieldCheck size={15} />{mode === "certificate" ? "Cancelar" : "Reenviar A1"}
             </Button>

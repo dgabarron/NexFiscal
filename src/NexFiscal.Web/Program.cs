@@ -36,6 +36,7 @@ builder.Services.AddSingleton<NfeHandoffPreparation>();
 var app = builder.Build();
 var hanaSetup = app.Services.GetRequiredService<HanaSetup>();
 var certificateVault = app.Services.GetRequiredService<CompanyCertificateVault>();
+app.Logger.LogInformation("NexFiscal: dados privados em {DataDirectory}", dataDirectory.Root);
 
 // Secure bootstrap: this initial configuration portal must never be accessible
 // from the network. Production multi-user authentication is not implemented.

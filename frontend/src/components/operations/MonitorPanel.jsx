@@ -17,7 +17,6 @@ export function MonitorPanel({ company, schedule, onScheduleField, onSaved }) {
     if (!schedule.every(s => isValidInterval(s.intervalMinutes))) {
       notify.error("Informe intervalos válidos em todos os tipos de documento."); return;
     }
-    if (!isValidInterval(nfe.intervalMinutes)) { notify.error("Informe um número inteiro de minutos a partir de 1."); return; }
     if (nfe.enabled && !nfe.destinationDirectory.trim()) { notify.error("Preencha a pasta de destino para ativar a captura."); return; }
     setSaving(true);
     try {
@@ -37,8 +36,8 @@ export function MonitorPanel({ company, schedule, onScheduleField, onSaved }) {
         <div className="flex items-center gap-3">
           <div className="p-2.5 bg-emerald-50 rounded-lg text-emerald-600"><Activity size={20} /></div>
           <div>
-            <h3 className="text-base font-bold">Monitoramento automático (Worker)</h3>
-            <p className="text-sm text-slate-500 mt-0.5">O servidor consulta a SEFAZ periodicamente. A captura só avança quando o intervalo e o cooldown permitirem.</p>
+            <h3 className="text-base font-bold">Monitoramento automático NF-e</h3>
+            <p className="text-sm text-slate-500 mt-0.5">O servidor consulta quando o intervalo e a janela SEFAZ permitem.</p>
           </div>
         </div>
       </CardHeader>

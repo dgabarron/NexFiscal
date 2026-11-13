@@ -1,0 +1,54 @@
+name: Etapa 1 - SAP HANA
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Compilar backend
+        run: dotnet build src/NexFiscal.Web/NexFiscal.Web.csproj -c Release
+      - name: Compilar frontend
+        working-directory: frontend
+        run: |
+          npm install --no-audit --no-fund
+          npm run build
+      - name: Verificar teste unitário frontend
+        working-directory: frontend
+        run: npm test
+      - name: Smoke test local
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $exe = if ($IsWindows) { (Resolve-Path "src/NexFiscal.Web/bin/Release/net8.0/NexFiscal.Web.exe").Path } else { (Get-Command dotnet).Source }
+          $parameters = if ($IsWindows) { @() } else { @((Resolve-Path "src/NexFiscal.Web/bin/Release/net8.0/NexFiscal.Web.dll").Path) }
+          $proc = Start-Process -FilePath $exe -ArgumentList $parameters -WorkingDirectory (Get-Location).Path -PassThru
+          try {
+            $ready = $false
+            for ($i = 0; $i -lt 30; $i++) {
+              try {
+                $status = Invoke-RestMethod -Uri 'http://127.0.0.1:5187/api/health' -TimeoutSec 2
+                if ($status.product -eq 'NexFiscal' -and $status.stage -eq 1) { $ready = $true; break }
+              } catch { Start-Sleep -Seconds 1 }
+            }
+            if (-not $ready) { throw 'API etapa 1 não inicializou' }
+            $page = Invoke-WebRequest -Uri 'http://127.0.0.1:5187/' -TimeoutSec 3
+            if ($page.Content -notmatch 'NexFiscal') { throw 'Frontend não disponível' }
+            $hana = Invoke-RestMethod -Uri 'http://127.0.0.1:5187/api/setup/hana/status' -TimeoutSec 5
+            if ($hana.configured) { throw 'Teste iniciou com HANA indevidamente configurado' }
+          } finally {
+            if (-not $proc.HasExited) { Stop-Process -Id $proc.Id -Force }
+          }

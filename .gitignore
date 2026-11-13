@@ -1,0 +1,6 @@
+**/bin/
+**/obj/
+**/node_modules/
+src/NexFiscal.Web/wwwroot/
+.nexfiscal-*/
+.nexfiscal-hana.dat

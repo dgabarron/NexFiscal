@@ -1,6 +1,8 @@
 import { HanaForm } from "../components/forms/HanaForm";
 import { A1Form } from "../components/forms/A1Form";
 import { Card, CardHeader, CardContent } from "../components/ui/card";
+import { Notice } from "../components/common/Notice";
+import { useNotices } from "../components/common/NoticesContext";
 
 const STEPS = [
   { key: "hana", label: "Conexão SAP HANA" },
@@ -8,6 +10,7 @@ const STEPS = [
 ];
 
 export function SetupPage({ step, onHanaSaved, onCompanyRegistered }) {
+  const { error, message, clear } = useNotices();
   return (
     <div className="min-h-screen bg-[#f5f7fb] flex flex-col">
       <header className="border-b border-slate-200 bg-white px-6 py-5">
@@ -22,6 +25,8 @@ export function SetupPage({ step, onHanaSaved, onCompanyRegistered }) {
         </div>
       </header>
       <main className="mx-auto w-full max-w-4xl px-4 py-10 sm:px-6 flex-1">
+        {error && <div className="mb-4"><Notice type="error">{error}</Notice><button type="button" onClick={clear} className="mt-1 text-sm underline">Fechar aviso</button></div>}
+        {message && <div className="mb-4"><Notice type="success">{message}</Notice></div>}
         <ol className="mb-8 flex gap-4">
           {STEPS.map((s, i) => {
             const active = i === step, done = i < step;

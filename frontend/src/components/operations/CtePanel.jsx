@@ -46,10 +46,13 @@ export function CtePanel({ company, cteState, schedule, cooldown, result, onResu
         </div>
       </CardHeader>
       <CardContent>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <Stat label="CT-e · Último NSU" value={cteState?.lastNsu || "Não inicializado"} mono />
-          <Stat label="CT-e · Maior NSU informado" value={cteState?.maxNsu || "Ainda não informado"} mono />
-        </div>
+        <details className="rounded-lg border border-slate-200 p-3">
+          <summary className="cursor-pointer text-xs font-semibold text-slate-600">Detalhes técnicos de NSU</summary>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            <Stat label="Último NSU CT-e" value={cteState?.lastNsu || "Não inicializado"} mono />
+            <Stat label="Maior NSU informado CT-e" value={cteState?.maxNsu || "Ainda não informado"} mono />
+          </div>
+        </details>
         {cooldown && (
           <div className="mt-3"><Notice>Próxima consulta permitida após {cooldown.time} ({cooldown.minutes} min).</Notice></div>
         )}

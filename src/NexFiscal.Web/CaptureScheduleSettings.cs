@@ -6,10 +6,10 @@ using System.Text.RegularExpressions;
 /// Intervalos são inteiros positivos em minutos, sem limite superior de negócio;
 /// usa Int64 por segurança/representação no processo.
 /// </summary>
-public sealed class CaptureScheduleSettings(IWebHostEnvironment environment)
+public sealed class CaptureScheduleSettings(NexFiscalDataDirectory dataDirectory)
 {
     private readonly SemaphoreSlim gate = new(1, 1);
-    private string Root => Path.Combine(environment.ContentRootPath, ".nexfiscal-schedules");
+    private string Root => dataDirectory.PathFor(".nexfiscal-schedules");
 
     public sealed record Schedule(string DocumentType, bool Enabled, long IntervalMinutes, string? DestinationDirectory, bool AutomaticConfirmed = false);
     public sealed record ScheduleInput(string DocumentType, bool Enabled, string IntervalMinutes, string? DestinationDirectory, bool AutomaticConfirmed = false);

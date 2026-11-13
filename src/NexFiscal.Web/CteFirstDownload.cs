@@ -8,11 +8,11 @@ using NexFiscal.Capture;
 /// checkpoint independentes. Estado durável local não requer SAP HANA.
 /// </summary>
 public sealed class CteFirstDownload(
-    CompanyCertificateVault vault, IWebHostEnvironment host,
+    CompanyCertificateVault vault, NexFiscalDataDirectory dataDirectory,
     NfeXmlArchive archive, NfeIndividualXmlStore store)
 {
     private static readonly SemaphoreSlim Gate = new(1, 1);
-    private string Root => Path.Combine(host.ContentRootPath, ".nexfiscal-cte");
+    private string Root => dataDirectory.PathFor(".nexfiscal-cte");
 
     public sealed record Cursor(
         long LastNsu, DateTime NextAllowedAtUtc,

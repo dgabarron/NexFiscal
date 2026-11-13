@@ -9,10 +9,10 @@ using NexFiscal.Capture;
 /// Proteção at rest via ASP.NET Data Protection + DPAPI do usuário Windows.
 /// Arquivos identificados somente por CompanyId gerado pelo servidor.
 /// </summary>
-public sealed class CompanyCertificateVault(IDataProtectionProvider keys, IWebHostEnvironment host)
+public sealed class CompanyCertificateVault(IDataProtectionProvider keys, NexFiscalDataDirectory dataDirectory)
 {
     private readonly IDataProtector _protector = keys.CreateProtector("NexFiscal.CompanyA1.v1");
-    private string VaultPath => Path.Combine(host.ContentRootPath, ".nexfiscal-certificates");
+    private string VaultPath => dataDirectory.PathFor(".nexfiscal-certificates");
 
     private string PathFor(string companyId)
     {

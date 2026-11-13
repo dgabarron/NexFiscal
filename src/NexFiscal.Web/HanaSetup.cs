@@ -10,7 +10,7 @@ public sealed record HanaSetupResult(bool Connected, bool SchemaReady, int Table
 /// O serviço de configuração é local (loopback) e armazena a conexão cifrada
 /// pelo ASP.NET Core Data Protection; nunca persiste senha em texto puro.
 /// </summary>
-public sealed class HanaSetup(IDataProtectionProvider provider, IWebHostEnvironment host, IConfiguration configuration)
+public sealed class HanaSetup(IDataProtectionProvider provider, NexFiscalDataDirectory dataDirectory, IConfiguration configuration)
 {
     private const string FileName = ".nexfiscal-hana.dat";
     private readonly IDataProtector _protector = provider.CreateProtector("NexFiscal.HanaSetup.v1");
@@ -20,7 +20,7 @@ public sealed class HanaSetup(IDataProtectionProvider provider, IWebHostEnvironm
         "BRAI_NEX_Envelope", "BRAI_NEX_CaptureLog"
     ];
 
-    private string ConfigPath => Path.Combine(host.ContentRootPath, FileName);
+    private string ConfigPath => dataDirectory.PathFor(FileName);
 
     public bool Configured => Load() is not null;
 

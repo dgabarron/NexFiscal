@@ -6,9 +6,15 @@ using NexFiscal.Capture;
 var builder = WebApplication.CreateBuilder(args);
 builder.WebHost.UseUrls(builder.Configuration["NexFiscal:ListenUrl"] ?? "http://127.0.0.1:5187");
 builder.WebHost.ConfigureKestrel(k => k.Limits.MaxRequestBodySize = 5_500_000);
+// Uma única raiz de estado local: não depende do diretório atual do processo.
+var dataDirectory = new NexFiscalDataDirectory(
+    AppContext.BaseDirectory,
+    builder.Configuration["NexFiscal:DataDirectory"] ??
+    Environment.GetEnvironmentVariable("NEXFISCAL_DATA_DIR"));
+builder.Services.AddSingleton(dataDirectory);
 var protection = builder.Services.AddDataProtection()
     .SetApplicationName("NexFiscal")
-    .PersistKeysToFileSystem(new DirectoryInfo(Path.Combine(builder.Environment.ContentRootPath, ".nexfiscal-keys")));
+    .PersistKeysToFileSystem(new DirectoryInfo(dataDirectory.PathFor(".nexfiscal-keys")));
 if (OperatingSystem.IsWindows())
     protection.ProtectKeysWithDpapi();
 builder.Services.AddSingleton<HanaSetup>();

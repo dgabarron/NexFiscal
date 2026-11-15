@@ -1,10 +1,59 @@
-import React, { useState } from "react";
-import { Database, Building2 } from "lucide-react";
+import React, { useEffect, useState } from "react";
+import { Badge, FluentProvider, Tab, TabList, Text, makeStyles, tokens, webDarkTheme, webLightTheme } from "@fluentui/react-components";
+import { BuildingFilled, BuildingRegular, DatabaseFilled, DatabaseRegular, bundleIcon } from "@fluentui/react-icons";
 import HanaPage from "./pages/HanaPage.jsx";
 import CompaniesPage from "./pages/CompaniesPage.jsx";
-import "./styles.css";
+import { describeStatus } from "./api.js";
+
+const DatabaseIcon = bundleIcon(DatabaseFilled, DatabaseRegular);
+const BuildingIcon = bundleIcon(BuildingFilled, BuildingRegular);
+const BADGE_COLOR = { ok: "success", warn: "warning", error: "danger" };
+
+const useStyles = makeStyles({
+  provider: { minHeight: "100vh", display: "flex", flexDirection: "column", backgroundColor: tokens.colorNeutralBackground2 },
+  header: {
+    height: "48px", flexShrink: 0, display: "flex", alignItems: "center", gap: tokens.spacingHorizontalM,
+    padding: `0 ${tokens.spacingHorizontalL}`, backgroundColor: tokens.colorNeutralBackground1,
+    borderBottom: `1px solid ${tokens.colorNeutralStroke2}`,
+  },
+  mark: {
+    width: "28px", height: "28px", borderRadius: tokens.borderRadiusMedium, display: "grid", placeItems: "center",
+    backgroundColor: tokens.colorBrandBackground, color: tokens.colorNeutralForegroundOnBrand, fontSize: "18px",
+  },
+  product: { fontWeight: tokens.fontWeightSemibold, fontSize: tokens.fontSizeBase400 },
+  tagline: { color: tokens.colorNeutralForeground3 },
+  spacer: { flexGrow: 1 },
+  body: { flexGrow: 1, display: "flex", minHeight: 0, "@media (max-width: 760px)": { flexDirection: "column" } },
+  nav: {
+    width: "248px", flexShrink: 0, padding: `${tokens.spacingVerticalL} ${tokens.spacingHorizontalS}`,
+    "@media (max-width: 760px)": {
+      width: "auto", padding: `0 ${tokens.spacingHorizontalS}`, backgroundColor: tokens.colorNeutralBackground1,
+      borderBottom: `1px solid ${tokens.colorNeutralStroke2}`, overflowX: "auto",
+    },
+  },
+  tabLabel: { display: "inline-flex", alignItems: "center", gap: tokens.spacingHorizontalS },
+  content: {
+    flexGrow: 1, minWidth: 0, padding: `${tokens.spacingVerticalXXL} ${tokens.spacingHorizontalXXXL} ${tokens.spacingVerticalXXXL}`,
+    "@media (max-width: 760px)": { padding: `${tokens.spacingVerticalL} ${tokens.spacingHorizontalL} ${tokens.spacingVerticalXXL}` },
+  },
+  page: { maxWidth: "880px", display: "flex", flexDirection: "column", gap: tokens.spacingVerticalL },
+});
+
+function useMedia(query) {
+  const [matches, setMatches] = useState(() => window.matchMedia(query).matches);
+  useEffect(() => {
+    const media = window.matchMedia(query);
+    const listener = () => setMatches(media.matches);
+    media.addEventListener("change", listener);
+    return () => media.removeEventListener("change", listener);
+  }, [query]);
+  return matches;
+}
 
 export default function App() {
+  const styles = useStyles();
+  const dark = useMedia("(prefers-color-scheme: dark)");
+  const narrow = useMedia("(max-width: 760px)");
   const [tab, setTab] = useState("hana");
   const [hana, setHana] = useState(undefined); // undefined = ainda carregando
 
@@ -16,20 +65,31 @@ export default function App() {
     });
   }
 
-  return <div className="layout">
-    <header className="header">
-      <div className="brand-mark"><Database size={22}/></div>
-      <div><strong>NexFiscal</strong><span>Captura de NF-e</span></div>
-      <nav className="tabs" aria-label="Seções">
-        <button type="button" className={tab==="hana"?"tab active":"tab"} onClick={()=>setTab("hana")}><Database size={16}/> Conexão SAP HANA</button>
-        <button type="button" className={tab==="companies"?"tab active":"tab"} onClick={()=>setTab("companies")}><Building2 size={16}/> Empresas</button>
-      </nav>
-      <div className="stage">V1 · Etapa 02 de 04</div>
+  const hanaView = describeStatus(hana);
+  return <FluentProvider theme={dark ? webDarkTheme : webLightTheme} className={styles.provider}>
+    <header className={styles.header}>
+      <div className={styles.mark} aria-hidden="true"><DatabaseFilled/></div>
+      <Text className={styles.product}>NexFiscal</Text>
+      {!narrow && <Text size={200} className={styles.tagline}>Captura de NF-e para SAP Business One</Text>}
+      <div className={styles.spacer}/>
+      <Badge appearance="outline" color="informative">V1 · Etapa 2 de 4</Badge>
     </header>
-    <main>
-      {/* A aba HANA permanece montada para não perder o que foi digitado ao trocar de aba. */}
-      <div hidden={tab !== "hana"}><HanaPage onStatus={onStatus}/></div>
-      {tab === "companies" && <CompaniesPage hana={hana} goToHana={()=>setTab("hana")}/>}
-    </main>
-  </div>;
+    <div className={styles.body}>
+      <nav className={styles.nav} aria-label="Seções">
+        <TabList vertical={!narrow} size="large" selectedValue={tab} onTabSelect={(_, data) => setTab(data.value)}>
+          <Tab value="hana" icon={<DatabaseIcon/>}>
+            <span className={styles.tabLabel}>Conexão SAP HANA
+              {hana && BADGE_COLOR[hanaView.tone] && <Badge size="extra-small" color={BADGE_COLOR[hanaView.tone]} aria-label={hanaView.title}/>}
+            </span>
+          </Tab>
+          <Tab value="companies" icon={<BuildingIcon/>}>Empresas</Tab>
+        </TabList>
+      </nav>
+      <main className={styles.content}>
+        {/* A seção HANA permanece montada para não perder o que foi digitado ao trocar de seção. */}
+        <div hidden={tab !== "hana"} className={styles.page}><HanaPage onStatus={onStatus}/></div>
+        {tab === "companies" && <div className={styles.page}><CompaniesPage hana={hana} goToHana={() => setTab("hana")}/></div>}
+      </main>
+    </div>
+  </FluentProvider>;
 }

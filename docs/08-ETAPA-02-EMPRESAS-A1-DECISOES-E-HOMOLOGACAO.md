@@ -27,6 +27,20 @@ Função 1 aprovada pelo usuário em 15/11/2026. Função 2 implementada na bran
 | 11 | Aceita CNPJ alfanumérico (12 posições A–Z/0–9 + 2 dígitos) | Formato novo da Receita Federal |
 | 12 | Empresas que já existam em `BRAI_NEX_Company` (versão antiga) aparecem na lista como "A1 não encontrado" | Não são validadas nem alteradas; basta enviar o A1 em "Atualizar A1" se quiser usá-las |
 
+### Interface refeita em Microsoft Fluent 2 (pedido do usuário em 15/11/2026)
+
+Toda a interface foi reescrita com **Fluent UI React v9**, a implementação oficial do Fluent 2, sem mudar nenhuma função nem a API:
+
+- Navegação lateral com as seções **Conexão SAP HANA** (com indicador de estado) e **Empresas**.
+- Estados e resultados em faixas de mensagem do Fluent (sucesso, aviso, erro), anunciadas por leitores de tela.
+- Conexão já salva aparece como resumo, com **Alterar conexão**; o formulário só abre quando necessário.
+- Envio do A1 e confirmação de remoção em diálogos modais, operáveis por teclado (Enter confirma, Esc fecha).
+- Dica permanente do que falta para habilitar **Salvar configuração**; validação de campo no próprio campo.
+- Tema claro/escuro conforme o Windows; fonte Segoe UI no Windows.
+- `lucide-react` e o CSS próprio foram removidos; os estilos usam os *tokens* do Fluent.
+
+Produto exclusivo para Windows e para o SAP HANA do SAP Business One: os textos da tela foram ajustados a isso (porta padrão 30015 do SAP B1).
+
 Ordem de gravação: cofre primeiro, HANA depois. Se o HANA falhar no cadastro, o arquivo recém-criado é removido; se falhar na atualização, o certificado anterior volta ao lugar. Depois de gravar, o A1 é relido do cofre e comparado.
 
 ## 3. Testes executados (resultados reais)
@@ -36,7 +50,7 @@ Ordem de gravação: cofre primeiro, HANA depois. Se o HANA falhar no cadastro, 
 | `dotnet build` | OK, 0 avisos |
 | `dotnet test` — 110 testes (58 da função 1 + 52 novos) | 110 aprovados |
 | `npm ci`, `npm run build`, `npm test` — 9 testes | OK |
-| Navegador (Chromium) contra o programa real com HANA simulado: arquivo inválido, senha errada, prévia, cadastro, duplicidade, segunda empresa, seleção após recarregar, A1 de outro CNPJ, renovação com backup, remoção, arquivamento, reativação, largura de celular, atualização de estrutura | OK, sem erros de console — imagens em `docs/evidencias-etapa-02/` |
+| Navegador (Chromium) na interface Fluent 2, contra o programa real com HANA simulado: arquivo inválido, senha errada, prévia, cadastro, duplicidade, fechar com Esc, segunda empresa, seleção após recarregar, A1 de outro CNPJ, renovação com backup, remoção, arquivamento, reativação, alterar conexão HANA, configuração ilegível, atualização de estrutura, janela estreita e tema escuro | OK, sem erros nem avisos de console — imagens em `docs/evidencias-etapa-02/` |
 | Arquivo do cofre | Não contém senha nem PFX em claro |
 | Processo real sem HANA: `/api/companies` | 409 "Configure e valide a conexão SAP HANA…" |
 
@@ -57,14 +71,15 @@ Não tive acesso a SAP HANA real, a um certificado A1 real nem a Windows. Especi
 3. **Atualizar estrutura** criando `BRAI_NEX_CompanyCertificate` no seu banco.
 4. Reinício no Windows com a mesma conta (A1 continua "guardado e válido").
 5. Carregamento do PFX no Windows sem instalar nada no repositório de certificados.
+6. Aparência da interface Fluent 2 no seu Windows (Edge/Chrome), em tema claro e escuro. Aqui foi verificada em Chromium no Linux, sem a fonte Segoe UI.
 
 ### Roteiro
 
 | Passo | Ação | Esperado |
 |---|---|---|
-| 1 | Baixe a branch `v1/etapa-02-empresas-a1` em pasta nova e rode o script | Abre na aba Conexão SAP HANA com "estrutura a revalidar" |
+| 1 | Baixe a branch `v1/etapa-02-empresas-a1` em pasta nova e rode o script | Abre na seção Conexão SAP HANA com "estrutura a revalidar" |
 | 2 | **Atualizar estrutura** | "Estrutura atualizada: 1 tabela(s) criada(s)"; faixa verde |
-| 3 | Aba **Empresas** → Adicionar empresa → A1 com **senha errada** → Validar | "Senha do certificado incorreta" |
+| 3 | Seção **Empresas** → Adicionar empresa → A1 com **senha errada** → Validar | "Senha do certificado incorreta" |
 | 4 | Senha correta → Validar | Prévia com CNPJ, razão social, UF, emissor e validade do seu certificado |
 | 5 | **Cadastrar empresa** | Empresa na lista com selo "A1 guardado e válido" |
 | 6 | Adicionar a mesma empresa de novo | Aviso de CNPJ já cadastrado; sem botão de cadastrar |

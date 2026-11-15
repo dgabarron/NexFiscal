@@ -2,6 +2,8 @@
 
 **Escopo desta branch: Função 1 (conexão SAP HANA, homologada) e Função 2 (cadastro de empresas por certificado A1).** Não há captura manual ou automática de NF-e, consulta à SEFAZ, CT-e ou NFS-e.
 
+**Plataforma:** aplicação exclusiva para **Windows**, integrada exclusivamente ao banco **SAP HANA do SAP Business One**. A interface segue o **Microsoft Fluent 2** (Fluent UI React v9) e acompanha o tema claro/escuro do Windows.
+
 **Estado da Função 2:** testada com HANA simulado e certificados de teste. **Ainda não homologada com SAP HANA real e A1 real** — veja o roteiro em [`docs/08-ETAPA-02-EMPRESAS-A1-DECISOES-E-HOMOLOGACAO.md`](docs/08-ETAPA-02-EMPRESAS-A1-DECISOES-E-HOMOLOGACAO.md). Função 1: [`docs/07`](docs/07-ETAPA-01-HANA-DECISOES-E-HOMOLOGACAO.md).
 
 ## Como executar (Windows)
@@ -75,6 +77,6 @@ dotnet test .\NexFiscal.sln -c Release
 cd frontend; npm test
 ```
 
-Os testes do backend usam um SAP HANA simulado em memória e certificados de teste autoassinados com CNPJs fictícios (`tests/NexFiscal.Tests`). **Eles e o GitHub Actions não substituem a homologação em HANA real.**
+O GitHub Actions compila e testa em Windows (plataforma do produto) e também em Linux, apenas como apoio ao desenvolvimento. Os testes do backend usam um SAP HANA simulado em memória e certificados de teste autoassinados com CNPJs fictícios (`tests/NexFiscal.Tests`). **Eles e o GitHub Actions não substituem a homologação em HANA real.**
 
 Documentação do projeto: [`CLAUDE.md`](CLAUDE.md) e [`docs/`](docs/).

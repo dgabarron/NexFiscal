@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Sap.Data.Hana.Net.v8.0" Version="2.30.27" />
+    <PackageReference Include="System.Security.Cryptography.Pkcs" Version="8.0.2" />
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="../../sql/migrations/001_BRAI_NEX_initial.sql" LogicalName="NexFiscal.Web.sql.migrations.001_BRAI_NEX_initial.sql" />
+    <EmbeddedResource Include="../../sql/migrations/002_BRAI_NEX_company_certificate.sql" LogicalName="NexFiscal.Web.sql.migrations.002_BRAI_NEX_company_certificate.sql" />
+    <EmbeddedResource Include="../../sql/migrations/003_BRAI_NEX_nfe_capture.sql" LogicalName="NexFiscal.Web.sql.migrations.003_BRAI_NEX_nfe_capture.sql" />
+    <EmbeddedResource Include="../../sql/migrations/004_BRAI_NEX_nfe_monitor.sql" LogicalName="NexFiscal.Web.sql.migrations.004_BRAI_NEX_nfe_monitor.sql" />
+    <InternalsVisibleTo Include="NexFiscal.Tests" />
+  </ItemGroup>
+  <!-- Ao compilar/rodar direto (Visual Studio, dotnet run) sem o script, gera a tela se ela ainda não existe. -->
+  <Target Name="NexFiscalBuildFrontend" BeforeTargets="Build" Condition="!Exists('$(MSBuildProjectDirectory)/wwwroot/index.html')">
+    <Message Importance="high" Text="NexFiscal: compilando o frontend (wwwroot ausente)..." />
+    <Exec Command="npm ci --no-audit --no-fund" WorkingDirectory="$(MSBuildProjectDirectory)/../../frontend" ContinueOnError="true" />
+    <Exec Command="npm run build" WorkingDirectory="$(MSBuildProjectDirectory)/../../frontend" ContinueOnError="true" />
+    <Warning Condition="!Exists('$(MSBuildProjectDirectory)/wwwroot/index.html')" Text="NexFiscal: o frontend não foi compilado. Instale o Node.js 20+ e execute scripts/Run-NexFiscalLocal.ps1." />
+  </Target>
+</Project>

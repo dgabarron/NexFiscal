@@ -45,7 +45,7 @@ public sealed class HanaCredentialStore(
     {
         var (state, _) = Read();
         if (state == StoredConfigState.Unreadable && !replaceUnreadable)
-            throw new HanaSetupException("stored_config_unreadable",
+            throw new NexFiscalException("stored_config_unreadable",
                 "Já existe uma configuração protegida que não pôde ser lida. Ela não será sobrescrita sem a sua confirmação explícita.", 409);
 
         var protectedText = _protector.Protect(JsonSerializer.Serialize(credentials));

@@ -18,13 +18,13 @@ public sealed record HanaSchemaReport(
 }
 
 /// <summary>
-/// Confere tabelas, colunas e tipos exigidos pela migração 001. Somente leitura do catálogo do HANA.
+/// Confere tabelas, colunas e tipos exigidos pelas migrações. Somente leitura do catálogo do HANA.
 /// </summary>
 public static class HanaSchemaVerifier
 {
     public const string Schema = "BRAI_NEX";
 
-    /// <summary>Tabela → (coluna, DATA_TYPE_NAME). Deve espelhar sql/migrations/001 (há teste garantindo).</summary>
+    /// <summary>Tabela → (coluna, DATA_TYPE_NAME). Deve espelhar sql/migrations (há teste garantindo).</summary>
     public static readonly IReadOnlyDictionary<string, (string Column, string Type)[]> Required =
         new Dictionary<string, (string, string)[]>(StringComparer.Ordinal)
         {
@@ -37,7 +37,10 @@ public static class HanaSchemaVerifier
                 ("SchemaName", "NVARCHAR"), ("XmlSha256", "NVARCHAR"), ("XmlBytes", "BLOB"), ("ReceivedAtUtc", "TIMESTAMP")],
             ["BRAI_NEX_CaptureLog"] = [("AttemptId", "NVARCHAR"), ("CompanyId", "NVARCHAR"), ("DocumentType", "NVARCHAR"),
                 ("RequestedNsu", "DECIMAL"), ("Status", "INTEGER"), ("Result", "NVARCHAR"), ("Message", "NVARCHAR"),
-                ("StartedAtUtc", "TIMESTAMP"), ("FinishedAtUtc", "TIMESTAMP")]
+                ("StartedAtUtc", "TIMESTAMP"), ("FinishedAtUtc", "TIMESTAMP")],
+            ["BRAI_NEX_CompanyCertificate"] = [("CompanyId", "NVARCHAR"), ("Uf", "NVARCHAR"), ("Issuer", "NVARCHAR"),
+                ("Thumbprint", "NVARCHAR"), ("NotBeforeUtc", "TIMESTAMP"), ("NotAfterUtc", "TIMESTAMP"),
+                ("UpdatedAtUtc", "TIMESTAMP"), ("ArchivedAtUtc", "TIMESTAMP")]
         };
 
     public static async Task<HanaSchemaReport> VerifyAsync(DbConnection connection, CancellationToken ct)
@@ -75,16 +78,21 @@ public static class HanaSchemaVerifier
 }
 
 /// <summary>
-/// Cria somente o schema e as tabelas AUSENTES da migração 001.
-/// Emite apenas CREATE SCHEMA, CREATE COLUMN TABLE e um INSERT de versão;
+/// Cria somente o schema e as tabelas AUSENTES das migrações.
+/// Emite apenas CREATE SCHEMA, CREATE COLUMN TABLE e INSERT de versão;
 /// nunca DROP, TRUNCATE, ALTER, DELETE ou UPDATE. Tabelas existentes não são tocadas.
 /// </summary>
 public static class HanaSchemaInstaller
 {
-    private const string MigrationResource = "NexFiscal.Web.sql.migrations.001_BRAI_NEX_initial.sql";
+    /// <summary>Migrações na ordem de aplicação. Novas etapas só acrescentam itens aqui.</summary>
+    public static readonly IReadOnlyList<(int Version, string Name, string Resource)> Migrations =
+    [
+        (1, "initial_nfe_capture", "NexFiscal.Web.sql.migrations.001_BRAI_NEX_initial.sql"),
+        (2, "company_certificate", "NexFiscal.Web.sql.migrations.002_BRAI_NEX_company_certificate.sql")
+    ];
 
-    /// <summary>Tabela → comando CREATE COLUMN TABLE completo, na ordem da migração (respeita chaves estrangeiras).</summary>
-    public static IReadOnlyList<(string Table, string Sql)> CreateStatements { get; } = ParseMigration();
+    /// <summary>Tabela → comando CREATE COLUMN TABLE completo, na ordem das migrações (respeita chaves estrangeiras).</summary>
+    public static IReadOnlyList<(string Table, string Sql)> CreateStatements { get; } = ParseMigrations();
 
     public static async Task<(HanaSchemaReport Report, IReadOnlyList<string> Created)> InstallAsync(
         DbConnection connection, CancellationToken ct)
@@ -93,7 +101,7 @@ public static class HanaSchemaInstaller
         // Tabela existente divergente: não criar nada e não tentar "consertar".
         if (before.Ready || before.Incompatibilities.Count > 0)
         {
-            if (before.Ready) await EnsureVersionRowAsync(connection, ct);
+            if (before.Ready) await EnsureVersionRowsAsync(connection, ct);
             return (before, []);
         }
 
@@ -109,32 +117,38 @@ public static class HanaSchemaInstaller
         }
 
         var after = await HanaSchemaVerifier.VerifyAsync(connection, ct);
-        if (after.Ready) await EnsureVersionRowAsync(connection, ct);
+        if (after.Ready) await EnsureVersionRowsAsync(connection, ct);
         return (after, created);
     }
 
-    private static async Task EnsureVersionRowAsync(DbConnection connection, CancellationToken ct)
+    private static async Task EnsureVersionRowsAsync(DbConnection connection, CancellationToken ct)
     {
-        if (await ScalarAsync(connection,
-                "SELECT COUNT(*) FROM \"BRAI_NEX\".\"BRAI_NEX_SchemaVersion\" WHERE \"Version\"=1", ct) == 0)
-            await ExecuteAsync(connection,
-                "INSERT INTO \"BRAI_NEX\".\"BRAI_NEX_SchemaVersion\" (\"Version\",\"Name\",\"AppliedAtUtc\") " +
-                "VALUES (1,'initial_nfe_capture',CURRENT_UTCTIMESTAMP)", ct);
+        foreach (var (version, name, _) in Migrations)
+        {
+            if (await ScalarAsync(connection,
+                    $"SELECT COUNT(*) FROM \"BRAI_NEX\".\"BRAI_NEX_SchemaVersion\" WHERE \"Version\"={version}", ct) == 0)
+                await ExecuteAsync(connection,
+                    "INSERT INTO \"BRAI_NEX\".\"BRAI_NEX_SchemaVersion\" (\"Version\",\"Name\",\"AppliedAtUtc\") " +
+                    $"VALUES ({version},'{name}',CURRENT_UTCTIMESTAMP)", ct);
+        }
     }
 
-    private static IReadOnlyList<(string, string)> ParseMigration()
+    private static IReadOnlyList<(string, string)> ParseMigrations()
     {
-        using var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream(MigrationResource)
-            ?? throw new InvalidOperationException("Migração SQL integrada não encontrada.");
-        using var reader = new StreamReader(stream);
-        var statements = Regex.Matches(reader.ReadToEnd(),
-                "CREATE\\s+COLUMN\\s+TABLE\\s+\"BRAI_NEX\"\\.\"(?<table>BRAI_NEX_[A-Za-z]+)\"\\s*\\(.*?\\)\\s*(?=;)",
-                RegexOptions.Singleline)
-            .Select(match => (match.Groups["table"].Value, match.Value.Trim()))
-            .ToList();
+        var statements = new List<(string, string)>();
+        foreach (var (_, _, resource) in Migrations)
+        {
+            using var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream(resource)
+                ?? throw new InvalidOperationException("Migração SQL integrada não encontrada: " + resource);
+            using var reader = new StreamReader(stream);
+            statements.AddRange(Regex.Matches(reader.ReadToEnd(),
+                    "CREATE\\s+COLUMN\\s+TABLE\\s+\"BRAI_NEX\"\\.\"(?<table>BRAI_NEX_[A-Za-z]+)\"\\s*\\(.*?\\)\\s*(?=;)",
+                    RegexOptions.Singleline)
+                .Select(match => (match.Groups["table"].Value, match.Value.Trim())));
+        }
         var expected = HanaSchemaVerifier.Required.Keys.ToHashSet(StringComparer.Ordinal);
         if (!expected.SetEquals(statements.Select(s => s.Item1)))
-            throw new InvalidOperationException("Migração 001 não corresponde às tabelas exigidas pelo NexFiscal.");
+            throw new InvalidOperationException("As migrações não correspondem às tabelas exigidas pelo NexFiscal.");
         return statements;
     }
 

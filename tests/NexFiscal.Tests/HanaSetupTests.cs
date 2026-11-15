@@ -66,8 +66,8 @@ public class HanaSetupTests
         var setup = install.Start();
         var request = new HanaSetupRequest(server, port, user, password);
 
-        var test = await Assert.ThrowsAsync<HanaSetupException>(() => setup.TestAsync(request, Ct));
-        var save = await Assert.ThrowsAsync<HanaSetupException>(() => setup.SaveAsync(request, Ct));
+        var test = await Assert.ThrowsAsync<NexFiscalException>(() => setup.TestAsync(request, Ct));
+        var save = await Assert.ThrowsAsync<NexFiscalException>(() => setup.SaveAsync(request, Ct));
 
         Assert.Equal((400, "invalid_input"), (test.StatusCode, test.Kind));
         Assert.Equal((400, "invalid_input"), (save.StatusCode, save.Kind));
@@ -79,7 +79,7 @@ public class HanaSetupTests
     public async Task Corpo_ausente_e_recusado()
     {
         using var install = new TestInstallation();
-        var error = await Assert.ThrowsAsync<HanaSetupException>(() => install.Start().SaveAsync(null, Ct));
+        var error = await Assert.ThrowsAsync<NexFiscalException>(() => install.Start().SaveAsync(null, Ct));
         Assert.Equal(400, error.StatusCode);
     }
 
@@ -96,7 +96,7 @@ public class HanaSetupTests
         Assert.Equal("pending", result.SchemaState);
         Assert.False(result.Saved);
         Assert.Contains("estrutura pendente", result.Message);
-        Assert.Equal(5, result.Issues.Count);
+        Assert.Equal(6, result.Issues.Count);
         Assert.Empty(install.Hana.Writes);
         Assert.False(install.Hana.SchemaExists);
         Assert.False(File.Exists(install.ConfigFile));
@@ -110,7 +110,7 @@ public class HanaSetupTests
         var result = await install.Start().TestAsync(TestInstallation.Request(), Ct);
 
         Assert.True(result.SchemaReady);
-        Assert.Equal(5, result.TablesFound);
+        Assert.Equal(6, result.TablesFound);
         Assert.Empty(install.Hana.Writes);
         Assert.False(File.Exists(install.ConfigFile));
     }
@@ -122,8 +122,8 @@ public class HanaSetupTests
         var setup = install.Start();
         var request = TestInstallation.Request(password: "SenhaErrada!123");
 
-        var test = await Assert.ThrowsAsync<HanaSetupException>(() => setup.TestAsync(request, Ct));
-        var save = await Assert.ThrowsAsync<HanaSetupException>(() => setup.SaveAsync(request, Ct));
+        var test = await Assert.ThrowsAsync<NexFiscalException>(() => setup.TestAsync(request, Ct));
+        var save = await Assert.ThrowsAsync<NexFiscalException>(() => setup.SaveAsync(request, Ct));
 
         Assert.Equal("invalid_credentials", test.Kind);
         Assert.Equal("invalid_credentials", save.Kind);
@@ -139,8 +139,8 @@ public class HanaSetupTests
         install.Hana.Online = false;
         var setup = install.Start();
 
-        var test = await Assert.ThrowsAsync<HanaSetupException>(() => setup.TestAsync(TestInstallation.Request(), Ct));
-        var save = await Assert.ThrowsAsync<HanaSetupException>(() => setup.SaveAsync(TestInstallation.Request(), Ct));
+        var test = await Assert.ThrowsAsync<NexFiscalException>(() => setup.TestAsync(TestInstallation.Request(), Ct));
+        var save = await Assert.ThrowsAsync<NexFiscalException>(() => setup.SaveAsync(TestInstallation.Request(), Ct));
 
         Assert.Equal((503, "connection_refused"), (test.StatusCode, test.Kind));
         Assert.Contains("hana.teste.local:30015", test.Message);
@@ -151,17 +151,17 @@ public class HanaSetupTests
     // ---------- Salvar (H05–H08) ----------
 
     [Fact]
-    public async Task Salvar_em_banco_vazio_cria_schema_e_cinco_tabelas_valida_e_grava_cifrado()
+    public async Task Salvar_em_banco_vazio_cria_schema_e_todas_as_tabelas_valida_e_grava_cifrado()
     {
         using var install = new TestInstallation();
         var result = await install.Start().SaveAsync(TestInstallation.Request(), Ct);
 
         Assert.True(result.Saved);
         Assert.True(result.SchemaReady);
-        Assert.Equal(5, result.CreatedTables.Count);
+        Assert.Equal(6, result.CreatedTables.Count);
         Assert.Equal(HanaSchemaVerifier.Required.Keys.Order(), install.Hana.Tables.Keys.Order());
-        Assert.Equal(1, install.Hana.VersionRows);
-        Assert.Equal(7, install.Hana.Writes.Count()); // 1 schema + 5 tabelas + 1 linha de versão
+        Assert.Equal([1, 2], install.Hana.Versions);
+        Assert.Equal(9, install.Hana.Writes.Count()); // 1 schema + 6 tabelas + 2 linhas de versão
 
         var stored = File.ReadAllText(install.ConfigFile);
         Assert.DoesNotContain(FakeHanaServer.Password, stored);
@@ -184,7 +184,7 @@ public class HanaSetupTests
         Assert.True(second.Saved);
         Assert.Empty(second.CreatedTables);
         Assert.Equal(writesAfterFirst, install.Hana.Writes.Count());
-        Assert.Equal(1, install.Hana.VersionRows);
+        Assert.Equal(2, install.Hana.VersionRows);
     }
 
     [Fact]
@@ -192,7 +192,7 @@ public class HanaSetupTests
     {
         using var install = new TestInstallation();
         install.Hana.SchemaExists = true;
-        install.Hana.VersionRows = 1;
+        install.Hana.Versions.Add(1);
         install.Hana.AddCompatibleTable("BRAI_NEX_SchemaVersion");
         install.Hana.AddCompatibleTable("BRAI_NEX_Company");
         install.Hana.Tables["BRAI_NEX_Company"].Add(("ColunaExtraLegada", "NVARCHAR")); // coluna a mais é tolerada
@@ -201,11 +201,11 @@ public class HanaSetupTests
         var result = await install.Start().SaveAsync(TestInstallation.Request(), Ct);
 
         Assert.True(result.Saved);
-        Assert.Equal(["BRAI_NEX_CaptureCursor", "BRAI_NEX_Envelope", "BRAI_NEX_CaptureLog"], result.CreatedTables);
+        Assert.Equal(["BRAI_NEX_CaptureCursor", "BRAI_NEX_Envelope", "BRAI_NEX_CaptureLog", "BRAI_NEX_CompanyCertificate"], result.CreatedTables);
         Assert.Equal(companyBefore, install.Hana.Tables["BRAI_NEX_Company"]);
-        Assert.Equal(1, install.Hana.VersionRows);
-        Assert.Equal(3, install.Hana.Writes.Count());
-        Assert.All(install.Hana.Writes, sql => Assert.StartsWith("CREATE COLUMN TABLE", sql));
+        Assert.Equal([1, 2], install.Hana.Versions); // a versão 1 já existia e não foi repetida
+        Assert.Equal(4, install.Hana.Writes.Count(sql => sql.StartsWith("CREATE COLUMN TABLE")));
+        Assert.Equal(5, install.Hana.Writes.Count());
     }
 
     [Theory]
@@ -222,7 +222,7 @@ public class HanaSetupTests
         var setup = install.Start();
 
         var test = await setup.TestAsync(TestInstallation.Request(), Ct);
-        var save = await Assert.ThrowsAsync<HanaSetupException>(() => setup.SaveAsync(TestInstallation.Request(), Ct));
+        var save = await Assert.ThrowsAsync<NexFiscalException>(() => setup.SaveAsync(TestInstallation.Request(), Ct));
 
         Assert.Equal("incompatible", test.SchemaState);
         Assert.Equal((409, "schema_incompatible"), (save.StatusCode, save.Kind));
@@ -238,7 +238,7 @@ public class HanaSetupTests
         using var install = new TestInstallation();
         install.Hana.FailWith = sql => sql.StartsWith("CREATE SCHEMA") ? 258 : null;
 
-        var error = await Assert.ThrowsAsync<HanaSetupException>(() => install.Start().SaveAsync(TestInstallation.Request(), Ct));
+        var error = await Assert.ThrowsAsync<NexFiscalException>(() => install.Start().SaveAsync(TestInstallation.Request(), Ct));
 
         Assert.Equal("insufficient_privilege", error.Kind);
         Assert.Contains("CREATE SCHEMA", error.Message);
@@ -253,7 +253,7 @@ public class HanaSetupTests
         install.Hana.FailWith = sql => sql.Contains("\"BRAI_NEX_Envelope\" (") ? 2048 : null;
         var setup = install.Start();
 
-        var error = await Assert.ThrowsAsync<HanaSetupException>(() => setup.SaveAsync(TestInstallation.Request(), Ct));
+        var error = await Assert.ThrowsAsync<NexFiscalException>(() => setup.SaveAsync(TestInstallation.Request(), Ct));
         Assert.Equal("hana_error", error.Kind);
         Assert.Contains("2048", error.Message);
         Assert.False(File.Exists(install.ConfigFile));
@@ -261,7 +261,7 @@ public class HanaSetupTests
 
         install.Hana.FailWith = _ => null;
         var retry = await setup.SaveAsync(TestInstallation.Request(), Ct);
-        Assert.Equal(["BRAI_NEX_Envelope", "BRAI_NEX_CaptureLog"], retry.CreatedTables);
+        Assert.Equal(["BRAI_NEX_Envelope", "BRAI_NEX_CaptureLog", "BRAI_NEX_CompanyCertificate"], retry.CreatedTables);
         Assert.True(retry.Saved);
     }
 
@@ -273,7 +273,7 @@ public class HanaSetupTests
         await setup.SaveAsync(TestInstallation.Request(), Ct);
         var before = File.ReadAllBytes(install.ConfigFile);
 
-        await Assert.ThrowsAsync<HanaSetupException>(() => setup.SaveAsync(TestInstallation.Request(password: "errada"), Ct));
+        await Assert.ThrowsAsync<NexFiscalException>(() => setup.SaveAsync(TestInstallation.Request(password: "errada"), Ct));
 
         Assert.Equal(before, File.ReadAllBytes(install.ConfigFile));
         Assert.Equal("ready", (await setup.StatusAsync(Ct)).State);
@@ -344,7 +344,7 @@ public class HanaSetupTests
         var setup = install.Start();
 
         var status = await setup.StatusAsync(Ct);
-        var save = await Assert.ThrowsAsync<HanaSetupException>(() => setup.SaveAsync(TestInstallation.Request(), Ct));
+        var save = await Assert.ThrowsAsync<NexFiscalException>(() => setup.SaveAsync(TestInstallation.Request(), Ct));
 
         Assert.Equal(("unreadable", true, false), (status.State, status.Configured, status.Connected));
         Assert.Equal((409, "stored_config_unreadable"), (save.StatusCode, save.Kind));
@@ -382,19 +382,69 @@ public class HanaSetupTests
         var original = File.ReadAllBytes(install.ConfigFile);
         install.Hana.Online = false;
 
-        await Assert.ThrowsAsync<HanaSetupException>(() => install.Start().SaveAsync(TestInstallation.Request(replace: true), Ct));
+        await Assert.ThrowsAsync<NexFiscalException>(() => install.Start().SaveAsync(TestInstallation.Request(replace: true), Ct));
 
         Assert.Equal(original, File.ReadAllBytes(install.ConfigFile));
         Assert.Empty(Directory.GetFiles(install.Root, "*.bak"));
     }
 
+    // ---------- Atualização de estrutura entre etapas ----------
+
+    private static void DowngradeToStage1(TestInstallation install)
+    {
+        install.Hana.Tables.Remove("BRAI_NEX_CompanyCertificate");
+        install.Hana.Versions.Remove(2);
+        install.Hana.Executed.Clear();
+    }
+
+    [Fact]
+    public async Task Instalacao_da_etapa_1_pede_atualizacao_e_cria_so_a_tabela_nova_sem_redigitar_senha()
+    {
+        using var install = new TestInstallation();
+        await install.Start().SaveAsync(TestInstallation.Request(), Ct);
+        DowngradeToStage1(install);
+        var setup = install.Start();
+
+        var before = await setup.StatusAsync(Ct);
+        Assert.Equal(("schema_pending", true), (before.State, before.CanUpgrade));
+        Assert.Empty(install.Hana.Writes);
+
+        var upgrade = await setup.UpgradeAsync(Ct);
+
+        Assert.Equal(["BRAI_NEX_CompanyCertificate"], upgrade.CreatedTables);
+        Assert.Equal(2, install.Hana.Writes.Count()); // 1 tabela + 1 linha de versão
+        Assert.Equal([1, 2], install.Hana.Versions);
+        Assert.Equal("ready", (await setup.StatusAsync(Ct)).State);
+        Assert.Empty((await setup.UpgradeAsync(Ct)).CreatedTables);
+    }
+
+    [Fact]
+    public async Task Atualizacao_de_estrutura_sem_conexao_salva_ou_com_tabela_incompativel_e_recusada()
+    {
+        using var install = new TestInstallation();
+        var none = await Assert.ThrowsAsync<NexFiscalException>(() => install.Start().UpgradeAsync(Ct));
+        Assert.Equal("hana_not_configured", none.Kind);
+        Assert.Equal(0, install.Hana.OpenCount);
+
+        await install.Start().SaveAsync(TestInstallation.Request(), Ct);
+        DowngradeToStage1(install);
+        install.Hana.Tables["BRAI_NEX_Company"].RemoveAll(c => c.Column == "Cnpj");
+
+        var status = await install.Start().StatusAsync(Ct);
+        var blocked = await Assert.ThrowsAsync<NexFiscalException>(() => install.Start().UpgradeAsync(Ct));
+
+        Assert.False(status.CanUpgrade);
+        Assert.Equal("schema_incompatible", blocked.Kind);
+        Assert.Empty(install.Hana.Writes);
+    }
+
     // ---------- Garantias estruturais ----------
 
     [Fact]
-    public void Migracao_001_contem_apenas_criacoes_e_espelha_as_colunas_validadas()
+    public void Migracoes_contem_apenas_criacoes_e_espelha_as_colunas_validadas()
     {
         var statements = HanaSchemaInstaller.CreateStatements;
-        Assert.Equal(5, statements.Count);
+        Assert.Equal(6, statements.Count);
         foreach (var (table, sql) in statements)
         {
             Assert.DoesNotMatch(new Regex(@"\b(DROP|TRUNCATE|ALTER|DELETE|UPDATE)\b", RegexOptions.IgnoreCase), sql);
@@ -406,6 +456,7 @@ public class HanaSetupTests
         var order = statements.Select(s => s.Table).ToList();
         Assert.True(order.IndexOf("BRAI_NEX_Company") < order.IndexOf("BRAI_NEX_CaptureCursor"));
         Assert.True(order.IndexOf("BRAI_NEX_Company") < order.IndexOf("BRAI_NEX_Envelope"));
+        Assert.True(order.IndexOf("BRAI_NEX_Company") < order.IndexOf("BRAI_NEX_CompanyCertificate"));
     }
 
     [Fact]

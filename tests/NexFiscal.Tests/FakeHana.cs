@@ -18,7 +18,8 @@ public sealed class FakeHanaServer
 
     public bool Online = true;
     public bool SchemaExists;
-    public int VersionRows;
+    public readonly List<int> Versions = [];
+    public int VersionRows => Versions.Count;
     public int OpenCount;
     public readonly Dictionary<string, List<(string Column, string Type)>> Tables = new(StringComparer.Ordinal);
     public readonly List<string> Executed = [];
@@ -51,8 +52,11 @@ public sealed class FakeHanaServer
         }
         if (reader) throw new InvalidOperationException("Consulta inesperada: " + sql);
         if (sql == "SELECT COUNT(*) FROM SYS.SCHEMAS WHERE SCHEMA_NAME='BRAI_NEX'") return SchemaExists ? 1 : 0;
-        if (sql == "SELECT COUNT(*) FROM \"BRAI_NEX\".\"BRAI_NEX_SchemaVersion\" WHERE \"Version\"=1")
-            return Tables.ContainsKey("BRAI_NEX_SchemaVersion") ? VersionRows : throw new FakeHanaException(259, "invalid table name");
+        var count = Regex.Match(sql, "^SELECT COUNT\\(\\*\\) FROM \"BRAI_NEX\"\\.\"BRAI_NEX_SchemaVersion\" WHERE \"Version\"=(\\d+)$");
+        if (count.Success)
+            return Tables.ContainsKey("BRAI_NEX_SchemaVersion")
+                ? Versions.Count(v => v == int.Parse(count.Groups[1].Value))
+                : throw new FakeHanaException(259, "invalid table name");
         if (sql == "CREATE SCHEMA \"BRAI_NEX\"")
         {
             if (SchemaExists) throw new FakeHanaException(386, "cannot use duplicate schema name");
@@ -69,9 +73,10 @@ public sealed class FakeHanaServer
                 .Select(m => (m.Groups[1].Value, m.Groups[2].Value)).ToList();
             return 0;
         }
-        if (sql.StartsWith("INSERT INTO \"BRAI_NEX\".\"BRAI_NEX_SchemaVersion\" (\"Version\",\"Name\",\"AppliedAtUtc\") VALUES (1,", StringComparison.Ordinal))
+        var insert = Regex.Match(sql, "^INSERT INTO \"BRAI_NEX\"\\.\"BRAI_NEX_SchemaVersion\" \\(\"Version\",\"Name\",\"AppliedAtUtc\"\\) VALUES \\((\\d+),'\\w+',CURRENT_UTCTIMESTAMP\\)$");
+        if (insert.Success)
         {
-            VersionRows++;
+            Versions.Add(int.Parse(insert.Groups[1].Value));
             return 1;
         }
         throw new InvalidOperationException("SQL não permitido na Função 1: " + sql);

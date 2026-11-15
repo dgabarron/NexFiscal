@@ -11,10 +11,11 @@ using NexFiscal.Web;
 namespace NexFiscal.Tests;
 
 /// <summary>Sobe o Program real em memória, com diretório de dados temporário e HANA simulado.</summary>
-public sealed class NexFiscalApp : WebApplicationFactory<Program>
+public class NexFiscalApp : WebApplicationFactory<Program>
 {
     public readonly string Root = Directory.CreateTempSubdirectory("nexfiscal-http-").FullName;
     public readonly FakeHanaServer Hana = new();
+    public readonly InMemoryCompanyStore Companies = new();
     public IPAddress? RemoteIp = IPAddress.Loopback;
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
@@ -23,6 +24,8 @@ public sealed class NexFiscalApp : WebApplicationFactory<Program>
         builder.ConfigureServices(services =>
         {
             services.AddSingleton<IHanaConnectionFactory>(new FakeHanaFactory(Hana));
+            services.AddSingleton<ICompanyStore>(Companies);
+            services.AddSingleton<TimeProvider>(new TestClock());
             services.AddSingleton<IStartupFilter>(new RemoteIpFilter(this));
         });
     }
@@ -65,7 +68,7 @@ public class HttpApiTests
         var status = await client.GetFromJsonAsync<JsonElement>("/api/setup/hana/status");
 
         Assert.Equal("NexFiscal", health.GetProperty("product").GetString());
-        Assert.Equal(1, health.GetProperty("stage").GetInt32());
+        Assert.Equal(2, health.GetProperty("stage").GetInt32());
         Assert.Equal("not_configured", status.GetProperty("state").GetString());
         Assert.False(status.GetProperty("configured").GetBoolean());
         Assert.False(File.Exists(Path.Combine(app.Root, ".nexfiscal-hana.dat")));
@@ -176,5 +179,107 @@ public class HttpApiTests
     {
         using var app = new NexFiscalApp();
         Assert.Equal(HttpStatusCode.NotFound, (await app.CreateClient().GetAsync("/api/inexistente")).StatusCode);
+    }
+
+    // ---------- Função 2 ----------
+
+    private static object A1(byte[]? pfx = null, string? password = TestCertificates.Password) =>
+        new { pfxBase64 = Convert.ToBase64String(pfx ?? TestCertificates.Create()), password };
+
+    [Fact]
+    public async Task Fluxo_de_empresa_inspecionar_cadastrar_listar_atualizar_remover()
+    {
+        using var app = new NexFiscalApp();
+        var client = app.CreateClient();
+
+        var inspect = await client.PostAsJsonAsync("/api/companies/certificates/inspect", A1());
+        var preview = await inspect.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal(HttpStatusCode.OK, inspect.StatusCode);
+        Assert.Equal("11.222.333/0001-81", preview.GetProperty("cnpjFormatted").GetString());
+        Assert.Equal("EMPRESA TESTE LTDA", preview.GetProperty("legalName").GetString());
+        Assert.EndsWith("Z", preview.GetProperty("notAfterUtc").GetString());
+        Assert.Empty(app.Companies.Rows);
+
+        var create = await client.PostAsJsonAsync("/api/companies", A1());
+        var createText = await create.Content.ReadAsStringAsync();
+        Assert.Equal(HttpStatusCode.OK, create.StatusCode);
+        var id = JsonDocument.Parse(createText).RootElement.GetProperty("company").GetProperty("companyId").GetString()!;
+
+        var listText = await client.GetStringAsync("/api/companies");
+        Assert.Contains("\"certificateStatus\":\"stored\"", listText);
+
+        var update = await client.PutAsJsonAsync($"/api/companies/{id}/certificate", A1());
+        var updateText = await update.Content.ReadAsStringAsync();
+        Assert.Equal(HttpStatusCode.OK, update.StatusCode);
+        Assert.Contains("\"outcome\":\"updated\"", updateText);
+
+        foreach (var body in new[] { createText, listText, updateText, await inspect.Content.ReadAsStringAsync() })
+        {
+            Assert.DoesNotContain("assword", body);
+            Assert.DoesNotContain("pfx", body, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("Senha#A1", body);
+        }
+
+        var remove = await client.DeleteAsync($"/api/companies/{id}");
+        Assert.Contains("\"outcome\":\"removed\"", await remove.Content.ReadAsStringAsync());
+        Assert.Equal("[]", await client.GetStringAsync("/api/companies"));
+        Assert.False(Directory.Exists(Path.Combine(app.Root, ".nexfiscal-certs")) &&
+                     Directory.GetFiles(Path.Combine(app.Root, ".nexfiscal-certs")).Length > 0);
+    }
+
+    [Fact]
+    public async Task Erros_de_empresa_chegam_com_status_e_mensagem()
+    {
+        using var app = new NexFiscalApp();
+        var client = app.CreateClient();
+
+        var wrong = await client.PostAsJsonAsync("/api/companies", A1(password: "errada"));
+        Assert.Equal(HttpStatusCode.BadRequest, wrong.StatusCode);
+        Assert.Equal("invalid_password", (await wrong.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("kind").GetString());
+
+        await client.PostAsJsonAsync("/api/companies", A1());
+        var duplicate = await client.PostAsJsonAsync("/api/companies", A1());
+        Assert.Equal(HttpStatusCode.Conflict, duplicate.StatusCode);
+
+        Assert.Equal(HttpStatusCode.NotFound, (await client.DeleteAsync("/api/companies/nao-existe")).StatusCode);
+
+        app.Companies.Unavailable = true;
+        var list = await client.GetAsync("/api/companies");
+        Assert.Equal(HttpStatusCode.Conflict, list.StatusCode);
+        Assert.Contains("SAP HANA", (await list.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("error").GetString());
+    }
+
+    [Theory]
+    [InlineData("https://site-malicioso.example", HttpStatusCode.Forbidden)]
+    [InlineData("null", HttpStatusCode.Forbidden)]
+    [InlineData("http://127.0.0.1:5187", HttpStatusCode.OK)]
+    [InlineData("http://localhost:5187", HttpStatusCode.OK)]
+    public async Task Alteracoes_vindas_de_outro_site_no_navegador_sao_bloqueadas(string origin, HttpStatusCode expected)
+    {
+        using var app = new NexFiscalApp();
+        var client = app.CreateClient();
+        var request = new HttpRequestMessage(HttpMethod.Post, "/api/companies") { Content = JsonContent.Create(A1()) };
+        request.Headers.Add("Origin", origin);
+
+        Assert.Equal(expected, (await client.SendAsync(request)).StatusCode);
+        Assert.Equal(expected == HttpStatusCode.OK ? 1 : 0, app.Companies.Rows.Count);
+    }
+
+    [Fact]
+    public async Task Atualizar_estrutura_pela_api_usa_a_conexao_salva()
+    {
+        using var app = new NexFiscalApp();
+        var client = app.CreateClient();
+        Assert.Equal(HttpStatusCode.Conflict, (await client.PostAsync("/api/setup/hana/upgrade", null)).StatusCode);
+
+        await client.PostAsJsonAsync("/api/setup/hana/save", ValidBody);
+        app.Hana.Tables.Remove("BRAI_NEX_CompanyCertificate");
+        var status = await client.GetFromJsonAsync<JsonElement>("/api/setup/hana/status");
+        Assert.True(status.GetProperty("canUpgrade").GetBoolean());
+
+        var upgrade = await client.PostAsync("/api/setup/hana/upgrade", null);
+        Assert.Equal(HttpStatusCode.OK, upgrade.StatusCode);
+        Assert.Contains("BRAI_NEX_CompanyCertificate", await upgrade.Content.ReadAsStringAsync());
+        Assert.Contains("\"state\":\"ready\"", await client.GetStringAsync("/api/setup/hana/status"));
     }
 }

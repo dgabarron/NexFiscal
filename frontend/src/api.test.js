@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { api, ApiError, credentials, describeStatus, isValid } from "./api.js";
+import { api, ApiError, credentials, describeCertificate, describeStatus, formatDate, isValid, removalWarning } from "./api.js";
 
 test("credenciais preservam senha e convertem porta", () => {
   assert.deepEqual(credentials({server:" hana.local ",port:"30015",username:" fiscal ",password:" segredo "}),
@@ -36,4 +36,26 @@ test("erro da API carrega mensagem, categoria e itens", async () => {
 test("serviço local parado gera mensagem clara", async () => {
   globalThis.fetch = async () => { throw new TypeError("fetch failed"); };
   await assert.rejects(api("/x"), error => error.kind === "service_offline" && /serviço local/.test(error.message));
+});
+
+test("selo do certificado reflete o estado real informado pelo servidor", () => {
+  const label = c => describeCertificate(c).tone + ":" + describeCertificate(c).label;
+  assert.equal(label({certificateStatus:"stored",daysRemaining:200}), "ok:A1 guardado e válido");
+  assert.equal(label({certificateStatus:"stored",daysRemaining:12}), "warn:A1 vence em 12 dia(s)");
+  assert.equal(label({certificateStatus:"expired"}), "error:A1 vencido");
+  assert.equal(label({certificateStatus:"missing"}), "error:A1 não encontrado");
+  assert.equal(label({certificateStatus:"unreadable"}), "error:A1 ilegível");
+  assert.equal(label({certificateStatus:"invalid"}), "error:A1 inválido");
+  assert.equal(label({certificateStatus:"stored",archived:true}), "warn:Empresa arquivada");
+});
+
+test("aviso de remoção distingue exclusão de arquivamento", () => {
+  assert.match(removalWarning({legalName:"X",hasFiscalHistory:false}), /excluídos definitivamente/);
+  assert.match(removalWarning({legalName:"X",hasFiscalHistory:true}), /apenas arquivada/);
+});
+
+test("datas inválidas não quebram a tela", () => {
+  assert.equal(formatDate(null), "—");
+  assert.equal(formatDate("lixo"), "—");
+  assert.match(formatDate("2027-10-16T12:00:00Z"), /2027/);
 });

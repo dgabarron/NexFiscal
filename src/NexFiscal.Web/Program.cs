@@ -14,7 +14,11 @@ var builder = WebApplication.CreateBuilder(new WebApplicationOptions
     WebRootPath = Path.Combine(contentRoot, "wwwroot")
 });
 // Escuta fixa em loopback: não pode ser alterada por --urls nem ASPNETCORE_URLS.
-builder.WebHost.ConfigureKestrel(kestrel => kestrel.Listen(IPAddress.Loopback, Port));
+builder.WebHost.ConfigureKestrel(kestrel =>
+{
+    kestrel.Listen(IPAddress.Loopback, Port);
+    kestrel.Limits.MaxRequestBodySize = 1024 * 1024; // um A1 em Base64 tem poucos KB
+});
 
 var dataDirectory = new NexFiscalDataDirectory(builder.Configuration["NEXFISCAL_DATA_DIR"]);
 builder.Services.AddSingleton(dataDirectory);
@@ -25,6 +29,10 @@ if (OperatingSystem.IsWindows()) protection.ProtectKeysWithDpapi();
 builder.Services.AddSingleton<IHanaConnectionFactory, HanaConnectionFactory>();
 builder.Services.AddSingleton<HanaCredentialStore>();
 builder.Services.AddSingleton<HanaSetup>();
+builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddSingleton<CertificateVault>();
+builder.Services.AddSingleton<ICompanyStore, HanaCompanyStore>();
+builder.Services.AddSingleton<CompanyService>();
 var app = builder.Build();
 
 app.Use(async (context, next) =>
@@ -34,7 +42,11 @@ app.Use(async (context, next) =>
     var ip = context.Connection.RemoteIpAddress;
     var local = ip is not null && (IPAddress.IsLoopback(ip) ||
         ip.IsIPv4MappedToIPv6 && IPAddress.IsLoopback(ip.MapToIPv4()));
-    if (!local || context.Request.Host.Host is not ("127.0.0.1" or "localhost"))
+    // Alterações só são aceitas quando partem da própria tela do NexFiscal, nunca de outro site aberto no navegador.
+    var origin = context.Request.Headers.Origin.ToString();
+    var foreignOrigin = origin.Length > 0 && !HttpMethods.IsGet(context.Request.Method) &&
+        !(Uri.TryCreate(origin, UriKind.Absolute, out var uri) && uri.Host is "127.0.0.1" or "localhost");
+    if (!local || foreignOrigin || context.Request.Host.Host is not ("127.0.0.1" or "localhost"))
     {
         context.Response.StatusCode = 403;
         return;
@@ -59,7 +71,7 @@ app.MapGet("/", () =>
         : Results.Problem("Frontend não compilado. Execute npm run build em frontend.", statusCode: 503);
 });
 
-app.MapGet("/api/health", () => Results.Ok(new { product = "NexFiscal", version = "V1", stage = 1 }));
+app.MapGet("/api/health", () => Results.Ok(new { product = "NexFiscal", version = "V1", stage = 2 }));
 
 app.MapGet("/api/setup/hana/status", async (HanaSetup hana, CancellationToken ct) =>
     Results.Ok(await hana.StatusAsync(ct)));
@@ -67,6 +79,20 @@ app.MapPost("/api/setup/hana/test", (HanaSetupRequest? req, HanaSetup hana, Canc
     Run(() => hana.TestAsync(req, ct)));
 app.MapPost("/api/setup/hana/save", (HanaSetupRequest? req, HanaSetup hana, CancellationToken ct) =>
     Run(() => hana.SaveAsync(req, ct)));
+
+app.MapPost("/api/setup/hana/upgrade", (HanaSetup hana, CancellationToken ct) =>
+    Run(() => hana.UpgradeAsync(ct)));
+
+app.MapGet("/api/companies", (CompanyService companies, CancellationToken ct) =>
+    Run(() => companies.ListAsync(ct)));
+app.MapPost("/api/companies/certificates/inspect", (CertificateUpload? upload, CompanyService companies, CancellationToken ct) =>
+    Run(() => companies.InspectAsync(upload, ct)));
+app.MapPost("/api/companies", (CertificateUpload? upload, CompanyService companies, CancellationToken ct) =>
+    Run(() => companies.RegisterAsync(upload, ct)));
+app.MapPut("/api/companies/{id}/certificate", (string id, CertificateUpload? upload, CompanyService companies, CancellationToken ct) =>
+    Run(() => companies.UpdateCertificateAsync(id, upload, ct)));
+app.MapDelete("/api/companies/{id}", (string id, CompanyService companies, CancellationToken ct) =>
+    Run(() => companies.RemoveAsync(id, ct)));
 
 app.MapFallback(() => Results.NotFound());
 
@@ -82,17 +108,17 @@ catch (IOException ex) when (ex.InnerException is AddressInUseException)
     Environment.ExitCode = 1;
 }
 
-async Task<IResult> Run(Func<Task<HanaSetupResult>> operation)
+async Task<IResult> Run<T>(Func<Task<T>> operation)
 {
     try { return Results.Ok(await operation()); }
-    catch (HanaSetupException ex)
+    catch (NexFiscalException ex)
     {
         return Results.Json(new { error = ex.Message, kind = ex.Kind, issues = ex.Issues }, statusCode: ex.StatusCode);
     }
     catch (Exception ex) when (ex is not OperationCanceledException)
     {
-        app.Logger.LogError("Falha inesperada na configuração HANA: {Type}", ex.GetType().Name);
-        return Results.Json(new { error = "Falha inesperada. A configuração não foi salva.", kind = "unexpected", issues = Array.Empty<string>() }, statusCode: 500);
+        app.Logger.LogError("Falha inesperada: {Type}", ex.GetType().Name);
+        return Results.Json(new { error = "Falha inesperada. Nada foi salvo.", kind = "unexpected", issues = Array.Empty<string>() }, statusCode: 500);
     }
 }
 

@@ -13,7 +13,7 @@ public sealed record HanaCredentials(string Server, int Port, string Username, s
 {
     public override string ToString() => $"HanaCredentials({Server}:{Port}, usuário {Username}, senha oculta)";
 
-    /// <summary>Valida e normaliza a entrada. Lança <see cref="HanaSetupException"/> com mensagem por campo.</summary>
+    /// <summary>Valida e normaliza a entrada. Lança <see cref="NexFiscalException"/> com mensagem por campo.</summary>
     public static HanaCredentials From(HanaSetupRequest? request)
     {
         if (request is null) throw Invalid("Informe servidor, porta, usuário e senha.");
@@ -33,7 +33,7 @@ public sealed record HanaCredentials(string Server, int Port, string Username, s
         return new HanaCredentials(server, request.Port, username, password);
     }
 
-    private static HanaSetupException Invalid(string message) => new("invalid_input", message, 400);
+    private static NexFiscalException Invalid(string message) => new("invalid_input", message, 400);
 }
 
 /// <summary>Resultado de testar ou salvar. Nunca contém senha.</summary>
@@ -47,10 +47,11 @@ public sealed record HanaSetupResult(
 public sealed record HanaStatus(
     string State, bool Configured, bool Connected, bool SchemaReady, int TablesFound, string Message,
     string? Server = null, int? Port = null, string? Username = null,
-    IReadOnlyList<string>? Issues = null);
+    IReadOnlyList<string>? Issues = null, bool CanUpgrade = false);
 
 /// <summary>Falha já traduzida para o operador: mensagem em português, sem segredos nem detalhes internos.</summary>
-public sealed class HanaSetupException(string kind, string message, int statusCode, IReadOnlyList<string>? issues = null)
+/// <remarks>Usada em todas as funções (HANA e empresas).</remarks>
+public sealed class NexFiscalException(string kind, string message, int statusCode, IReadOnlyList<string>? issues = null)
     : Exception(message)
 {
     public string Kind { get; } = kind;

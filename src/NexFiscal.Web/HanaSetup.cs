@@ -62,7 +62,7 @@ public sealed class HanaSetup(
         {
             // Recusar antes de tocar no HANA se há arquivo cifrado ilegível e não houve confirmação.
             if (store.Read().State == StoredConfigState.Unreadable && !replaceUnreadable)
-                throw new HanaSetupException("stored_config_unreadable",
+                throw new NexFiscalException("stored_config_unreadable",
                     "Já existe uma configuração protegida que não pôde ser lida. Ela não será sobrescrita sem a sua confirmação explícita.", 409);
 
             HanaSchemaReport report;
@@ -76,16 +76,16 @@ public sealed class HanaSetup(
             catch (Exception ex) when (ex is not OperationCanceledException) { throw Fail(ex, credentials, saving: true); }
 
             if (!report.Ready)
-                throw new HanaSetupException("schema_incompatible",
+                throw new NexFiscalException("schema_incompatible",
                     "A estrutura BRAI_NEX existente não é compatível com o NexFiscal. A configuração não foi salva e nenhuma tabela foi alterada ou apagada. Corrija os itens listados com o administrador do banco.",
                     409, report.Issues);
 
             string? backup;
             try { backup = await store.WriteAsync(credentials, replaceUnreadable, ct); }
-            catch (Exception ex) when (ex is not (OperationCanceledException or HanaSetupException))
+            catch (Exception ex) when (ex is not (OperationCanceledException or NexFiscalException))
             {
                 logger.LogError("Falha ao gravar a configuração protegida: {Type}", ex.GetType().Name);
-                throw new HanaSetupException("store_write_failed",
+                throw new NexFiscalException("store_write_failed",
                     $"O SAP HANA está pronto, mas não foi possível gravar a configuração protegida em {store.ConfigPath}. Verifique permissão e espaço em disco e salve novamente.", 500);
             }
 
@@ -97,6 +97,41 @@ public sealed class HanaSetup(
             if (backup is not null)
                 message += $" A configuração ilegível anterior foi preservada em {backup}.";
             return ToResult(report, created, saved: true, message);
+        }
+        finally { SaveLock.Release(); }
+    }
+
+    /// <summary>
+    /// Cria as tabelas que uma nova versão acrescentou, usando a conexão já salva (sem redigitar a senha).
+    /// Mesmo instalador não destrutivo do salvamento.
+    /// </summary>
+    public async Task<HanaSetupResult> UpgradeAsync(CancellationToken ct)
+    {
+        await SaveLock.WaitAsync(ct);
+        try
+        {
+            var (state, credentials) = store.Read();
+            if (state != StoredConfigState.Readable)
+                throw new NexFiscalException("hana_not_configured",
+                    "Não há conexão SAP HANA salva e legível. Configure a conexão primeiro.", 409);
+            HanaSchemaReport report;
+            IReadOnlyList<string> created;
+            try
+            {
+                await using var db = connections.Create(credentials!);
+                await db.OpenAsync(ct);
+                (report, created) = await HanaSchemaInstaller.InstallAsync(db, ct);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException) { throw Fail(ex, credentials!, saving: true); }
+
+            if (!report.Ready)
+                throw new NexFiscalException("schema_incompatible",
+                    "A estrutura BRAI_NEX existente não é compatível com o NexFiscal. Nenhuma tabela foi alterada ou apagada. Corrija os itens listados com o administrador do banco.",
+                    409, report.Issues);
+            logger.LogInformation("Estrutura HANA atualizada. Tabelas criadas: {Count}.", created.Count);
+            return ToResult(report, created, saved: false, created.Count > 0
+                ? $"Estrutura atualizada: {created.Count} tabela(s) criada(s). Nenhum dado existente foi alterado."
+                : "A estrutura já estava completa. Nada foi alterado.");
         }
         finally { SaveLock.Release(); }
     }
@@ -116,12 +151,14 @@ public sealed class HanaSetup(
             await using var db = connections.Create(saved);
             await db.OpenAsync(ct);
             var report = await HanaSchemaVerifier.VerifyAsync(db, ct);
-            return report.Ready
-                ? new("ready", true, true, true, report.TablesFound, "Conexão SAP HANA ativa e estrutura validada.",
-                    saved.Server, saved.Port, saved.Username)
-                : new("schema_pending", true, true, false, report.TablesFound,
-                    "Conexão ativa, mas a estrutura BRAI_NEX está incompleta ou incompatível. Teste e salve a configuração novamente para revalidar.",
-                    saved.Server, saved.Port, saved.Username, report.Issues);
+            if (report.Ready)
+                return new("ready", true, true, true, report.TablesFound, "Conexão SAP HANA ativa e estrutura validada.",
+                    saved.Server, saved.Port, saved.Username);
+            var upgradable = report.State == "pending";
+            return new("schema_pending", true, true, false, report.TablesFound, upgradable
+                    ? $"Conexão ativa. Esta versão do NexFiscal precisa de {report.MissingTables.Count} tabela(s) que ainda não existe(m). Clique em \"Atualizar estrutura\": somente o que falta será criado, sem alterar dados existentes."
+                    : "Conexão ativa, mas há tabela existente incompatível com o NexFiscal. Nenhuma tabela será alterada; corrija os itens listados com o administrador do banco.",
+                saved.Server, saved.Port, saved.Username, report.Issues, upgradable);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -132,7 +169,7 @@ public sealed class HanaSetup(
         }
     }
 
-    private HanaSetupException Fail(Exception ex, HanaCredentials credentials, bool saving)
+    private NexFiscalException Fail(Exception ex, HanaCredentials credentials, bool saving)
     {
         var failure = HanaFailure.Translate(ex, credentials, saving);
         // Somente tipo, categoria e código numérico: o texto do driver não vai para o log.

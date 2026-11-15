@@ -17,9 +17,9 @@ public static class HanaFailure
         _ => null
     };
 
-    public static HanaSetupException Translate(Exception ex, HanaCredentials credentials, bool saving)
+    public static NexFiscalException Translate(Exception ex, HanaCredentials credentials, bool saving)
     {
-        if (ex is HanaSetupException known) return known;
+        if (ex is NexFiscalException known) return known;
         if (ex is DllNotFoundException or BadImageFormatException or TypeInitializationException or EntryPointNotFoundException)
             return new("driver_unavailable",
                 "O driver SAP HANA não pôde ser carregado nesta máquina. Recompile o projeto com o script de execução e confirme que o Windows é 64 bits.", 500);
@@ -46,6 +46,10 @@ public static class HanaFailure
                 "O schema BRAI_NEX já existe no SAP HANA, mas este usuário não tem acesso a ele. Use o usuário dono do schema ou peça a concessão de acesso. Nada foi alterado.", 422),
             288 => new("table_not_accessible",
                 "Uma tabela do NexFiscal já existe no schema BRAI_NEX, mas este usuário não consegue enxergá-la. Peça acesso ao schema BRAI_NEX. Nenhuma tabela foi alterada.", 422),
+            259 => new("schema_outdated",
+                "A estrutura do SAP HANA está desatualizada para esta versão. Abra a aba Conexão SAP HANA e clique em \"Atualizar estrutura\".", 409),
+            301 => new("duplicate",
+                "Já existe um registro com esses dados no SAP HANA. Nada foi alterado.", 409),
             not null => new("hana_error",
                 $"O SAP HANA recusou a operação (código {code}). " + (saving ? "A configuração não foi salva." : "Nada foi alterado."), 502),
             _ => new("unexpected",
@@ -53,7 +57,7 @@ public static class HanaFailure
         };
     }
 
-    private static HanaSetupException Unreachable(string driverMessage, string target)
+    private static NexFiscalException Unreachable(string driverMessage, string target)
     {
         if (driverMessage.Contains("resolve host", StringComparison.OrdinalIgnoreCase))
             return new("host_not_found",

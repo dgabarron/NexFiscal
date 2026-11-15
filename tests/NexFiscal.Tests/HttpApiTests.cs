@@ -18,6 +18,8 @@ public class NexFiscalApp : WebApplicationFactory<Program>
     public readonly InMemoryCompanyStore Companies = new();
     public readonly InMemoryCaptureStore Capture = new();
     public readonly FakeSefaz Sefaz = new();
+    public readonly InMemoryNfseStore Nfse = new();
+    public readonly FakeAdn Adn = new();
     public IPAddress? RemoteIp = IPAddress.Loopback;
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
@@ -29,6 +31,8 @@ public class NexFiscalApp : WebApplicationFactory<Program>
             services.AddSingleton<ICompanyStore>(Companies);
             services.AddSingleton<ICaptureStore>(Capture);
             services.AddSingleton<ISefazTransport>(Sefaz);
+            services.AddSingleton<INfseStore>(Nfse);
+            services.AddSingleton<IAdnTransport>(Adn);
             services.AddSingleton<TimeProvider>(new TestClock());
             services.AddSingleton<IStartupFilter>(new RemoteIpFilter(this));
         });
@@ -72,7 +76,7 @@ public class HttpApiTests
         var status = await client.GetFromJsonAsync<JsonElement>("/api/setup/hana/status");
 
         Assert.Equal("NexFiscal", health.GetProperty("product").GetString());
-        Assert.Equal(4, health.GetProperty("stage").GetInt32());
+        Assert.Equal(5, health.GetProperty("stage").GetInt32());
         Assert.Equal("not_configured", status.GetProperty("state").GetString());
         Assert.False(status.GetProperty("configured").GetBoolean());
         Assert.False(File.Exists(Path.Combine(app.Root, ".nexfiscal-hana.dat")));
@@ -366,6 +370,46 @@ public class HttpApiTests
             var off = await client.PutAsJsonAsync(url, new { enabled = false, intervalMinutes = 30 });
             Assert.Contains("\"enabled\":false", await off.Content.ReadAsStringAsync());
             Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync("/api/companies/nao-existe/nfe/monitor")).StatusCode);
+        }
+        finally { Directory.Delete(folder, recursive: true); }
+    }
+
+    // ---------- NFS-e ----------
+
+    [Fact]
+    public async Task Nfse_pela_api_captura_monitora_e_nao_se_mistura_com_a_nfe()
+    {
+        using var app = new NexFiscalApp();
+        var client = app.CreateClient();
+        var folder = Directory.CreateTempSubdirectory("nexfiscal-api-nfse-").FullName;
+        try
+        {
+            var create = await client.PostAsJsonAsync("/api/companies", A1());
+            var id = (await create.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("company").GetProperty("companyId").GetString()!;
+
+            var before = await client.GetFromJsonAsync<JsonElement>($"/api/companies/{id}/nfse/capture");
+            Assert.True(before.GetProperty("canCapture").GetBoolean());
+            Assert.Equal(JsonValueKind.Null, before.GetProperty("job").ValueKind);
+            Assert.Equal(HttpStatusCode.BadRequest, (await client.PostAsJsonAsync($"/api/companies/{id}/nfse/captures", new { destinationDirectory = "relativa" })).StatusCode);
+
+            app.Adn.Reply(Adn.Found(Adn.Note(1, 1))).Reply(Adn.None());
+            Assert.Equal(HttpStatusCode.OK, (await client.PostAsJsonAsync($"/api/companies/{id}/nfse/captures", new { destinationDirectory = folder })).StatusCode);
+            await app.Services.GetRequiredService<CaptureWorker>().RunDueJobsAsync(CancellationToken.None);
+
+            var text = await client.GetStringAsync($"/api/companies/{id}/nfse/capture");
+            Assert.Contains("\"state\":\"completed\"", text);
+            Assert.Contains("\"newComplete\":1", text);
+            Assert.DoesNotContain("nsu", text, StringComparison.OrdinalIgnoreCase);
+            Assert.True(File.Exists(Path.Combine(folder, Adn.Key(1) + ".xml")));
+            // A tela de NF-e não enxerga o pedido de NFS-e.
+            Assert.Equal(JsonValueKind.Null, (await client.GetFromJsonAsync<JsonElement>($"/api/companies/{id}/nfe/capture")).GetProperty("job").ValueKind);
+
+            var monitor = await client.GetFromJsonAsync<JsonElement>($"/api/companies/{id}/nfse/monitor");
+            Assert.False(monitor.GetProperty("enabled").GetBoolean());
+            Assert.Equal(folder, monitor.GetProperty("destinationDirectory").GetString());
+            Assert.Equal(HttpStatusCode.BadRequest, (await client.PutAsJsonAsync($"/api/companies/{id}/nfse/monitor", new { enabled = true, intervalMinutes = 0, destinationDirectory = folder })).StatusCode);
+            var saved = await client.PutAsJsonAsync($"/api/companies/{id}/nfse/monitor", new { enabled = false, intervalMinutes = 45, destinationDirectory = folder });
+            Assert.Contains("\"intervalMinutes\":45", await saved.Content.ReadAsStringAsync());
         }
         finally { Directory.Delete(folder, recursive: true); }
     }

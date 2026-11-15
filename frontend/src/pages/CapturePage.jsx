@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
-import { Body1, Button, Caption1, Card, Field, Input, Select, Spinner, Subtitle2, Table, TableBody, TableCell, TableHeader, TableHeaderCell, TableRow, Text, Title2, Tooltip, makeStyles, mergeClasses, tokens } from "@fluentui/react-components";
+import { Body1, Button, Caption1, Card, Field, Input, Select, Spinner, Subtitle2, Tab, TabList, Table, TableBody, TableCell, TableHeader, TableHeaderCell, TableRow, Text, Title2, Tooltip, makeStyles, mergeClasses, tokens } from "@fluentui/react-components";
 import { ArrowDownloadRegular, ArrowSyncRegular, ChevronDownRegular, ChevronUpRegular, ClockRegular } from "@fluentui/react-icons";
-import { api, describeJob, formatDate, formatDateTime, formatMoney, isJobActive, jobCounters } from "../api.js";
+import { api, countersFor, describeJob, DOCUMENT_KINDS, formatDate, formatDateTime, formatMoney, isJobActive } from "../api.js";
 import Notice from "../components/Notice.jsx";
 
 const SELECTED_KEY = "nexfiscal.empresaSelecionada";
@@ -46,6 +46,8 @@ export default function CapturePage({ hana, goToHana, goToCompanies }) {
   const styles = useStyles();
   const [companies, setCompanies] = useState(null);
   const [companyId, setCompanyId] = useState("");
+  const [kind, setKind] = useState("nfe");
+  const doc = DOCUMENT_KINDS[kind];
   const [view, setView] = useState(null);
   const [folder, setFolder] = useState("");
   const [busy, setBusy] = useState(false);
@@ -68,7 +70,7 @@ export default function CapturePage({ hana, goToHana, goToCompanies }) {
   // background = atualização automática: uma falha passageira não apaga o que está na tela nem interrompe o acompanhamento.
   async function load(id, background) {
     try {
-      const next = await api(`/api/companies/${encodeURIComponent(id)}/nfe/capture`);
+      const next = await api(`/api/companies/${encodeURIComponent(id)}/${kind}/capture`);
       setView(next);
       if (!folderTouched.current) setFolder(next.destinationDirectory || "");
       if (!background) setError(null);
@@ -82,7 +84,7 @@ export default function CapturePage({ hana, goToHana, goToCompanies }) {
   useEffect(() => {
     setView(null); setPending(null); folderTouched.current = false; setFolder("");
     if (companyId) load(companyId);
-  }, [companyId]);
+  }, [companyId, kind]);
 
   // Enquanto houver pedido ativo, a tela acompanha sozinha: rápido durante a consulta, devagar na espera da SEFAZ.
   const active = isJobActive(view?.job);
@@ -91,12 +93,12 @@ export default function CapturePage({ hana, goToHana, goToCompanies }) {
     if (!active || !companyId) return;
     const timer = setInterval(() => load(companyId, true), waiting ? 30000 : 2500);
     return () => clearInterval(timer);
-  }, [active, waiting, companyId]);
+  }, [active, waiting, companyId, kind]);
 
   async function capture() {
     setBusy(true); setError(null);
     try {
-      await api(`/api/companies/${encodeURIComponent(companyId)}/nfe/captures`, { method: "POST", body: JSON.stringify({ destinationDirectory: folder }) });
+      await api(`/api/companies/${encodeURIComponent(companyId)}/${kind}/captures`, { method: "POST", body: JSON.stringify({ destinationDirectory: folder }) });
       folderTouched.current = false;
       await load(companyId);
     } catch (e) { setError(e.message); }
@@ -110,8 +112,8 @@ export default function CapturePage({ hana, goToHana, goToCompanies }) {
   }
 
   const heading = <div className={styles.heading}>
-    <Title2 as="h1">Captura de NF-e</Title2>
-    <Body1 className={styles.lead}>Baixa da SEFAZ todos os XMLs completos de NF-e disponíveis para a empresa e que ainda não estão na pasta, um arquivo por nota. Nenhuma chave ou número precisa ser digitado.</Body1>
+    <Title2 as="h1">Captura de {doc.label}</Title2>
+    <Body1 className={styles.lead}>{doc.lead}</Body1>
   </div>;
 
   if (!hanaReady)
@@ -137,7 +139,7 @@ export default function CapturePage({ hana, goToHana, goToCompanies }) {
     </>;
 
   const job = view?.job;
-  const state = describeJob(job);
+  const state = describeJob(job, doc.source);
   const canStart = view?.canCapture && folder.trim() && !active && !busy;
 
   return <>
@@ -148,6 +150,11 @@ export default function CapturePage({ hana, goToHana, goToCompanies }) {
       </Tooltip>
     </div>
 
+    <TabList selectedValue={kind} onTabSelect={(_, data) => setKind(data.value)} aria-label="Tipo de documento">
+      <Tab value="nfe" disabled={busy}>NF-e</Tab>
+      <Tab value="nfse" disabled={busy}>NFS-e</Tab>
+    </TabList>
+
     <Card className={styles.card}>
       <div className={styles.fields}>
         <Field label="Empresa" required>
@@ -155,7 +162,7 @@ export default function CapturePage({ hana, goToHana, goToCompanies }) {
             {companies.map(c => <option key={c.companyId} value={c.companyId}>{c.legalName} — {c.cnpjFormatted}</option>)}
           </Select>
         </Field>
-        <Field label="Pasta de destino" required hint="Pasta neste computador. Cada NF-e é gravada como <chave de acesso>.xml">
+        <Field label="Pasta de destino" required hint={`Pasta neste computador. Cada ${doc.label} é gravada como <chave de acesso>.xml`}>
           <Input value={folder} placeholder="C:\NexFiscal\XML" spellCheck={false} autoComplete="off" disabled={active || busy}
             onChange={(_, data) => { folderTouched.current = true; setFolder(data.value); }}/>
         </Field>
@@ -163,8 +170,8 @@ export default function CapturePage({ hana, goToHana, goToCompanies }) {
       <div className={styles.actions}>
         <Caption1 className={styles.hint}>
           {view?.nextAllowedAtUtc
-            ? <><ClockRegular/> Próxima consulta à SEFAZ permitida em {formatDateTime(view.nextAllowedAtUtc)}</>
-            : view ? "A SEFAZ pode ser consultada agora." : ""}
+            ? <><ClockRegular/> Próxima consulta {doc.sourceTo} permitida em {formatDateTime(view.nextAllowedAtUtc)}</>
+            : view ? "A consulta pode ser feita agora." : ""}
         </Caption1>
         <Button appearance="primary" size="large" icon={busy ? <Spinner size="tiny"/> : <ArrowDownloadRegular/>} disabled={!canStart} onClick={capture}>
           Capturar todos os XMLs disponíveis
@@ -180,7 +187,7 @@ export default function CapturePage({ hana, goToHana, goToCompanies }) {
         {job.message}
       </Notice>
       <section className={styles.counters} aria-label="Resultado da captura">
-        {jobCounters(job).map(counter => <div key={counter.key} className={styles.counter} data-counter={counter.key}>
+        {countersFor(kind, job).map(counter => <div key={counter.key} className={styles.counter} data-counter={counter.key}>
           <span className={mergeClasses(styles.value, styles[counter.tone])}>{counter.value}</span>
           <Caption1 className={styles.label}>{counter.label}</Caption1>
         </div>)}
@@ -191,7 +198,7 @@ export default function CapturePage({ hana, goToHana, goToCompanies }) {
       </Caption1>
     </>}
 
-    {view?.pendingSummaries > 0 && <Card className={styles.card}>
+    {doc.pending && view?.pendingSummaries > 0 && <Card className={styles.card}>
       <Subtitle2 as="h2">{view.pendingSummaries} nota(s) aguardando manifestação do destinatário</Subtitle2>
       <Body1 className={styles.lead}>
         Para estas notas a SEFAZ entregou apenas o resumo. O XML completo só é liberado ao destinatário depois da manifestação

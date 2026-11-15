@@ -17,6 +17,9 @@ Construir o **NexFiscal V1**, aplicação local de captura de XML completo de NF
 9. Aplicação atual é **local `127.0.0.1:5187`**, não expor em rede sem autenticação, TLS e planejamento explícito.
 10. Nunca alterar `main` ou mesclar PRs sem pedido explícito; trabalhar em branches específicas e produzir mudanças pequenas, reversíveis e testadas.
 
+## Atualização de escopo — 15/11/2026
+Depois de homologar as quatro funções acima, o usuário pediu a captura (manual e automática) da **NFS-e do padrão nacional (ADN)**, entregue como etapa 5 na branch `v1/etapa-05-nfse`. A regra 1 continua valendo para CT-e e demais itens; NFS-e deixou de estar fora do escopo. Manifestação do destinatário da NF-e segue **não implementada**, aguardando decisão expressa do usuário. Detalhes em `docs/07` a `docs/11`.
+
 ## Repositório e branch de referência
 - GitHub: https://github.com/dgabarron/NexFiscal
 - V1 etapa 1 (base de trabalho): `v1/etapa-01-hana` — commit `002b45813ef424db776cd1c07a477143973e94c5`, PR #7: https://github.com/dgabarron/NexFiscal/pull/7

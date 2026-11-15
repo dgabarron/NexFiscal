@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
-import { Body1, Button, Caption1, Card, Field, Input, Select, Spinner, Subtitle2, Switch, Text, Title2, Tooltip, makeStyles, mergeClasses, tokens } from "@fluentui/react-components";
+import { Body1, Button, Caption1, Card, Field, Input, Select, Spinner, Subtitle2, Switch, Tab, TabList, Text, Title2, Tooltip, makeStyles, mergeClasses, tokens } from "@fluentui/react-components";
 import { ArrowSyncRegular, InfoRegular, SaveRegular } from "@fluentui/react-icons";
-import { api, describeJob, describeMonitor, formatDateTime, isIntervalValid, jobCounters } from "../api.js";
+import { api, countersFor, describeJob, describeMonitor, DOCUMENT_KINDS, formatDateTime, isIntervalValid } from "../api.js";
 import Notice from "../components/Notice.jsx";
 
 const SELECTED_KEY = "nexfiscal.empresaSelecionada";
@@ -44,6 +44,8 @@ export default function MonitorPage({ hana, goToHana, goToCompanies }) {
   const styles = useStyles();
   const [companies, setCompanies] = useState(null);
   const [companyId, setCompanyId] = useState("");
+  const [kind, setKind] = useState("nfe");
+  const doc = DOCUMENT_KINDS[kind];
   const [view, setView] = useState(null);
   const [form, setForm] = useState({ enabled: false, interval: "60", folder: "" });
   const [busy, setBusy] = useState(false);
@@ -71,28 +73,28 @@ export default function MonitorPage({ hana, goToHana, goToCompanies }) {
   }
 
   async function load(id, background) {
-    try { show(await api(`/api/companies/${encodeURIComponent(id)}/nfe/monitor`)); if (!background) setError(null); }
+    try { show(await api(`/api/companies/${encodeURIComponent(id)}/${kind}/monitor`)); if (!background) setError(null); }
     catch (e) { if (!background) { setView(null); setError(e.message); } }
   }
 
   useEffect(() => {
     setView(null); setSaved(null); dirty.current = false;
     if (companyId) load(companyId);
-  }, [companyId]);
+  }, [companyId, kind]);
 
   // Com o monitoramento ligado, a tela se atualiza sozinha para mostrar a última execução.
   useEffect(() => {
     if (!view?.enabled || !companyId) return;
     const timer = setInterval(() => load(companyId, true), 20000);
     return () => clearInterval(timer);
-  }, [view?.enabled, companyId]);
+  }, [view?.enabled, companyId, kind]);
 
   function change(patch) { dirty.current = true; setSaved(null); setForm(current => ({ ...current, ...patch })); }
 
   async function save() {
     setBusy(true); setError(null); setSaved(null);
     try {
-      const next = await api(`/api/companies/${encodeURIComponent(companyId)}/nfe/monitor`, {
+      const next = await api(`/api/companies/${encodeURIComponent(companyId)}/${kind}/monitor`, {
         method: "PUT", body: JSON.stringify({ enabled: form.enabled, intervalMinutes: Number(form.interval), destinationDirectory: form.folder })
       });
       dirty.current = false;
@@ -104,7 +106,7 @@ export default function MonitorPage({ hana, goToHana, goToCompanies }) {
 
   const heading = <div className={styles.heading}>
     <Title2 as="h1">Monitoramento automático</Title2>
-    <Body1 className={styles.lead}>Captura as NF-e novas sozinho, na periodicidade escolhida, usando o mesmo processo da captura manual. Só funciona para as empresas em que você ligar.</Body1>
+    <Body1 className={styles.lead}>Captura as {doc.label} novas sozinho, na periodicidade escolhida, usando o mesmo processo da captura manual. Só funciona para as empresas e os tipos de documento em que você ligar.</Body1>
   </div>;
 
   if (!hanaReady)
@@ -133,7 +135,7 @@ export default function MonitorPage({ hana, goToHana, goToCompanies }) {
   const intervalValid = isIntervalValid(form.interval);
   const canSave = view && !busy && intervalValid && (!form.enabled || form.folder.trim());
   const job = view?.lastJob;
-  const jobState = describeJob(job);
+  const jobState = describeJob(job, doc.source);
 
   return <>
     <div className={styles.top}>
@@ -142,6 +144,11 @@ export default function MonitorPage({ hana, goToHana, goToCompanies }) {
         <Button appearance="subtle" icon={<ArrowSyncRegular/>} disabled={!companyId} onClick={() => load(companyId)}/>
       </Tooltip>
     </div>
+
+    <TabList selectedValue={kind} onTabSelect={(_, data) => setKind(data.value)} aria-label="Tipo de documento">
+      <Tab value="nfe" disabled={busy}>NF-e</Tab>
+      <Tab value="nfse" disabled={busy}>NFS-e</Tab>
+    </TabList>
 
     {state && <Notice intent={state.intent} title={state.title}
       actions={view.enabled && !view.canCapture && <Button onClick={goToCompanies}>Abrir Empresas</Button>}>
@@ -156,21 +163,21 @@ export default function MonitorPage({ hana, goToHana, goToCompanies }) {
           {companies.map(c => <option key={c.companyId} value={c.companyId}>{c.legalName} — {c.cnpjFormatted}</option>)}
         </Select>
       </Field>
-      <Switch checked={form.enabled} disabled={!view || busy} label="Monitoramento automático ativo"
+      <Switch checked={form.enabled} disabled={!view || busy} label={`Monitoramento automático de ${doc.label} ativo`}
         onChange={(_, data) => change({ enabled: data.checked })}/>
       <div className={styles.fields}>
         <Field label="Intervalo (minutos)" required validationState={intervalValid ? "none" : "error"}
           validationMessage={intervalValid ? undefined : "De 1 a 10080"} hint={intervalValid ? "Mínimo de 1 minuto" : undefined}>
           <Input value={form.interval} inputMode="numeric" disabled={!view || busy} onChange={(_, data) => change({ interval: data.value })}/>
         </Field>
-        <Field label="Pasta de destino" required={form.enabled} hint="Pasta neste computador. Cada NF-e é gravada como <chave de acesso>.xml">
+        <Field label="Pasta de destino" required={form.enabled} hint={`Pasta neste computador. Cada ${doc.label} é gravada como <chave de acesso>.xml`}>
           <Input value={form.folder} placeholder="C:\NexFiscal\XML" spellCheck={false} autoComplete="off" disabled={!view || busy}
             onChange={(_, data) => change({ folder: data.value })}/>
         </Field>
       </div>
       <Caption1 className={styles.note}><InfoRegular fontSize={16}/>
-        <span>O intervalo é a periodicidade desejada. Quando não há documentos novos, a SEFAZ só permite outra consulta depois de 1 hora:
-        nesse caso o NexFiscal aguarda o horário liberado, mesmo que o intervalo seja menor.</span>
+        <span>O intervalo é a periodicidade desejada. Quando não há documentos novos, a próxima consulta só ocorre depois de 1 hora
+        (regra da SEFAZ para a NF-e; adotada também para a NFS-e): o NexFiscal aguarda esse horário, mesmo que o intervalo seja menor.</span>
       </Caption1>
       <div className={styles.actions}>
         <Caption1 className={styles.hint}>{dirty.current ? "Há alterações não salvas." : ""}</Caption1>
@@ -183,7 +190,7 @@ export default function MonitorPage({ hana, goToHana, goToCompanies }) {
       <Caption1 className={styles.meta}>{view.lastRunAtUtc ? formatDateTime(view.lastRunAtUtc) : "Ainda não executou"}{jobState ? ` · ${jobState.title}` : ""}</Caption1>
       {view.lastMessage && <Body1>{view.lastMessage}</Body1>}
       {job && <section className={styles.counters} aria-label="Resultado da última execução automática">
-        {jobCounters(job).map(counter => <div key={counter.key} className={styles.counter} data-counter={counter.key}>
+        {countersFor(kind, job).map(counter => <div key={counter.key} className={styles.counter} data-counter={counter.key}>
           <span className={mergeClasses(styles.value, styles[counter.tone])}>{counter.value}</span>
           <Caption1 className={styles.label}>{counter.label}</Caption1>
         </div>)}

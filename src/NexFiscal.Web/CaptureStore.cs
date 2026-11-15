@@ -30,6 +30,9 @@ public sealed record CaptureJob(
         Completed = "completed", CompletedWithPending = "completed_with_pending", Failed = "failed";
 
     public bool Active => State is Queued or Running or WaitingSefaz;
+    public const string ManualNfse = "manual-nfse", AutomaticNfse = "auto-nfse";
+    public bool IsNfse => Kind is ManualNfse or AutomaticNfse;
+    public bool IsAutomatic => Kind is "automatic" or AutomaticNfse;
 }
 
 /// <summary>Configuração e agenda do monitoramento automático de uma empresa (BRAI_NEX_NfeMonitor).</summary>
@@ -58,7 +61,9 @@ public interface ICaptureStore
     Task InsertJobAsync(CaptureJob job, CancellationToken ct);
     Task UpdateJobAsync(CaptureJob job, CancellationToken ct);
     Task<IReadOnlyList<CaptureJob>> ListActiveJobsAsync(CancellationToken ct);
+    /// <summary>Último pedido de NF-e da empresa (manual ou automático). Pedidos de NFS-e ficam na mesma tabela, com outro tipo.</summary>
     Task<CaptureJob?> LatestJobAsync(string companyId, CancellationToken ct);
+    Task<CaptureJob?> LatestNfseJobAsync(string companyId, CancellationToken ct);
     Task<CaptureJob?> LatestJobOfKindAsync(string companyId, string kind, CancellationToken ct);
 
     Task<string?> GetDestinationAsync(string companyId, CancellationToken ct);
@@ -154,7 +159,9 @@ internal static class CaptureSql
     public const string ActiveJobs =
         "SELECT " + JobColumns + " FROM " + B + "\"BRAI_NEX_CaptureJob\" WHERE \"State\" IN ('queued', 'running', 'waiting_sefaz') ORDER BY \"RequestedAtUtc\"";
     public const string LatestJob =
-        "SELECT TOP 1 " + JobColumns + " FROM " + B + "\"BRAI_NEX_CaptureJob\" WHERE \"CompanyId\" = ? ORDER BY \"RequestedAtUtc\" DESC";
+        "SELECT TOP 1 " + JobColumns + " FROM " + B + "\"BRAI_NEX_CaptureJob\" WHERE \"CompanyId\" = ? AND \"Kind\" IN ('manual', 'automatic') ORDER BY \"RequestedAtUtc\" DESC";
+    public const string LatestNfseJob =
+        "SELECT TOP 1 " + JobColumns + " FROM " + B + "\"BRAI_NEX_CaptureJob\" WHERE \"CompanyId\" = ? AND \"Kind\" IN ('manual-nfse', 'auto-nfse') ORDER BY \"RequestedAtUtc\" DESC";
 
     public const string LatestJobOfKind =
         "SELECT TOP 1 " + JobColumns + " FROM " + B + "\"BRAI_NEX_CaptureJob\" WHERE \"CompanyId\" = ? AND \"Kind\" = ? ORDER BY \"RequestedAtUtc\" DESC";
@@ -333,6 +340,9 @@ public sealed class HanaCaptureStore(
 
     public Task<CaptureJob?> LatestJobAsync(string companyId, CancellationToken ct) =>
         WithConnectionAsync(async db => (await ReadJobsAsync(db, ct, CaptureSql.LatestJob, companyId)).FirstOrDefault(), ct);
+
+    public Task<CaptureJob?> LatestNfseJobAsync(string companyId, CancellationToken ct) =>
+        WithConnectionAsync(async db => (await ReadJobsAsync(db, ct, CaptureSql.LatestNfseJob, companyId)).FirstOrDefault(), ct);
 
     public Task<CaptureJob?> LatestJobOfKindAsync(string companyId, string kind, CancellationToken ct) =>
         WithConnectionAsync(async db => (await ReadJobsAsync(db, ct, CaptureSql.LatestJobOfKind, companyId, kind)).FirstOrDefault(), ct);

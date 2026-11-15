@@ -77,9 +77,9 @@ export default function App() {
     <header className={styles.header}>
       <div className={styles.mark} aria-hidden="true"><DatabaseFilled/></div>
       <Text className={styles.product}>NexFiscal</Text>
-      {!narrow && <Text size={200} className={styles.tagline}>Captura de NF-e para SAP Business One</Text>}
+      {!narrow && <Text size={200} className={styles.tagline}>Captura de NF-e e NFS-e para SAP Business One</Text>}
       <div className={styles.spacer}/>
-      <Badge appearance="outline" color="informative">V1 · Etapa 4 de 4</Badge>
+      <Badge appearance="outline" color="informative">NF-e e NFS-e</Badge>
     </header>
     <div className={styles.body}>
       <nav className={styles.nav} aria-label="Seções">
@@ -90,7 +90,7 @@ export default function App() {
             </span>
           </Tab>
           <Tab value="companies" icon={<BuildingIcon/>}>Empresas</Tab>
-          <Tab value="capture" icon={<CaptureIcon/>}>Captura de NF-e</Tab>
+          <Tab value="capture" icon={<CaptureIcon/>} aria-label="Captura de NF-e e NFS-e">Captura</Tab>
           <Tab value="monitor" icon={<MonitorIcon/>} aria-label="Monitoramento automático">Monitoramento</Tab>
         </TabList>
       </nav>

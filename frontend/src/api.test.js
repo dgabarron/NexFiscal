@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { api, ApiError, credentials, describeCertificate, describeJob, describeMonitor, describeStatus, isIntervalValid, formatDate, formatDateTime, formatMoney, isJobActive, isValid, jobCounters, removalWarning } from "./api.js";
+import { api, ApiError, countersFor, credentials, DOCUMENT_KINDS, describeCertificate, describeJob, describeMonitor, describeStatus, isIntervalValid, formatDate, formatDateTime, formatMoney, isJobActive, isValid, jobCounters, removalWarning } from "./api.js";
 
 test("credenciais preservam senha e convertem porta", () => {
   assert.deepEqual(credentials({server:" hana.local ",port:"30015",username:" fiscal ",password:" segredo "}),
@@ -98,4 +98,16 @@ test("monitoramento só aparece ativo quando ligado e sem bloqueio", () => {
 test("intervalo aceito de 1 minuto a uma semana", () => {
   assert.deepEqual(["1", "60", "10080", 15].map(isIntervalValid), [true, true, true, true]);
   assert.deepEqual(["0", "10081", "", "1.5", "-3", "abc"].map(isIntervalValid), [false, false, false, false, false, false]);
+});
+
+test("nf-e e nfs-e têm fonte e contagens próprias", () => {
+  assert.equal(DOCUMENT_KINDS.nfe.pending, true);
+  assert.equal(DOCUMENT_KINDS.nfse.pending, false);
+  assert.match(describeJob({ state: "waiting_sefaz", nextRunAtUtc: "2026-11-15T15:00:00Z" }, DOCUMENT_KINDS.nfse.source).title, /Aguardando o ADN/);
+  assert.match(describeJob({ state: "running" }).title, /Consultando a SEFAZ/);
+  const job = { newComplete: 2, ignored: 1, pending: 0, failures: 0 };
+  assert.deepEqual(countersFor("nfe", job).map(c => c.key), ["newComplete", "alreadyPresent", "recovered", "ignored", "pending", "failures"]);
+  const nfse = countersFor("nfse", job);
+  assert.deepEqual(nfse.map(c => c.key), ["newComplete", "alreadyPresent", "recovered", "ignored", "failures"]);
+  assert.equal(nfse[0].label, "NFS-e novas");
 });

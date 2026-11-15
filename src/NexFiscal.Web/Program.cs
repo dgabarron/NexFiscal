@@ -39,6 +39,10 @@ builder.Services.AddSingleton<NfeCaptureEngine>();
 builder.Services.AddSingleton<CaptureSignal>();
 builder.Services.AddSingleton<CaptureService>();
 builder.Services.AddSingleton<MonitorService>();
+builder.Services.AddSingleton<INfseStore, HanaNfseStore>();
+builder.Services.AddSingleton<IAdnTransport, HttpAdnTransport>();
+builder.Services.AddSingleton<NfseCaptureEngine>();
+builder.Services.AddSingleton<NfseService>();
 builder.Services.AddSingleton<CaptureWorker>();
 builder.Services.AddHostedService(services => services.GetRequiredService<CaptureWorker>());
 var app = builder.Build();
@@ -79,7 +83,7 @@ app.MapGet("/", () =>
         : Results.Problem("Frontend não compilado. Execute npm run build em frontend.", statusCode: 503);
 });
 
-app.MapGet("/api/health", () => Results.Ok(new { product = "NexFiscal", version = "V1", stage = 4 }));
+app.MapGet("/api/health", () => Results.Ok(new { product = "NexFiscal", version = "V1", stage = 5 }));
 
 app.MapGet("/api/setup/hana/status", async (HanaSetup hana, CancellationToken ct) =>
     Results.Ok(await hana.StatusAsync(ct)));
@@ -113,6 +117,15 @@ app.MapGet("/api/companies/{id}/nfe/monitor", (string id, MonitorService monitor
     Run(() => monitor.GetAsync(id, ct)));
 app.MapPut("/api/companies/{id}/nfe/monitor", (string id, MonitorRequest? request, MonitorService monitor, CancellationToken ct) =>
     Run(() => monitor.SaveAsync(id, request, ct)));
+
+app.MapGet("/api/companies/{id}/nfse/capture", (string id, NfseService nfse, CancellationToken ct) =>
+    Run(() => nfse.GetCaptureAsync(id, ct)));
+app.MapPost("/api/companies/{id}/nfse/captures", (string id, CaptureRequest? request, NfseService nfse, CancellationToken ct) =>
+    Run(() => nfse.StartAsync(id, request, ct)));
+app.MapGet("/api/companies/{id}/nfse/monitor", (string id, NfseService nfse, CancellationToken ct) =>
+    Run(() => nfse.GetMonitorAsync(id, ct)));
+app.MapPut("/api/companies/{id}/nfse/monitor", (string id, MonitorRequest? request, NfseService nfse, CancellationToken ct) =>
+    Run(() => nfse.SaveMonitorAsync(id, request, ct)));
 
 app.MapFallback(() => Results.NotFound());
 

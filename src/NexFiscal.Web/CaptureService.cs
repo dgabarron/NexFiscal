@@ -160,8 +160,8 @@ public sealed class CaptureSignal
 /// pedidos em espera pela SEFAZ são retomados sozinhos no horário permitido.
 /// </summary>
 public sealed class CaptureWorker(
-    ICaptureStore store, NfeCaptureEngine engine, CompanyService companies, CaptureSignal signal, TimeProvider clock,
-    ILogger<CaptureWorker> logger)
+    ICaptureStore store, NfeCaptureEngine engine, INfseStore nfseStore, NfseCaptureEngine nfseEngine, CompanyService companies,
+    CaptureSignal signal, TimeProvider clock, ILogger<CaptureWorker> logger)
     : BackgroundService
 {
     /// <summary>Espera mínima depois de uma execução automática que falhou ou não pôde começar.</summary>
@@ -200,7 +200,9 @@ public sealed class CaptureWorker(
                 var due = job.State == CaptureJob.Queued || interrupted ||
                           (job.State == CaptureJob.WaitingSefaz && (job.NextRunAtUtc is null || job.NextRunAtUtc <= Now));
                 if (!due) continue;
-                if (job.Kind == "automatic" && await store.GetMonitorAsync(job.CompanyId, ct) is not { Enabled: true })
+                var monitor = !job.IsAutomatic ? null
+                    : job.IsNfse ? await nfseStore.GetMonitorAsync(job.CompanyId, ct) : await store.GetMonitorAsync(job.CompanyId, ct);
+                if (job.IsAutomatic && monitor is not { Enabled: true })
                 {
                     // O operador desligou o monitoramento enquanto esta execução aguardava: encerrar sem consultar a SEFAZ.
                     await store.UpdateJobAsync(job with
@@ -210,11 +212,11 @@ public sealed class CaptureWorker(
                     }, ct);
                     continue;
                 }
-                await engine.RunAsync(job, ct);
+                if (job.IsNfse) await nfseEngine.RunAsync(job, ct); else await engine.RunAsync(job, ct);
                 executed++;
             }
             _resumed = true;
-            return executed + await RunMonitorsAsync(ct);
+            return executed + await RunMonitorsAsync(ct) + await RunNfseMonitorsAsync(ct);
         }
         finally { _pass.Release(); }
     }
@@ -257,6 +259,43 @@ public sealed class CaptureWorker(
             if (result.State == CaptureJob.Failed && next < Now + FailureBackoff) next = Now + FailureBackoff;
             // Só a agenda é gravada aqui: se o operador mudou a configuração durante a execução, a escolha dele prevalece.
             await store.SetMonitorScheduleAsync(monitor.CompanyId, next, Now, result.Message, Now, ct);
+        }
+        return executed;
+    }
+
+    /// <summary>Mesma agenda da NF-e, aplicada à NFS-e. As duas consultam serviços diferentes e têm checkpoints próprios.</summary>
+    private async Task<int> RunNfseMonitorsAsync(CancellationToken ct)
+    {
+        var executed = 0;
+        foreach (var monitor in await nfseStore.ListEnabledMonitorsAsync(ct))
+        {
+            var latest = await store.LatestNfseJobAsync(monitor.CompanyId, ct);
+            if (latest is { Active: true }) continue;
+            if (latest is { Kind: CaptureJob.AutomaticNfse, State: CaptureJob.Failed, FinishedAtUtc: { } failedAt } && failedAt + FailureBackoff > Now) continue;
+            var cursor = await nfseStore.GetCursorAsync(monitor.CompanyId, ct);
+            if ((monitor.NextRunAtUtc ?? Now) > Now || cursor.NextAllowedAtUtc > Now) continue;
+
+            string? blocked;
+            try
+            {
+                var (company, view) = await companies.GetAsync(monitor.CompanyId, ct);
+                blocked = MonitorService.Blocked(company, view);
+            }
+            catch (NexFiscalException ex) when (ex.Kind == "company_not_found") { blocked = "Empresa não encontrada."; }
+            if (blocked is not null)
+            {
+                await nfseStore.SetMonitorScheduleAsync(monitor.CompanyId, Now + Backoff(monitor), monitor.LastRunAtUtc, "Monitoramento em espera: " + blocked, Now, ct);
+                continue;
+            }
+
+            var job = new CaptureJob(Guid.NewGuid().ToString(), monitor.CompanyId, CaptureJob.AutomaticNfse, CaptureJob.Queued, monitor.DestinationDirectory, Now);
+            await store.InsertJobAsync(job, ct);
+            var result = await nfseEngine.RunAsync(job, ct);
+            executed++;
+
+            var next = Now + TimeSpan.FromMinutes(monitor.IntervalMinutes);
+            if (result.State == CaptureJob.Failed && next < Now + FailureBackoff) next = Now + FailureBackoff;
+            await nfseStore.SetMonitorScheduleAsync(monitor.CompanyId, next, Now, result.Message, Now, ct);
         }
         return executed;
     }

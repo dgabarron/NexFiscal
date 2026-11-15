@@ -176,7 +176,9 @@ public class UnsafeInMemoryCaptureStore
     public Task<IReadOnlyList<CaptureJob>> ListActiveJobsAsync(CancellationToken ct) =>
         Task.FromResult<IReadOnlyList<CaptureJob>>(Jobs.Where(j => j.Active).OrderBy(j => j.RequestedAtUtc).ToList());
     public Task<CaptureJob?> LatestJobAsync(string companyId, CancellationToken ct) =>
-        Task.FromResult(Jobs.Where(j => j.CompanyId == companyId).OrderByDescending(j => j.RequestedAtUtc).FirstOrDefault());
+        Task.FromResult(Jobs.Where(j => j.CompanyId == companyId && !j.IsNfse).OrderByDescending(j => j.RequestedAtUtc).FirstOrDefault());
+    public Task<CaptureJob?> LatestNfseJobAsync(string companyId, CancellationToken ct) =>
+        Task.FromResult(Jobs.Where(j => j.CompanyId == companyId && j.IsNfse).OrderByDescending(j => j.RequestedAtUtc).FirstOrDefault());
     public Task<CaptureJob?> LatestJobOfKindAsync(string companyId, string kind, CancellationToken ct) =>
         Task.FromResult(Jobs.Where(j => j.CompanyId == companyId && j.Kind == kind).OrderByDescending(j => j.RequestedAtUtc).FirstOrDefault());
     public Task<MonitorRow?> GetMonitorAsync(string companyId, CancellationToken ct) => Task.FromResult(Monitors.GetValueOrDefault(companyId));
@@ -214,6 +216,7 @@ public sealed class InMemoryCaptureStore : UnsafeInMemoryCaptureStore, ICaptureS
     Task ICaptureStore.UpdateJobAsync(CaptureJob job, CancellationToken ct) { Locked(() => UpdateJobAsync(job, ct)); return Task.CompletedTask; }
     Task<IReadOnlyList<CaptureJob>> ICaptureStore.ListActiveJobsAsync(CancellationToken ct) => Task.FromResult(Locked(() => ListActiveJobsAsync(ct)));
     Task<CaptureJob?> ICaptureStore.LatestJobAsync(string companyId, CancellationToken ct) => Task.FromResult(Locked(() => LatestJobAsync(companyId, ct)));
+    Task<CaptureJob?> ICaptureStore.LatestNfseJobAsync(string companyId, CancellationToken ct) => Task.FromResult(Locked(() => LatestNfseJobAsync(companyId, ct)));
     Task<CaptureJob?> ICaptureStore.LatestJobOfKindAsync(string companyId, string kind, CancellationToken ct) => Task.FromResult(Locked(() => LatestJobOfKindAsync(companyId, kind, ct)));
     Task<MonitorRow?> ICaptureStore.GetMonitorAsync(string companyId, CancellationToken ct) => Task.FromResult(Locked(() => GetMonitorAsync(companyId, ct)));
     Task ICaptureStore.SaveMonitorAsync(MonitorRow monitor, DateTime nowUtc, CancellationToken ct) { Locked(() => SaveMonitorAsync(monitor, nowUtc, ct)); return Task.CompletedTask; }
@@ -237,6 +240,10 @@ public sealed class CaptureInstallation : IDisposable
     public CompanyService Companies = null!;
     public CaptureService Service = null!;
     public MonitorService Monitor = null!;
+    public readonly InMemoryNfseStore NfseStore = new();
+    public readonly FakeAdn Adn = new();
+    public NfseService Nfse = null!;
+    public readonly string NfseFolder = Directory.CreateTempSubdirectory("nexfiscal-nfse-").FullName;
     public CaptureWorker Worker = null!;
 
     public static async Task<CaptureInstallation> CreateAsync()
@@ -256,7 +263,9 @@ public sealed class CaptureInstallation : IDisposable
         var engine = new NfeCaptureEngine(Store, Companies, Sefaz, Clock, logs.CreateLogger<NfeCaptureEngine>());
         Service = new CaptureService(Store, Companies, signal, Clock);
         Monitor = new MonitorService(Store, Companies, signal, Clock);
-        Worker = new CaptureWorker(Store, engine, Companies, signal, Clock, logs.CreateLogger<CaptureWorker>());
+        var nfseEngine = new NfseCaptureEngine(NfseStore, Store, Companies, Adn, Clock, logs.CreateLogger<NfseCaptureEngine>());
+        Nfse = new NfseService(NfseStore, Store, Companies, signal, Clock);
+        Worker = new CaptureWorker(Store, engine, NfseStore, nfseEngine, Companies, signal, Clock, logs.CreateLogger<CaptureWorker>());
     }
 
     /// <summary>Clique em "Capturar todos os XMLs disponíveis" + uma passada da fila em segundo plano.</summary>
@@ -274,5 +283,111 @@ public sealed class CaptureInstallation : IDisposable
     {
         Base.Dispose();
         if (Directory.Exists(Folder)) Directory.Delete(Folder, recursive: true);
+        if (Directory.Exists(NfseFolder)) Directory.Delete(NfseFolder, recursive: true);
     }
+}
+
+/// <summary>NFS-e e respostas do ADN de teste. Chaves e CNPJs fictícios.</summary>
+public static class Adn
+{
+    public static string Key(int number) => TestCertificates.CnpjB + number.ToString("D36"); // 50 dígitos
+
+    public static string Nfse(string key, string value = "500.00") =>
+        "<NFSe xmlns=\"http://www.sped.fazenda.gov.br/nfse\" versao=\"1.01\"><infNFSe Id=\"NFS" + key + "\"><xLocEmi>SAO PAULO</xLocEmi>" +
+        "<nNFSe>1</nNFSe><cStat>100</cStat><dhProc>2026-11-10T09:30:00-03:00</dhProc><emit><CNPJ>" + TestCertificates.CnpjB +
+        "</CNPJ><xNome>PRESTADOR EXEMPLO LTDA</xNome></emit><valores><vLiq>" + value + "</vLiq></valores>" +
+        "<DPS versao=\"1.01\"><infDPS Id=\"DPS1\"><dCompet>2026-11-10</dCompet></infDPS></DPS></infNFSe></NFSe>";
+
+    public static string CancelEvent(string key) =>
+        "<evento xmlns=\"http://www.sped.fazenda.gov.br/nfse\" versao=\"1.01\"><infEvento Id=\"EVT1\"><dhProc>2026-11-11T10:00:00-03:00</dhProc>" +
+        "<pedRegEvento><infPedReg><chNFSe>" + key + "</chNFSe><e101101><xDesc>Cancelamento de NFS-e</xDesc></e101101></infPedReg></pedRegEvento></infEvento></evento>";
+
+    public sealed record Doc(long? Nsu, string? Key, string Type, string Xml);
+    public static Doc Note(long nsu, int number) => new(nsu, Key(number), "NFSE", Nfse(Key(number)));
+    public static Doc Cancel(long nsu, int number) => new(nsu, Key(number), "EVENTO", CancelEvent(Key(number)));
+
+    public static (int, string) Found(params Doc[] documents) => (200, System.Text.Json.JsonSerializer.Serialize(new
+    {
+        StatusProcessamento = "DOCUMENTOS_LOCALIZADOS",
+        LoteDFe = documents.Select(d => new { NSU = d.Nsu, ChaveAcesso = d.Key, TipoDocumento = d.Type, ArquivoXml = Sefaz.Zip(d.Xml), DataHoraGeracao = "2026-11-10T09:30:00" }),
+        Alertas = (object?)null, Erros = (object?)null, TipoAmbiente = "PRODUCAO"
+    }));
+
+    public static (int, string) None() => (404, "{\"StatusProcessamento\":\"NENHUM_DOCUMENTO_LOCALIZADO\",\"LoteDFe\":null,\"Erros\":[{\"Codigo\":\"E2220\"," +
+        "\"Descricao\":\"Nenhum documento localizado - não existem documentos fiscais para o contribuinte a partir do NSU informado.\"}]}");
+
+    public static (int, string) Rejected(string code, string text) =>
+        (400, "{\"StatusProcessamento\":\"REJEICAO\",\"Erros\":[{\"Codigo\":\"" + code + "\",\"Descricao\":\"" + text + "\"}],\"TipoConsulta\":\"InscricaoCertificado\"}");
+}
+
+/// <summary>ADN simulado: devolve as respostas programadas, em ordem, e registra cada consulta.</summary>
+public sealed class FakeAdn : IAdnTransport
+{
+    public sealed record Call(long Nsu, string Cnpj, string Url, bool HasPrivateKey);
+    public readonly List<Call> Calls = [];
+    public readonly Queue<Func<(int, string, TimeSpan?)>> Responses = new();
+
+    public FakeAdn Reply((int Status, string Body) response, TimeSpan? retryAfter = null) { Responses.Enqueue(() => (response.Status, response.Body, retryAfter)); return this; }
+    public FakeAdn Throw(NexFiscalException error) { Responses.Enqueue(() => throw error); return this; }
+
+    public Task<(int Status, string Body, TimeSpan? RetryAfter)> GetAsync(Uri url, System.Security.Cryptography.X509Certificates.X509Certificate2 clientCertificate, CancellationToken ct)
+    {
+        var match = System.Text.RegularExpressions.Regex.Match(url.AbsoluteUri, "^https://adn\\.nfse\\.gov\\.br/contribuintes/DFe/(\\d+)\\?cnpjConsulta=(\\w{14})&lote=true$");
+        if (!match.Success) throw new InvalidOperationException("Consulta fora do contrato: " + url);
+        Calls.Add(new Call(long.Parse(match.Groups[1].Value), match.Groups[2].Value, url.AbsoluteUri, clientCertificate.HasPrivateKey));
+        if (Responses.Count == 0) throw new InvalidOperationException("Consulta não esperada ao ADN: " + url);
+        return Task.FromResult(Responses.Dequeue()());
+    }
+}
+
+/// <summary>Substitui o HANA nos testes da NFS-e, com as mesmas regras do repositório real e trava para uso simultâneo.</summary>
+public sealed class InMemoryNfseStore : INfseStore
+{
+    private static readonly DateTime Epoch = new(2000, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+    public sealed class Company
+    {
+        public long LastNsu;
+        public DateTime NextAllowedAtUtc = Epoch;
+        public readonly SortedDictionary<long, EnvelopeRow> Envelopes = [];
+        public readonly Dictionary<string, NfseDocumentRow> Documents = [];
+        public readonly List<CaptureAttempt> Log = [];
+    }
+    private readonly object _lock = new();
+    public readonly Dictionary<string, Company> Companies = [];
+    public readonly Dictionary<string, MonitorRow> Monitors = [];
+    public bool FailNextSave;
+    public Company Of(string id) { lock (_lock) return Companies.TryGetValue(id, out var c) ? c : Companies[id] = new Company(); }
+
+    public Task<CaptureCursor> GetCursorAsync(string companyId, CancellationToken ct) { lock (_lock) return Task.FromResult(new CaptureCursor(Of(companyId).LastNsu, Of(companyId).NextAllowedAtUtc)); }
+
+    public Task SaveLotAsync(string companyId, NfseLot lot, DateTime nowUtc, CancellationToken ct)
+    {
+        lock (_lock)
+        {
+            if (FailNextSave) { FailNextSave = false; throw new NexFiscalException("hana_error", "O SAP HANA recusou a operação (código 2048).", 502); }
+            var c = Of(companyId);
+            foreach (var e in lot.Envelopes) c.Envelopes.TryAdd(e.Nsu, e);
+            foreach (var d in lot.Documents)
+                c.Documents[d.AccessKey] = c.Documents.TryGetValue(d.AccessKey, out var current) ? current with { Nsu = d.Nsu, Sha256 = d.Sha256 } : d;
+            foreach (var key in lot.CancelledKeys)
+                if (c.Documents.TryGetValue(key, out var doc)) c.Documents[key] = doc with { Cancelled = true };
+            if (lot.LastNsu is { } last && last > c.LastNsu) c.LastNsu = last;
+            if (lot.NextAllowedAtUtc is { } next) c.NextAllowedAtUtc = next;
+            return Task.CompletedTask;
+        }
+    }
+
+    public Task LogAttemptAsync(string companyId, CaptureAttempt attempt, CancellationToken ct) { lock (_lock) Of(companyId).Log.Add(attempt); return Task.CompletedTask; }
+    public Task<IReadOnlyList<NfseDocumentRow>> ListDocumentsAsync(string companyId, CancellationToken ct) { lock (_lock) return Task.FromResult<IReadOnlyList<NfseDocumentRow>>(Of(companyId).Documents.Values.ToList()); }
+    public Task<byte[]?> ReadEnvelopeAsync(string companyId, long nsu, CancellationToken ct) { lock (_lock) return Task.FromResult(Of(companyId).Envelopes.TryGetValue(nsu, out var e) ? e.Xml : null); }
+    public Task<MonitorRow?> GetMonitorAsync(string companyId, CancellationToken ct) { lock (_lock) return Task.FromResult(Monitors.GetValueOrDefault(companyId)); }
+    public Task SaveMonitorAsync(MonitorRow monitor, DateTime nowUtc, CancellationToken ct) { lock (_lock) Monitors[monitor.CompanyId] = monitor; return Task.CompletedTask; }
+    public Task SetMonitorScheduleAsync(string companyId, DateTime? nextRunAtUtc, DateTime? lastRunAtUtc, string? message, DateTime nowUtc, CancellationToken ct)
+    {
+        lock (_lock)
+            if (Monitors.TryGetValue(companyId, out var current))
+                Monitors[companyId] = current with { NextRunAtUtc = nextRunAtUtc, LastRunAtUtc = lastRunAtUtc, LastMessage = message };
+        return Task.CompletedTask;
+    }
+    public Task<IReadOnlyList<MonitorRow>> ListEnabledMonitorsAsync(CancellationToken ct) { lock (_lock) return Task.FromResult<IReadOnlyList<MonitorRow>>(Monitors.Values.Where(m => m.Enabled).OrderBy(m => m.CompanyId).ToList()); }
 }

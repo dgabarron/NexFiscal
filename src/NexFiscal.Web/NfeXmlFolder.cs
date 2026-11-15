@@ -35,7 +35,9 @@ public static class NfeXmlFolder
 
     public static string PathFor(string directory, string accessKey)
     {
-        if (!NfeProtocol.IsAccessKey(accessKey)) throw new ArgumentException("Chave de acesso inválida.", nameof(accessKey));
+        // NF-e: 44 posições; NFS-e nacional: 50 dígitos. Nada além disso vira nome de arquivo.
+        if (!NfeProtocol.IsAccessKey(accessKey) && !NfseProtocol.IsAccessKey(accessKey))
+            throw new ArgumentException("Chave de acesso inválida.", nameof(accessKey));
         return Path.Combine(directory, accessKey + ".xml");
     }
 

@@ -248,4 +248,45 @@ public class NfeProtocolTests
             new HttpSefazTransport().SendAsync(new Uri("https://127.0.0.1:1/"), "<x/>", certificate, CancellationToken.None));
         Assert.Equal("sefaz_unreachable", error.Kind);
     }
+
+    // ---------- transporte da NFS-e (ADN): GET com certificado do cliente ----------
+
+    [Fact]
+    public async Task Transporte_do_adn_autentica_com_o_a1_e_devolve_status_corpo_e_espera_indicada()
+    {
+        using var install = await CaptureInstallation.CreateAsync();
+        string? method = null, path = null, clientThumbprint = null;
+        var replies = new Queue<(int, string, string?)>([(200, Adn.Found(Adn.Note(1, 1)).Item2, null), (404, Adn.None().Item2, null), (429, "", "1200")]);
+        var (app, url, serverCertificate) = await StartServerAsync(async context =>
+        {
+            method = context.Request.Method;
+            path = context.Request.Path + context.Request.QueryString;
+            clientThumbprint = context.Connection.ClientCertificate?.GetCertHashString(HashAlgorithmName.SHA256);
+            var (status, body, retry) = replies.Dequeue();
+            context.Response.StatusCode = status;
+            if (retry is not null) context.Response.Headers.RetryAfter = retry;
+            context.Response.ContentType = "application/json";
+            await context.Response.WriteAsync(body);
+        });
+        await using (app)
+        {
+            var transport = new HttpAdnTransport { TrustedTestServerCertificate = serverCertificate };
+            using var certificate = install.Companies.OpenCertificate(install.CompanyId);
+            var target = new Uri(url, NfseProtocol.BuildRequest(TestCertificates.CnpjA, 7).PathAndQuery);
+
+            var found = await transport.GetAsync(target, certificate, CancellationToken.None);
+            Assert.Equal(NfseResponseStatus.Found, NfseProtocol.ParseResponse(found.Status, found.Body).Status);
+            Assert.Equal(("GET", "/contribuintes/DFe/7?cnpjConsulta=11222333000181&lote=true"), (method, path));
+            Assert.Equal(install.Base.Store.Rows[0].Thumbprint, clientThumbprint);
+
+            var none = await transport.GetAsync(target, certificate, CancellationToken.None);
+            Assert.Equal(NfseResponseStatus.None, NfseProtocol.ParseResponse(none.Status, none.Body).Status);
+
+            var limited = await transport.GetAsync(target, certificate, CancellationToken.None);
+            Assert.Equal((429, TimeSpan.FromMinutes(20)), (limited.Status, limited.RetryAfter!.Value));
+
+            var untrusted = await Assert.ThrowsAsync<NexFiscalException>(() => new HttpAdnTransport().GetAsync(target, certificate, CancellationToken.None));
+            Assert.Equal("adn_tls", untrusted.Kind);
+        }
+    }
 }

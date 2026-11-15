@@ -1,14 +1,14 @@
-# NexFiscal V1 — Etapa 04: Monitoramento automático de NF-e
+# NexFiscal — Etapa 05: NFS-e nacional
 
-**Escopo desta branch: as quatro funções da V1** — conexão SAP HANA, empresas e certificado A1, captura manual de NF-e (as três homologadas) e **monitoramento automático de NF-e**. Não há NFS-e, CT-e nem envio de manifestação.
+**Escopo desta branch:** as quatro funções da V1 (conexão SAP HANA, empresas e A1, captura manual e monitoramento automático de NF-e — todas homologadas) e a **captura manual e automática de NFS-e do padrão nacional**, pelo Ambiente de Dados Nacional (ADN). Não há CT-e nem envio de manifestação.
 
-**Estado da Função 4:** testada com SEFAZ e HANA simulados. **Ainda não homologada no seu ambiente** — veja [`docs/10-ETAPA-04-MONITORAMENTO-DECISOES-E-HOMOLOGACAO.md`](docs/10-ETAPA-04-MONITORAMENTO-DECISOES-E-HOMOLOGACAO.md). Etapas anteriores: [`docs/07`](docs/07-ETAPA-01-HANA-DECISOES-E-HOMOLOGACAO.md), [`docs/08`](docs/08-ETAPA-02-EMPRESAS-A1-DECISOES-E-HOMOLOGACAO.md) e [`docs/09`](docs/09-ETAPA-03-CAPTURA-NFE-DECISOES-E-HOMOLOGACAO.md).
+**Estado da NFS-e:** testada com ADN e HANA simulados. **Nunca consultou o ADN real**, e o formato do corpo da resposta não pôde ser conferido na documentação oficial — veja [`docs/11-ETAPA-05-NFSE-DECISOES-E-HOMOLOGACAO.md`](docs/11-ETAPA-05-NFSE-DECISOES-E-HOMOLOGACAO.md). Etapas anteriores: [`docs/07`](docs/07-ETAPA-01-HANA-DECISOES-E-HOMOLOGACAO.md), [`docs/08`](docs/08-ETAPA-02-EMPRESAS-A1-DECISOES-E-HOMOLOGACAO.md), [`docs/09`](docs/09-ETAPA-03-CAPTURA-NFE-DECISOES-E-HOMOLOGACAO.md) e [`docs/10`](docs/10-ETAPA-04-MONITORAMENTO-DECISOES-E-HOMOLOGACAO.md).
 
 **Plataforma:** aplicação exclusiva para **Windows**, integrada exclusivamente ao banco **SAP HANA do SAP Business One**. A interface segue o **Microsoft Fluent 2** (Fluent UI React v9) e acompanha o tema claro/escuro do Windows.
 
 ## Como executar (Windows)
 
-1. Baixe/extraia a branch `v1/etapa-04-monitoramento` **em uma pasta nova**. Não misture com a instalação anterior.
+1. Baixe/extraia a branch `v1/etapa-05-nfse` **em uma pasta nova**. Não misture com a instalação anterior.
 2. Instale o .NET SDK 8 e o Node.js 20+.
 3. Feche qualquer versão antiga do NexFiscal (ela usa a mesma porta 5187).
 4. Na raiz da pasta, execute:
@@ -46,6 +46,13 @@ A conexão salva e as empresas cadastradas continuam valendo. Na primeira abertu
 3. O NexFiscal confere os arquivos da pasta, consulta a SEFAZ a partir do ponto em que parou e grava cada NF-e completa como `<chave de acesso>.xml`.
 4. A tela mostra: XMLs novos, já presentes, recuperados, resumos e eventos ignorados, notas ainda sem XML completo e falhas.
 5. A SEFAZ exige **1 hora** entre consultas depois que não há mais documentos. Um novo clique nesse intervalo apenas confere os arquivos locais e fica aguardando; a captura continua sozinha no horário indicado, enquanto o serviço estiver aberto.
+
+### NFS-e nacional (abas NFS-e das seções Captura e Monitoramento)
+
+1. Nas seções **Captura** e **Monitoramento**, escolha a aba **NFS-e**. O funcionamento é o mesmo da NF-e: empresa, pasta de destino, botão de captura e, se quiser, monitoramento automático.
+2. São baixadas as NFS-e do padrão nacional em que a empresa é **prestadora, tomadora ou intermediária**, cada uma como `<chave de acesso de 50 dígitos>.xml`.
+3. NF-e e NFS-e são independentes: pontos de captura, pastas, pedidos e monitoramento separados. Recomenda-se uma pasta para cada tipo.
+4. Na NFS-e não existe "resumo aguardando manifestação": o que o ADN distribui já é a nota completa. Só aparecem notas que estejam no ADN — de municípios que emitem pelo sistema nacional ou que compartilham suas notas com ele.
 
 ### Monitoramento automático (seção Monitoramento)
 
@@ -98,6 +105,9 @@ O serviço escuta somente `127.0.0.1:5187` (não configurável) e recusa requisi
 
 | `GET` | `/api/companies/{id}/nfe/monitor` | Configuração do monitoramento, próxima consulta prevista e última execução automática |
 | `PUT` | `/api/companies/{id}/nfe/monitor` | `{enabled,intervalMinutes,destinationDirectory}`; liga, desliga ou ajusta |
+
+| `GET` / `POST` | `/api/companies/{id}/nfse/capture` e `/nfse/captures` | Mesmos contratos da NF-e, para NFS-e |
+| `GET` / `PUT` | `/api/companies/{id}/nfse/monitor` | Mesmos contratos da NF-e, para NFS-e |
 
 Erros retornam `{error, kind, issues}` com mensagem em português.
 

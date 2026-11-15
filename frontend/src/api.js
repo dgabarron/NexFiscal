@@ -103,11 +103,11 @@ export function isJobActive(job) {
 }
 
 // Estado do pedido de captura, nos termos da especificação: Aguardando SEFAZ, Consultando, Concluído, Com pendências, Falha.
-export function describeJob(job) {
+export function describeJob(job, source = "a SEFAZ") {
   switch (job?.state) {
     case "queued":
-    case "running": return { intent: "info", title: "Consultando a SEFAZ e gravando os XMLs...", busy: true };
-    case "waiting_sefaz": return { intent: "warning", title: `Aguardando a SEFAZ — continua sozinho em ${formatDateTime(job.nextRunAtUtc)}`, busy: false };
+    case "running": return { intent: "info", title: `Consultando ${source} e gravando os XMLs...`, busy: true };
+    case "waiting_sefaz": return { intent: "warning", title: `Aguardando ${source} — continua sozinho em ${formatDateTime(job.nextRunAtUtc)}`, busy: false };
     case "completed": return { intent: "success", title: "Captura concluída", busy: false };
     case "completed_with_pending": return { intent: "warning", title: "Captura concluída com pendências", busy: false };
     case "failed": return { intent: "error", title: "A captura falhou", busy: false };
@@ -139,4 +139,21 @@ export function describeMonitor(view) {
 
 export function isIntervalValid(text) {
   return /^\d+$/.test(String(text)) && +text >= 1 && +text <= 10080;
+}
+
+// ---------- Tipos de documento (NF-e pela SEFAZ, NFS-e pelo ADN) ----------
+
+export const DOCUMENT_KINDS = {
+  nfe: { id: "nfe", label: "NF-e", source: "a SEFAZ", sourceTo: "à SEFAZ", pending: true,
+    lead: "Baixa da SEFAZ todos os XMLs completos de NF-e disponíveis para a empresa e que ainda não estão na pasta, um arquivo por nota. Nenhuma chave ou número precisa ser digitado." },
+  nfse: { id: "nfse", label: "NFS-e", source: "o ADN", sourceTo: "ao ADN da NFS-e", pending: false,
+    lead: "Baixa do Ambiente de Dados Nacional todas as NFS-e do padrão nacional em que a empresa é prestadora, tomadora ou intermediária e que ainda não estão na pasta, um arquivo por nota." },
+};
+
+// Contagens de uma captura; na NFS-e não existe "resumo sem XML completo".
+export function countersFor(kind, job) {
+  const counters = jobCounters(job);
+  if (kind !== "nfse") return counters;
+  return counters.filter(c => c.key !== "pending").map(c => c.key === "ignored" ? { ...c, label: "Eventos (não são notas)" }
+    : c.key === "newComplete" ? { ...c, label: "NFS-e novas" } : c);
 }

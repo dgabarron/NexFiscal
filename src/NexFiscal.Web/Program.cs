@@ -33,6 +33,13 @@ builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<CertificateVault>();
 builder.Services.AddSingleton<ICompanyStore, HanaCompanyStore>();
 builder.Services.AddSingleton<CompanyService>();
+builder.Services.AddSingleton<ICaptureStore, HanaCaptureStore>();
+builder.Services.AddSingleton<ISefazTransport, HttpSefazTransport>();
+builder.Services.AddSingleton<NfeCaptureEngine>();
+builder.Services.AddSingleton<CaptureSignal>();
+builder.Services.AddSingleton<CaptureService>();
+builder.Services.AddSingleton<CaptureWorker>();
+builder.Services.AddHostedService(services => services.GetRequiredService<CaptureWorker>());
 var app = builder.Build();
 
 app.Use(async (context, next) =>
@@ -71,7 +78,7 @@ app.MapGet("/", () =>
         : Results.Problem("Frontend não compilado. Execute npm run build em frontend.", statusCode: 503);
 });
 
-app.MapGet("/api/health", () => Results.Ok(new { product = "NexFiscal", version = "V1", stage = 2 }));
+app.MapGet("/api/health", () => Results.Ok(new { product = "NexFiscal", version = "V1", stage = 3 }));
 
 app.MapGet("/api/setup/hana/status", async (HanaSetup hana, CancellationToken ct) =>
     Results.Ok(await hana.StatusAsync(ct)));
@@ -93,6 +100,13 @@ app.MapPut("/api/companies/{id}/certificate", (string id, CertificateUpload? upl
     Run(() => companies.UpdateCertificateAsync(id, upload, ct)));
 app.MapDelete("/api/companies/{id}", (string id, CompanyService companies, CancellationToken ct) =>
     Run(() => companies.RemoveAsync(id, ct)));
+
+app.MapGet("/api/companies/{id}/nfe/capture", (string id, CaptureService capture, CancellationToken ct) =>
+    Run(() => capture.GetAsync(id, ct)));
+app.MapPost("/api/companies/{id}/nfe/captures", (string id, CaptureRequest? request, CaptureService capture, CancellationToken ct) =>
+    Run(() => capture.StartAsync(id, request, ct)));
+app.MapGet("/api/companies/{id}/nfe/pending", (string id, CaptureService capture, CancellationToken ct) =>
+    Run(() => capture.PendingAsync(id, ct)));
 
 app.MapFallback(() => Results.NotFound());
 

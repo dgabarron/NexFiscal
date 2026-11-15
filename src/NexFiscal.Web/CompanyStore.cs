@@ -193,7 +193,8 @@ public sealed class HanaCompanyStore(
         foreach (var arg in args)
         {
             var parameter = cmd.CreateParameter();
-            parameter.Value = arg ?? DBNull.Value;
+            if (arg is TypedNull typed) { parameter.DbType = typed.Type; parameter.Value = DBNull.Value; }
+            else parameter.Value = arg ?? DBNull.Value;
             cmd.Parameters.Add(parameter);
         }
         return cmd;
@@ -215,4 +216,13 @@ public sealed class HanaCompanyStore(
 
     private static DateTime? Utc(DbDataReader reader, int index) =>
         reader.IsDBNull(index) ? null : DateTime.SpecifyKind(reader.GetDateTime(index), DateTimeKind.Utc);
+}
+
+/// <summary>Nulo com tipo declarado, para colunas numéricas e de data (o driver não tem como inferir o tipo de um nulo).</summary>
+internal readonly record struct TypedNull(System.Data.DbType Type)
+{
+    public static object Dec(long? value) => value is { } v ? (decimal)v : new TypedNull(System.Data.DbType.Decimal);
+    public static object Money(decimal? value) => value is { } v ? v : new TypedNull(System.Data.DbType.Decimal);
+    public static object Int(int? value) => value is { } v ? v : new TypedNull(System.Data.DbType.Int32);
+    public static object Time(DateTime? value) => value is { } v ? v : new TypedNull(System.Data.DbType.DateTime);
 }

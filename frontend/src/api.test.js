@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { api, ApiError, credentials, describeCertificate, describeStatus, formatDate, isValid, removalWarning } from "./api.js";
+import { api, ApiError, credentials, describeCertificate, describeJob, describeStatus, formatDate, formatDateTime, formatMoney, isJobActive, isValid, jobCounters, removalWarning } from "./api.js";
 
 test("credenciais preservam senha e convertem porta", () => {
   assert.deepEqual(credentials({server:" hana.local ",port:"30015",username:" fiscal ",password:" segredo "}),
@@ -58,4 +58,30 @@ test("datas inválidas não quebram a tela", () => {
   assert.equal(formatDate(null), "—");
   assert.equal(formatDate("lixo"), "—");
   assert.match(formatDate("2027-10-16T12:00:00Z"), /2027/);
+});
+
+test("estado do pedido de captura tem apresentação própria e só os ativos pedem atualização", () => {
+  const intent = state => describeJob({ state, nextRunAtUtc: "2026-11-15T15:00:00Z" })?.intent;
+  assert.deepEqual(["queued","running","waiting_sefaz","completed","completed_with_pending","failed"].map(intent),
+    ["info","info","warning","success","warning","error"]);
+  assert.equal(describeJob(null), null);
+  assert.match(describeJob({ state: "waiting_sefaz", nextRunAtUtc: "2026-11-15T15:00:00Z" }).title, /continua sozinho em \d{2}\/\d{2}\/2026/);
+  assert.deepEqual(["queued","running","waiting_sefaz","completed","failed",undefined].map(state => isJobActive({ state })),
+    [true, true, true, false, false, false]);
+});
+
+test("contagens separam xml completo de resumo e destacam pendências e falhas", () => {
+  const counters = jobCounters({ newComplete: 3, alreadyPresent: 10, recovered: 1, ignored: 7, pending: 2, failures: 0 });
+  assert.deepEqual(counters.map(c => [c.key, c.value, c.tone]), [
+    ["newComplete", 3, "ok"], ["alreadyPresent", 10, "neutral"], ["recovered", 1, "ok"],
+    ["ignored", 7, "neutral"], ["pending", 2, "warn"], ["failures", 0, "neutral"]]);
+  assert.equal(jobCounters(null).every(c => c.value === 0), true);
+  assert.equal(jobCounters({ failures: 1 }).at(-1).tone, "error");
+});
+
+test("data, hora e valor em formato brasileiro", () => {
+  assert.equal(formatDateTime(null), "—");
+  assert.match(formatDateTime("2026-11-15T15:04:00Z"), /\d{2}\/11\/2026.*\d{2}:04/);
+  assert.match(formatMoney(1234.56), /1\.234,56/);
+  assert.equal(formatMoney(null), "—");
 });

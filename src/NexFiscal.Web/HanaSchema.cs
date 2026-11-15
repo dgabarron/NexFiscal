@@ -40,7 +40,19 @@ public static class HanaSchemaVerifier
                 ("StartedAtUtc", "TIMESTAMP"), ("FinishedAtUtc", "TIMESTAMP")],
             ["BRAI_NEX_CompanyCertificate"] = [("CompanyId", "NVARCHAR"), ("Uf", "NVARCHAR"), ("Issuer", "NVARCHAR"),
                 ("Thumbprint", "NVARCHAR"), ("NotBeforeUtc", "TIMESTAMP"), ("NotAfterUtc", "TIMESTAMP"),
-                ("UpdatedAtUtc", "TIMESTAMP"), ("ArchivedAtUtc", "TIMESTAMP")]
+                ("UpdatedAtUtc", "TIMESTAMP"), ("ArchivedAtUtc", "TIMESTAMP")],
+            ["BRAI_NEX_NfeDocument"] = [("CompanyId", "NVARCHAR"), ("AccessKey", "NVARCHAR"), ("HasCompleteXml", "TINYINT"),
+                ("CompleteNsu", "DECIMAL"), ("CompleteSha256", "NVARCHAR"), ("SummaryNsu", "DECIMAL"), ("Situation", "TINYINT"),
+                ("IssuerId", "NVARCHAR"), ("IssuerName", "NVARCHAR"), ("IssuedAtUtc", "TIMESTAMP"), ("TotalValue", "DECIMAL"),
+                ("FirstSeenAtUtc", "TIMESTAMP"), ("UpdatedAtUtc", "TIMESTAMP")],
+            ["BRAI_NEX_NfeRecovery"] = [("CompanyId", "NVARCHAR"), ("Nsu", "DECIMAL"), ("State", "NVARCHAR"),
+                ("Attempts", "INTEGER"), ("LastStatus", "INTEGER"), ("CreatedAtUtc", "TIMESTAMP"), ("LastAttemptAtUtc", "TIMESTAMP")],
+            ["BRAI_NEX_CaptureJob"] = [("JobId", "NVARCHAR"), ("CompanyId", "NVARCHAR"), ("Kind", "NVARCHAR"), ("State", "NVARCHAR"),
+                ("DestinationDirectory", "NVARCHAR"), ("RequestedAtUtc", "TIMESTAMP"), ("StartedAtUtc", "TIMESTAMP"),
+                ("FinishedAtUtc", "TIMESTAMP"), ("NextRunAtUtc", "TIMESTAMP"), ("Attempts", "INTEGER"), ("NewComplete", "INTEGER"),
+                ("AlreadyPresent", "INTEGER"), ("Recovered", "INTEGER"), ("Ignored", "INTEGER"), ("Pending", "INTEGER"),
+                ("Failures", "INTEGER"), ("LastStatus", "INTEGER"), ("Message", "NVARCHAR")],
+            ["BRAI_NEX_CaptureSettings"] = [("CompanyId", "NVARCHAR"), ("DestinationDirectory", "NVARCHAR"), ("UpdatedAtUtc", "TIMESTAMP")]
         };
 
     public static async Task<HanaSchemaReport> VerifyAsync(DbConnection connection, CancellationToken ct)
@@ -88,7 +100,8 @@ public static class HanaSchemaInstaller
     public static readonly IReadOnlyList<(int Version, string Name, string Resource)> Migrations =
     [
         (1, "initial_nfe_capture", "NexFiscal.Web.sql.migrations.001_BRAI_NEX_initial.sql"),
-        (2, "company_certificate", "NexFiscal.Web.sql.migrations.002_BRAI_NEX_company_certificate.sql")
+        (2, "company_certificate", "NexFiscal.Web.sql.migrations.002_BRAI_NEX_company_certificate.sql"),
+        (3, "nfe_capture", "NexFiscal.Web.sql.migrations.003_BRAI_NEX_nfe_capture.sql")
     ];
 
     /// <summary>Tabela → comando CREATE COLUMN TABLE completo, na ordem das migrações (respeita chaves estrangeiras).</summary>

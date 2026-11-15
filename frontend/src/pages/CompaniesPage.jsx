@@ -165,7 +165,7 @@ export default function CompaniesPage({ hana, goToHana }) {
     </section>
 
     {selected && active.some(c => c.companyId === selected) &&
-      <Caption1 className={styles.footnote}><CheckmarkCircleFilled fontSize={16}/> A empresa selecionada será usada na captura de NF-e, disponível na próxima etapa.</Caption1>}
+      <Caption1 className={styles.footnote}><CheckmarkCircleFilled fontSize={16}/> A empresa selecionada é a que abre primeiro na seção Captura de NF-e.</Caption1>}
 
     {form && <CertificateDialog key={form.mode + (form.company?.companyId || "")} mode={form.mode} company={form.company} onDone={done} onCancel={() => setForm(null)}/>}
 

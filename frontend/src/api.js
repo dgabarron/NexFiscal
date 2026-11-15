@@ -84,3 +84,45 @@ export function removalWarning(company) {
     ? `${company.legalName} possui histórico fiscal. Ela será apenas arquivada: documentos, NSUs e o certificado guardado ficam preservados, e ela pode ser reativada depois.`
     : `${company.legalName} não possui histórico fiscal. O cadastro e o certificado A1 guardado serão excluídos definitivamente.`;
 }
+
+// ---------- Captura de NF-e (função 3) ----------
+
+export function formatDateTime(iso) {
+  if (!iso) return "—";
+  const date = new Date(iso);
+  return Number.isNaN(date.getTime()) ? "—"
+    : date.toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
+}
+
+export function formatMoney(value) {
+  return typeof value === "number" ? value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) : "—";
+}
+
+export function isJobActive(job) {
+  return ["queued", "running", "waiting_sefaz"].includes(job?.state);
+}
+
+// Estado do pedido de captura, nos termos da especificação: Aguardando SEFAZ, Consultando, Concluído, Com pendências, Falha.
+export function describeJob(job) {
+  switch (job?.state) {
+    case "queued":
+    case "running": return { intent: "info", title: "Consultando a SEFAZ e gravando os XMLs...", busy: true };
+    case "waiting_sefaz": return { intent: "warning", title: `Aguardando a SEFAZ — continua sozinho em ${formatDateTime(job.nextRunAtUtc)}`, busy: false };
+    case "completed": return { intent: "success", title: "Captura concluída", busy: false };
+    case "completed_with_pending": return { intent: "warning", title: "Captura concluída com pendências", busy: false };
+    case "failed": return { intent: "error", title: "A captura falhou", busy: false };
+    default: return null;
+  }
+}
+
+// Contagens exibidas. Resumos e eventos nunca entram na conta de XMLs completos.
+export function jobCounters(job) {
+  return [
+    { key: "newComplete", label: "XMLs completos novos", value: job?.newComplete ?? 0, tone: "ok" },
+    { key: "alreadyPresent", label: "Já presentes na pasta", value: job?.alreadyPresent ?? 0, tone: "neutral" },
+    { key: "recovered", label: "Recuperados de pendência", value: job?.recovered ?? 0, tone: "ok" },
+    { key: "ignored", label: "Resumos e eventos ignorados", value: job?.ignored ?? 0, tone: "neutral" },
+    { key: "pending", label: "Ainda sem XML completo", value: job?.pending ?? 0, tone: (job?.pending ?? 0) > 0 ? "warn" : "neutral" },
+    { key: "failures", label: "Falhas", value: job?.failures ?? 0, tone: (job?.failures ?? 0) > 0 ? "error" : "neutral" },
+  ];
+}

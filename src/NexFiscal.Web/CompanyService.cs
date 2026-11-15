@@ -146,6 +146,28 @@ public sealed class CompanyService(
         finally { ChangeLock.Release(); }
     }
 
+    /// <summary>Empresa e estado real do A1, para a captura.</summary>
+    public async Task<(CompanyRecord Record, CompanyView View)> GetAsync(string companyId, CancellationToken ct)
+    {
+        var record = await FindAsync(companyId, ct);
+        return (record, View(record));
+    }
+
+    /// <summary>
+    /// Abre o A1 guardado para autenticar na SEFAZ. A chave privada fica em um contêiner temporário,
+    /// removido quando o certificado é descartado; nada é instalado no repositório do Windows.
+    /// </summary>
+    public System.Security.Cryptography.X509Certificates.X509Certificate2 OpenCertificate(string companyId)
+    {
+        var (state, entry) = vault.Read(companyId);
+        if (state != VaultState.Readable)
+            throw new NexFiscalException("certificate_unavailable",
+                "O certificado A1 desta empresa não está disponível. Abra a seção Empresas e use \"Atualizar A1\".", 409);
+        return new System.Security.Cryptography.X509Certificates.X509Certificate2(
+            Convert.FromBase64String(entry!.PfxBase64), entry.Password,
+            System.Security.Cryptography.X509Certificates.X509KeyStorageFlags.DefaultKeySet);
+    }
+
     // ---------- apoio ----------
 
     private (byte[] Pfx, string Password, CertificateInfo Info) Open(CertificateUpload? upload)

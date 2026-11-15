@@ -14,5 +14,6 @@
   <ItemGroup>
     <ProjectReference Include="../../src/NexFiscal.Web/NexFiscal.Web.csproj" />
     <Using Include="Xunit" />
+    <None Include="Schemas/**/*.xsd" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

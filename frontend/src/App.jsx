@@ -1,12 +1,14 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Badge, FluentProvider, Tab, TabList, Text, makeStyles, tokens, webDarkTheme, webLightTheme } from "@fluentui/react-components";
-import { BuildingFilled, BuildingRegular, DatabaseFilled, DatabaseRegular, bundleIcon } from "@fluentui/react-icons";
+import { ArrowDownloadFilled, ArrowDownloadRegular, BuildingFilled, BuildingRegular, DatabaseFilled, DatabaseRegular, bundleIcon } from "@fluentui/react-icons";
 import HanaPage from "./pages/HanaPage.jsx";
 import CompaniesPage from "./pages/CompaniesPage.jsx";
+import CapturePage from "./pages/CapturePage.jsx";
 import { describeStatus } from "./api.js";
 
 const DatabaseIcon = bundleIcon(DatabaseFilled, DatabaseRegular);
 const BuildingIcon = bundleIcon(BuildingFilled, BuildingRegular);
+const CaptureIcon = bundleIcon(ArrowDownloadFilled, ArrowDownloadRegular);
 const BADGE_COLOR = { ok: "success", warn: "warning", error: "danger" };
 
 const useStyles = makeStyles({
@@ -57,13 +59,16 @@ export default function App() {
   const [tab, setTab] = useState("hana");
   const [hana, setHana] = useState(undefined); // undefined = ainda carregando
 
-  // Ao abrir: se o HANA já está pronto, a tela útil é a de empresas.
+  const chosen = useRef(false); // o operador já escolheu uma seção: não trocar sozinho
+
+  // Ao abrir: se o HANA já está pronto, a tela útil é a de empresas — desde que o operador ainda não tenha escolhido outra.
   function onStatus(status) {
     setHana(previous => {
-      if (previous === undefined && status?.state === "ready") setTab("companies");
+      if (previous === undefined && status?.state === "ready" && !chosen.current) setTab("companies");
       return status;
     });
   }
+  function choose(value) { chosen.current = true; setTab(value); }
 
   const hanaView = describeStatus(hana);
   return <FluentProvider theme={dark ? webDarkTheme : webLightTheme} className={styles.provider}>
@@ -72,23 +77,25 @@ export default function App() {
       <Text className={styles.product}>NexFiscal</Text>
       {!narrow && <Text size={200} className={styles.tagline}>Captura de NF-e para SAP Business One</Text>}
       <div className={styles.spacer}/>
-      <Badge appearance="outline" color="informative">V1 · Etapa 2 de 4</Badge>
+      <Badge appearance="outline" color="informative">V1 · Etapa 3 de 4</Badge>
     </header>
     <div className={styles.body}>
       <nav className={styles.nav} aria-label="Seções">
-        <TabList vertical={!narrow} size="large" selectedValue={tab} onTabSelect={(_, data) => setTab(data.value)}>
+        <TabList vertical={!narrow} size="large" selectedValue={tab} onTabSelect={(_, data) => choose(data.value)}>
           <Tab value="hana" icon={<DatabaseIcon/>}>
             <span className={styles.tabLabel}>Conexão SAP HANA
               {hana && BADGE_COLOR[hanaView.tone] && <Badge size="extra-small" color={BADGE_COLOR[hanaView.tone]} aria-label={hanaView.title}/>}
             </span>
           </Tab>
           <Tab value="companies" icon={<BuildingIcon/>}>Empresas</Tab>
+          <Tab value="capture" icon={<CaptureIcon/>}>Captura de NF-e</Tab>
         </TabList>
       </nav>
       <main className={styles.content}>
         {/* A seção HANA permanece montada para não perder o que foi digitado ao trocar de seção. */}
         <div hidden={tab !== "hana"} className={styles.page}><HanaPage onStatus={onStatus}/></div>
-        {tab === "companies" && <div className={styles.page}><CompaniesPage hana={hana} goToHana={() => setTab("hana")}/></div>}
+        {tab === "companies" && <div className={styles.page}><CompaniesPage hana={hana} goToHana={() => choose("hana")}/></div>}
+        {tab === "capture" && <div className={styles.page}><CapturePage hana={hana} goToHana={() => choose("hana")} goToCompanies={() => choose("companies")}/></div>}
       </main>
     </div>
   </FluentProvider>;

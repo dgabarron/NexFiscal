@@ -16,6 +16,8 @@ public class NexFiscalApp : WebApplicationFactory<Program>
     public readonly string Root = Directory.CreateTempSubdirectory("nexfiscal-http-").FullName;
     public readonly FakeHanaServer Hana = new();
     public readonly InMemoryCompanyStore Companies = new();
+    public readonly InMemoryCaptureStore Capture = new();
+    public readonly FakeSefaz Sefaz = new();
     public IPAddress? RemoteIp = IPAddress.Loopback;
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
@@ -25,6 +27,8 @@ public class NexFiscalApp : WebApplicationFactory<Program>
         {
             services.AddSingleton<IHanaConnectionFactory>(new FakeHanaFactory(Hana));
             services.AddSingleton<ICompanyStore>(Companies);
+            services.AddSingleton<ICaptureStore>(Capture);
+            services.AddSingleton<ISefazTransport>(Sefaz);
             services.AddSingleton<TimeProvider>(new TestClock());
             services.AddSingleton<IStartupFilter>(new RemoteIpFilter(this));
         });
@@ -68,7 +72,7 @@ public class HttpApiTests
         var status = await client.GetFromJsonAsync<JsonElement>("/api/setup/hana/status");
 
         Assert.Equal("NexFiscal", health.GetProperty("product").GetString());
-        Assert.Equal(2, health.GetProperty("stage").GetInt32());
+        Assert.Equal(3, health.GetProperty("stage").GetInt32());
         Assert.Equal("not_configured", status.GetProperty("state").GetString());
         Assert.False(status.GetProperty("configured").GetBoolean());
         Assert.False(File.Exists(Path.Combine(app.Root, ".nexfiscal-hana.dat")));
@@ -281,5 +285,50 @@ public class HttpApiTests
         Assert.Equal(HttpStatusCode.OK, upgrade.StatusCode);
         Assert.Contains("BRAI_NEX_CompanyCertificate", await upgrade.Content.ReadAsStringAsync());
         Assert.Contains("\"state\":\"ready\"", await client.GetStringAsync("/api/setup/hana/status"));
+    }
+
+    // ---------- Função 3 ----------
+
+    [Fact]
+    public async Task Fluxo_de_captura_pela_api_cria_pedido_duravel_e_mostra_o_resultado_sem_expor_nsu()
+    {
+        using var app = new NexFiscalApp();
+        var client = app.CreateClient();
+        var folder = Directory.CreateTempSubdirectory("nexfiscal-api-xml-").FullName;
+        try
+        {
+            var create = await client.PostAsJsonAsync("/api/companies", A1());
+            var id = (await create.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("company").GetProperty("companyId").GetString()!;
+
+            var before = await client.GetFromJsonAsync<JsonElement>($"/api/companies/{id}/nfe/capture");
+            Assert.True(before.GetProperty("canCapture").GetBoolean());
+            Assert.Equal(JsonValueKind.Null, before.GetProperty("job").ValueKind);
+
+            var invalid = await client.PostAsJsonAsync($"/api/companies/{id}/nfe/captures", new { destinationDirectory = "relativa" });
+            Assert.Equal(HttpStatusCode.BadRequest, invalid.StatusCode);
+            Assert.Empty(app.Capture.Jobs);
+
+            app.Sefaz.Reply(Sefaz.Found(2, 2, Sefaz.Complete(1, 101), Sefaz.Summary(2, 102)));
+            var start = await client.PostAsJsonAsync($"/api/companies/{id}/nfe/captures", new { destinationDirectory = folder });
+            Assert.Equal(HttpStatusCode.OK, start.StatusCode);
+            await app.Services.GetRequiredService<CaptureWorker>().RunDueJobsAsync(CancellationToken.None);
+
+            var afterText = await client.GetStringAsync($"/api/companies/{id}/nfe/capture");
+            var after = JsonDocument.Parse(afterText).RootElement;
+            var job = after.GetProperty("job");
+            Assert.Equal("completed_with_pending", job.GetProperty("state").GetString());
+            Assert.Equal((1, 1, 1), (job.GetProperty("newComplete").GetInt32(), job.GetProperty("ignored").GetInt32(), job.GetProperty("pending").GetInt32()));
+            Assert.Equal(folder, after.GetProperty("destinationDirectory").GetString());
+            Assert.Equal(1, after.GetProperty("pendingSummaries").GetInt32());
+            Assert.NotEqual(JsonValueKind.Null, after.GetProperty("nextAllowedAtUtc").ValueKind);
+            Assert.DoesNotContain("nsu", afterText, StringComparison.OrdinalIgnoreCase);
+            Assert.True(File.Exists(Path.Combine(folder, Sefaz.Key(101) + ".xml")));
+
+            var pending = await client.GetFromJsonAsync<JsonElement>($"/api/companies/{id}/nfe/pending");
+            Assert.Equal(Sefaz.Key(102), pending[0].GetProperty("accessKey").GetString());
+
+            Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync("/api/companies/nao-existe/nfe/capture")).StatusCode);
+        }
+        finally { Directory.Delete(folder, recursive: true); }
     }
 }

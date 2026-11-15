@@ -12,6 +12,7 @@
     <EmbeddedResource Include="../../sql/migrations/001_BRAI_NEX_initial.sql" LogicalName="NexFiscal.Web.sql.migrations.001_BRAI_NEX_initial.sql" />
     <EmbeddedResource Include="../../sql/migrations/002_BRAI_NEX_company_certificate.sql" LogicalName="NexFiscal.Web.sql.migrations.002_BRAI_NEX_company_certificate.sql" />
     <EmbeddedResource Include="../../sql/migrations/003_BRAI_NEX_nfe_capture.sql" LogicalName="NexFiscal.Web.sql.migrations.003_BRAI_NEX_nfe_capture.sql" />
+    <EmbeddedResource Include="../../sql/migrations/004_BRAI_NEX_nfe_monitor.sql" LogicalName="NexFiscal.Web.sql.migrations.004_BRAI_NEX_nfe_monitor.sql" />
     <InternalsVisibleTo Include="NexFiscal.Tests" />
   </ItemGroup>
   <!-- Ao compilar/rodar direto (Visual Studio, dotnet run) sem o script, gera a tela se ela ainda não existe. -->

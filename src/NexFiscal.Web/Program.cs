@@ -38,6 +38,7 @@ builder.Services.AddSingleton<ISefazTransport, HttpSefazTransport>();
 builder.Services.AddSingleton<NfeCaptureEngine>();
 builder.Services.AddSingleton<CaptureSignal>();
 builder.Services.AddSingleton<CaptureService>();
+builder.Services.AddSingleton<MonitorService>();
 builder.Services.AddSingleton<CaptureWorker>();
 builder.Services.AddHostedService(services => services.GetRequiredService<CaptureWorker>());
 var app = builder.Build();
@@ -78,7 +79,7 @@ app.MapGet("/", () =>
         : Results.Problem("Frontend não compilado. Execute npm run build em frontend.", statusCode: 503);
 });
 
-app.MapGet("/api/health", () => Results.Ok(new { product = "NexFiscal", version = "V1", stage = 3 }));
+app.MapGet("/api/health", () => Results.Ok(new { product = "NexFiscal", version = "V1", stage = 4 }));
 
 app.MapGet("/api/setup/hana/status", async (HanaSetup hana, CancellationToken ct) =>
     Results.Ok(await hana.StatusAsync(ct)));
@@ -107,6 +108,11 @@ app.MapPost("/api/companies/{id}/nfe/captures", (string id, CaptureRequest? requ
     Run(() => capture.StartAsync(id, request, ct)));
 app.MapGet("/api/companies/{id}/nfe/pending", (string id, CaptureService capture, CancellationToken ct) =>
     Run(() => capture.PendingAsync(id, ct)));
+
+app.MapGet("/api/companies/{id}/nfe/monitor", (string id, MonitorService monitor, CancellationToken ct) =>
+    Run(() => monitor.GetAsync(id, ct)));
+app.MapPut("/api/companies/{id}/nfe/monitor", (string id, MonitorRequest? request, MonitorService monitor, CancellationToken ct) =>
+    Run(() => monitor.SaveAsync(id, request, ct)));
 
 app.MapFallback(() => Results.NotFound());
 

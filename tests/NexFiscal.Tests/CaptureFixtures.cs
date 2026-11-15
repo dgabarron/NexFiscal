@@ -107,6 +107,7 @@ public class UnsafeInMemoryCaptureStore
 
     public readonly Dictionary<string, Company> Companies = [];
     public readonly List<CaptureJob> Jobs = [];
+    public readonly Dictionary<string, MonitorRow> Monitors = [];
     public bool FailNextSave;
     public Company Of(string id) => Companies.TryGetValue(id, out var c) ? c : Companies[id] = new Company();
 
@@ -176,6 +177,18 @@ public class UnsafeInMemoryCaptureStore
         Task.FromResult<IReadOnlyList<CaptureJob>>(Jobs.Where(j => j.Active).OrderBy(j => j.RequestedAtUtc).ToList());
     public Task<CaptureJob?> LatestJobAsync(string companyId, CancellationToken ct) =>
         Task.FromResult(Jobs.Where(j => j.CompanyId == companyId).OrderByDescending(j => j.RequestedAtUtc).FirstOrDefault());
+    public Task<CaptureJob?> LatestJobOfKindAsync(string companyId, string kind, CancellationToken ct) =>
+        Task.FromResult(Jobs.Where(j => j.CompanyId == companyId && j.Kind == kind).OrderByDescending(j => j.RequestedAtUtc).FirstOrDefault());
+    public Task<MonitorRow?> GetMonitorAsync(string companyId, CancellationToken ct) => Task.FromResult(Monitors.GetValueOrDefault(companyId));
+    public Task SaveMonitorAsync(MonitorRow monitor, DateTime nowUtc, CancellationToken ct) { Monitors[monitor.CompanyId] = monitor; return Task.CompletedTask; }
+    public Task SetMonitorScheduleAsync(string companyId, DateTime? nextRunAtUtc, DateTime? lastRunAtUtc, string? message, DateTime nowUtc, CancellationToken ct)
+    {
+        if (Monitors.TryGetValue(companyId, out var current))
+            Monitors[companyId] = current with { NextRunAtUtc = nextRunAtUtc, LastRunAtUtc = lastRunAtUtc, LastMessage = message };
+        return Task.CompletedTask;
+    }
+    public Task<IReadOnlyList<MonitorRow>> ListEnabledMonitorsAsync(CancellationToken ct) =>
+        Task.FromResult<IReadOnlyList<MonitorRow>>(Monitors.Values.Where(m => m.Enabled).OrderBy(m => m.CompanyId).ToList());
     public Task<string?> GetDestinationAsync(string companyId, CancellationToken ct) => Task.FromResult(Of(companyId).Destination);
     public Task SetDestinationAsync(string companyId, string directory, DateTime nowUtc, CancellationToken ct) { Of(companyId).Destination = directory; return Task.CompletedTask; }
 }
@@ -201,6 +214,11 @@ public sealed class InMemoryCaptureStore : UnsafeInMemoryCaptureStore, ICaptureS
     Task ICaptureStore.UpdateJobAsync(CaptureJob job, CancellationToken ct) { Locked(() => UpdateJobAsync(job, ct)); return Task.CompletedTask; }
     Task<IReadOnlyList<CaptureJob>> ICaptureStore.ListActiveJobsAsync(CancellationToken ct) => Task.FromResult(Locked(() => ListActiveJobsAsync(ct)));
     Task<CaptureJob?> ICaptureStore.LatestJobAsync(string companyId, CancellationToken ct) => Task.FromResult(Locked(() => LatestJobAsync(companyId, ct)));
+    Task<CaptureJob?> ICaptureStore.LatestJobOfKindAsync(string companyId, string kind, CancellationToken ct) => Task.FromResult(Locked(() => LatestJobOfKindAsync(companyId, kind, ct)));
+    Task<MonitorRow?> ICaptureStore.GetMonitorAsync(string companyId, CancellationToken ct) => Task.FromResult(Locked(() => GetMonitorAsync(companyId, ct)));
+    Task ICaptureStore.SaveMonitorAsync(MonitorRow monitor, DateTime nowUtc, CancellationToken ct) { Locked(() => SaveMonitorAsync(monitor, nowUtc, ct)); return Task.CompletedTask; }
+    Task ICaptureStore.SetMonitorScheduleAsync(string companyId, DateTime? nextRunAtUtc, DateTime? lastRunAtUtc, string? message, DateTime nowUtc, CancellationToken ct) { Locked(() => SetMonitorScheduleAsync(companyId, nextRunAtUtc, lastRunAtUtc, message, nowUtc, ct)); return Task.CompletedTask; }
+    Task<IReadOnlyList<MonitorRow>> ICaptureStore.ListEnabledMonitorsAsync(CancellationToken ct) => Task.FromResult(Locked(() => ListEnabledMonitorsAsync(ct)));
     Task<string?> ICaptureStore.GetDestinationAsync(string companyId, CancellationToken ct) => Task.FromResult(Locked(() => GetDestinationAsync(companyId, ct)));
     Task ICaptureStore.SetDestinationAsync(string companyId, string directory, DateTime nowUtc, CancellationToken ct) { Locked(() => SetDestinationAsync(companyId, directory, nowUtc, ct)); return Task.CompletedTask; }
 }
@@ -218,6 +236,7 @@ public sealed class CaptureInstallation : IDisposable
 
     public CompanyService Companies = null!;
     public CaptureService Service = null!;
+    public MonitorService Monitor = null!;
     public CaptureWorker Worker = null!;
 
     public static async Task<CaptureInstallation> CreateAsync()
@@ -236,7 +255,8 @@ public sealed class CaptureInstallation : IDisposable
         var signal = new CaptureSignal();
         var engine = new NfeCaptureEngine(Store, Companies, Sefaz, Clock, logs.CreateLogger<NfeCaptureEngine>());
         Service = new CaptureService(Store, Companies, signal, Clock);
-        Worker = new CaptureWorker(Store, engine, signal, Clock, logs.CreateLogger<CaptureWorker>());
+        Monitor = new MonitorService(Store, Companies, signal, Clock);
+        Worker = new CaptureWorker(Store, engine, Companies, signal, Clock, logs.CreateLogger<CaptureWorker>());
     }
 
     /// <summary>Clique em "Capturar todos os XMLs disponíveis" + uma passada da fila em segundo plano.</summary>

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { api, ApiError, credentials, describeCertificate, describeJob, describeStatus, formatDate, formatDateTime, formatMoney, isJobActive, isValid, jobCounters, removalWarning } from "./api.js";
+import { api, ApiError, credentials, describeCertificate, describeJob, describeMonitor, describeStatus, isIntervalValid, formatDate, formatDateTime, formatMoney, isJobActive, isValid, jobCounters, removalWarning } from "./api.js";
 
 test("credenciais preservam senha e convertem porta", () => {
   assert.deepEqual(credentials({server:" hana.local ",port:"30015",username:" fiscal ",password:" segredo "}),
@@ -84,4 +84,18 @@ test("data, hora e valor em formato brasileiro", () => {
   assert.match(formatDateTime("2026-11-15T15:04:00Z"), /\d{2}\/11\/2026.*\d{2}:04/);
   assert.match(formatMoney(1234.56), /1\.234,56/);
   assert.equal(formatMoney(null), "—");
+});
+
+test("monitoramento só aparece ativo quando ligado e sem bloqueio", () => {
+  assert.equal(describeMonitor(null), null);
+  assert.equal(describeMonitor({ enabled: false, canCapture: true }).intent, "info");
+  const active = describeMonitor({ enabled: true, canCapture: true, nextRunAtUtc: "2026-11-15T15:00:00Z" });
+  assert.equal(active.intent, "success");
+  assert.match(active.title, /próxima consulta prevista para \d{2}\/11\/2026/);
+  assert.equal(describeMonitor({ enabled: true, canCapture: false }).intent, "error");
+});
+
+test("intervalo aceito de 1 minuto a uma semana", () => {
+  assert.deepEqual(["1", "60", "10080", 15].map(isIntervalValid), [true, true, true, true]);
+  assert.deepEqual(["0", "10081", "", "1.5", "-3", "abc"].map(isIntervalValid), [false, false, false, false, false, false]);
 });

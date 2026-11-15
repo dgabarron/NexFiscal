@@ -1,14 +1,16 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Badge, FluentProvider, Tab, TabList, Text, makeStyles, tokens, webDarkTheme, webLightTheme } from "@fluentui/react-components";
-import { ArrowDownloadFilled, ArrowDownloadRegular, BuildingFilled, BuildingRegular, DatabaseFilled, DatabaseRegular, bundleIcon } from "@fluentui/react-icons";
+import { ArrowDownloadFilled, ArrowDownloadRegular, ClockArrowDownloadFilled, ClockArrowDownloadRegular, BuildingFilled, BuildingRegular, DatabaseFilled, DatabaseRegular, bundleIcon } from "@fluentui/react-icons";
 import HanaPage from "./pages/HanaPage.jsx";
 import CompaniesPage from "./pages/CompaniesPage.jsx";
 import CapturePage from "./pages/CapturePage.jsx";
+import MonitorPage from "./pages/MonitorPage.jsx";
 import { describeStatus } from "./api.js";
 
 const DatabaseIcon = bundleIcon(DatabaseFilled, DatabaseRegular);
 const BuildingIcon = bundleIcon(BuildingFilled, BuildingRegular);
 const CaptureIcon = bundleIcon(ArrowDownloadFilled, ArrowDownloadRegular);
+const MonitorIcon = bundleIcon(ClockArrowDownloadFilled, ClockArrowDownloadRegular);
 const BADGE_COLOR = { ok: "success", warn: "warning", error: "danger" };
 
 const useStyles = makeStyles({
@@ -77,7 +79,7 @@ export default function App() {
       <Text className={styles.product}>NexFiscal</Text>
       {!narrow && <Text size={200} className={styles.tagline}>Captura de NF-e para SAP Business One</Text>}
       <div className={styles.spacer}/>
-      <Badge appearance="outline" color="informative">V1 · Etapa 3 de 4</Badge>
+      <Badge appearance="outline" color="informative">V1 · Etapa 4 de 4</Badge>
     </header>
     <div className={styles.body}>
       <nav className={styles.nav} aria-label="Seções">
@@ -89,6 +91,7 @@ export default function App() {
           </Tab>
           <Tab value="companies" icon={<BuildingIcon/>}>Empresas</Tab>
           <Tab value="capture" icon={<CaptureIcon/>}>Captura de NF-e</Tab>
+          <Tab value="monitor" icon={<MonitorIcon/>} aria-label="Monitoramento automático">Monitoramento</Tab>
         </TabList>
       </nav>
       <main className={styles.content}>
@@ -96,6 +99,7 @@ export default function App() {
         <div hidden={tab !== "hana"} className={styles.page}><HanaPage onStatus={onStatus}/></div>
         {tab === "companies" && <div className={styles.page}><CompaniesPage hana={hana} goToHana={() => choose("hana")}/></div>}
         {tab === "capture" && <div className={styles.page}><CapturePage hana={hana} goToHana={() => choose("hana")} goToCompanies={() => choose("companies")}/></div>}
+        {tab === "monitor" && <div className={styles.page}><MonitorPage hana={hana} goToHana={() => choose("hana")} goToCompanies={() => choose("companies")}/></div>}
       </main>
     </div>
   </FluentProvider>;

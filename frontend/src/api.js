@@ -126,3 +126,17 @@ export function jobCounters(job) {
     { key: "failures", label: "Falhas", value: job?.failures ?? 0, tone: (job?.failures ?? 0) > 0 ? "error" : "neutral" },
   ];
 }
+
+// ---------- Monitoramento automático (função 4) ----------
+
+// Situação do monitoramento de uma empresa. Ligado só por opção explícita do operador.
+export function describeMonitor(view) {
+  if (!view) return null;
+  if (view.enabled && !view.canCapture) return { intent: "error", title: "Monitoramento ativo, mas em espera" };
+  if (view.enabled) return { intent: "success", title: `Monitoramento ativo — próxima consulta prevista para ${formatDateTime(view.nextRunAtUtc)}` };
+  return { intent: "info", title: "Monitoramento automático desligado para esta empresa" };
+}
+
+export function isIntervalValid(text) {
+  return /^\d+$/.test(String(text)) && +text >= 1 && +text <= 10080;
+}

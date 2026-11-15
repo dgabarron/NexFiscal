@@ -32,6 +32,11 @@ public sealed record CaptureJob(
     public bool Active => State is Queued or Running or WaitingSefaz;
 }
 
+/// <summary>Configuração e agenda do monitoramento automático de uma empresa (BRAI_NEX_NfeMonitor).</summary>
+public sealed record MonitorRow(
+    string CompanyId, bool Enabled, int IntervalMinutes, string DestinationDirectory,
+    DateTime? NextRunAtUtc, DateTime? LastRunAtUtc, string? LastMessage);
+
 /// <summary>Persistência da captura. A implementação real é o HANA; os testes usam uma em memória.</summary>
 public interface ICaptureStore
 {
@@ -54,9 +59,17 @@ public interface ICaptureStore
     Task UpdateJobAsync(CaptureJob job, CancellationToken ct);
     Task<IReadOnlyList<CaptureJob>> ListActiveJobsAsync(CancellationToken ct);
     Task<CaptureJob?> LatestJobAsync(string companyId, CancellationToken ct);
+    Task<CaptureJob?> LatestJobOfKindAsync(string companyId, string kind, CancellationToken ct);
 
     Task<string?> GetDestinationAsync(string companyId, CancellationToken ct);
     Task SetDestinationAsync(string companyId, string directory, DateTime nowUtc, CancellationToken ct);
+
+    Task<MonitorRow?> GetMonitorAsync(string companyId, CancellationToken ct);
+    Task SaveMonitorAsync(MonitorRow monitor, DateTime nowUtc, CancellationToken ct);
+    /// <summary>Atualiza só a agenda (próxima e última execução, mensagem). Nunca altera ligado/desligado, intervalo ou pasta.</summary>
+    Task SetMonitorScheduleAsync(string companyId, DateTime? nextRunAtUtc, DateTime? lastRunAtUtc, string? message, DateTime nowUtc, CancellationToken ct);
+    /// <summary>Somente empresas em que o operador ligou o monitoramento explicitamente.</summary>
+    Task<IReadOnlyList<MonitorRow>> ListEnabledMonitorsAsync(CancellationToken ct);
 }
 
 /// <summary>Todo o SQL da Função 3. Um teste confere cada identificador contra as migrações.</summary>
@@ -142,6 +155,27 @@ internal static class CaptureSql
         "SELECT " + JobColumns + " FROM " + B + "\"BRAI_NEX_CaptureJob\" WHERE \"State\" IN ('queued', 'running', 'waiting_sefaz') ORDER BY \"RequestedAtUtc\"";
     public const string LatestJob =
         "SELECT TOP 1 " + JobColumns + " FROM " + B + "\"BRAI_NEX_CaptureJob\" WHERE \"CompanyId\" = ? ORDER BY \"RequestedAtUtc\" DESC";
+
+    public const string LatestJobOfKind =
+        "SELECT TOP 1 " + JobColumns + " FROM " + B + "\"BRAI_NEX_CaptureJob\" WHERE \"CompanyId\" = ? AND \"Kind\" = ? ORDER BY \"RequestedAtUtc\" DESC";
+
+    private const string MonitorColumns =
+        "\"CompanyId\", \"Enabled\", \"IntervalMinutes\", \"DestinationDirectory\", \"NextRunAtUtc\", \"LastRunAtUtc\", \"LastMessage\"";
+    public const string SelectMonitor =
+        "SELECT " + MonitorColumns + " FROM " + B + "\"BRAI_NEX_NfeMonitor\" WHERE \"CompanyId\" = ?";
+    public const string EnabledMonitors =
+        "SELECT " + MonitorColumns + " FROM " + B + "\"BRAI_NEX_NfeMonitor\" WHERE \"Enabled\" = 1 ORDER BY \"CompanyId\"";
+    public const string CountMonitor =
+        "SELECT COUNT(*) FROM " + B + "\"BRAI_NEX_NfeMonitor\" WHERE \"CompanyId\" = ?";
+    public const string InsertMonitor =
+        "INSERT INTO " + B + "\"BRAI_NEX_NfeMonitor\" (\"CompanyId\", \"Enabled\", \"IntervalMinutes\", \"DestinationDirectory\", " +
+        "\"NextRunAtUtc\", \"LastRunAtUtc\", \"LastMessage\", \"UpdatedAtUtc\") VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
+    public const string UpdateMonitor =
+        "UPDATE " + B + "\"BRAI_NEX_NfeMonitor\" SET \"Enabled\" = ?, \"IntervalMinutes\" = ?, \"DestinationDirectory\" = ?, " +
+        "\"NextRunAtUtc\" = ?, \"LastRunAtUtc\" = ?, \"LastMessage\" = ?, \"UpdatedAtUtc\" = ? WHERE \"CompanyId\" = ?";
+
+    public const string SetMonitorSchedule =
+        "UPDATE " + B + "\"BRAI_NEX_NfeMonitor\" SET \"NextRunAtUtc\" = ?, \"LastRunAtUtc\" = ?, \"LastMessage\" = ?, \"UpdatedAtUtc\" = ? WHERE \"CompanyId\" = ?";
 
     public const string SelectSettings =
         "SELECT \"DestinationDirectory\" FROM " + B + "\"BRAI_NEX_CaptureSettings\" WHERE \"CompanyId\" = ?";
@@ -299,6 +333,46 @@ public sealed class HanaCaptureStore(
 
     public Task<CaptureJob?> LatestJobAsync(string companyId, CancellationToken ct) =>
         WithConnectionAsync(async db => (await ReadJobsAsync(db, ct, CaptureSql.LatestJob, companyId)).FirstOrDefault(), ct);
+
+    public Task<CaptureJob?> LatestJobOfKindAsync(string companyId, string kind, CancellationToken ct) =>
+        WithConnectionAsync(async db => (await ReadJobsAsync(db, ct, CaptureSql.LatestJobOfKind, companyId, kind)).FirstOrDefault(), ct);
+
+    public Task<MonitorRow?> GetMonitorAsync(string companyId, CancellationToken ct) =>
+        WithConnectionAsync(async db => (await ReadMonitorsAsync(db, ct, CaptureSql.SelectMonitor, companyId)).FirstOrDefault(), ct);
+
+    public Task<IReadOnlyList<MonitorRow>> ListEnabledMonitorsAsync(CancellationToken ct) =>
+        WithConnectionAsync(db => ReadMonitorsAsync(db, ct, CaptureSql.EnabledMonitors), ct);
+
+    public Task SaveMonitorAsync(MonitorRow monitor, DateTime nowUtc, CancellationToken ct) => InTransactionAsync(async (db, tx) =>
+    {
+        var message = monitor.LastMessage is { Length: > 500 } ? monitor.LastMessage[..500] : monitor.LastMessage;
+        if (await ScalarAsync(db, tx, ct, CaptureSql.CountMonitor, monitor.CompanyId) == 0)
+            await ExecuteAsync(db, tx, ct, CaptureSql.InsertMonitor, monitor.CompanyId, monitor.Enabled ? 1 : 0, monitor.IntervalMinutes,
+                monitor.DestinationDirectory, TypedNull.Time(monitor.NextRunAtUtc), TypedNull.Time(monitor.LastRunAtUtc), message, nowUtc);
+        else
+            await ExecuteAsync(db, tx, ct, CaptureSql.UpdateMonitor, monitor.Enabled ? 1 : 0, monitor.IntervalMinutes,
+                monitor.DestinationDirectory, TypedNull.Time(monitor.NextRunAtUtc), TypedNull.Time(monitor.LastRunAtUtc), message, nowUtc, monitor.CompanyId);
+        return true;
+    }, ct);
+
+    public Task SetMonitorScheduleAsync(string companyId, DateTime? nextRunAtUtc, DateTime? lastRunAtUtc, string? message, DateTime nowUtc, CancellationToken ct) =>
+        WithConnectionAsync(async db =>
+        {
+            await ExecuteAsync(db, null, ct, CaptureSql.SetMonitorSchedule, TypedNull.Time(nextRunAtUtc), TypedNull.Time(lastRunAtUtc),
+                message is { Length: > 500 } ? message[..500] : message, nowUtc, companyId);
+            return true;
+        }, ct);
+
+    private static async Task<IReadOnlyList<MonitorRow>> ReadMonitorsAsync(DbConnection db, CancellationToken ct, string sql, params object?[] args)
+    {
+        var list = new List<MonitorRow>();
+        await using var cmd = Command(db, null, sql, args);
+        await using var reader = await cmd.ExecuteReaderAsync(ct);
+        while (await reader.ReadAsync(ct))
+            list.Add(new MonitorRow(reader.GetString(0), Convert.ToInt32(reader.GetValue(1)) == 1, Int(reader, 2), reader.GetString(3),
+                Utc(reader, 4), Utc(reader, 5), Text(reader, 6)));
+        return list;
+    }
 
     private static async Task<IReadOnlyList<CaptureJob>> ReadJobsAsync(DbConnection db, CancellationToken ct, string sql, params object?[] args)
     {

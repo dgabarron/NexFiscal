@@ -1,14 +1,14 @@
-# NexFiscal V1 — Etapa 03: Captura manual de NF-e
+# NexFiscal V1 — Etapa 04: Monitoramento automático de NF-e
 
-**Escopo desta branch: Funções 1 e 2 (homologadas) e Função 3 — captura manual de todos os XMLs completos de NF-e disponíveis e ainda ausentes.** Não há monitoramento automático (Função 4), NFS-e, CT-e nem envio de manifestação.
+**Escopo desta branch: as quatro funções da V1** — conexão SAP HANA, empresas e certificado A1, captura manual de NF-e (as três homologadas) e **monitoramento automático de NF-e**. Não há NFS-e, CT-e nem envio de manifestação.
 
-**Estado da Função 3:** testada com SEFAZ simulada e HANA simulado, seguindo a Nota Técnica 2014.002 v1.40. **Ainda não executou contra a SEFAZ real nem contra o seu HANA** — veja limites e roteiro em [`docs/09-ETAPA-03-CAPTURA-NFE-DECISOES-E-HOMOLOGACAO.md`](docs/09-ETAPA-03-CAPTURA-NFE-DECISOES-E-HOMOLOGACAO.md). Etapas anteriores: [`docs/07`](docs/07-ETAPA-01-HANA-DECISOES-E-HOMOLOGACAO.md) e [`docs/08`](docs/08-ETAPA-02-EMPRESAS-A1-DECISOES-E-HOMOLOGACAO.md).
+**Estado da Função 4:** testada com SEFAZ e HANA simulados. **Ainda não homologada no seu ambiente** — veja [`docs/10-ETAPA-04-MONITORAMENTO-DECISOES-E-HOMOLOGACAO.md`](docs/10-ETAPA-04-MONITORAMENTO-DECISOES-E-HOMOLOGACAO.md). Etapas anteriores: [`docs/07`](docs/07-ETAPA-01-HANA-DECISOES-E-HOMOLOGACAO.md), [`docs/08`](docs/08-ETAPA-02-EMPRESAS-A1-DECISOES-E-HOMOLOGACAO.md) e [`docs/09`](docs/09-ETAPA-03-CAPTURA-NFE-DECISOES-E-HOMOLOGACAO.md).
 
 **Plataforma:** aplicação exclusiva para **Windows**, integrada exclusivamente ao banco **SAP HANA do SAP Business One**. A interface segue o **Microsoft Fluent 2** (Fluent UI React v9) e acompanha o tema claro/escuro do Windows.
 
 ## Como executar (Windows)
 
-1. Baixe/extraia a branch `v1/etapa-03-captura-nfe` **em uma pasta nova**. Não misture com a instalação anterior.
+1. Baixe/extraia a branch `v1/etapa-04-monitoramento` **em uma pasta nova**. Não misture com a instalação anterior.
 2. Instale o .NET SDK 8 e o Node.js 20+.
 3. Feche qualquer versão antiga do NexFiscal (ela usa a mesma porta 5187).
 4. Na raiz da pasta, execute:
@@ -46,6 +46,14 @@ A conexão salva e as empresas cadastradas continuam valendo. Na primeira abertu
 3. O NexFiscal confere os arquivos da pasta, consulta a SEFAZ a partir do ponto em que parou e grava cada NF-e completa como `<chave de acesso>.xml`.
 4. A tela mostra: XMLs novos, já presentes, recuperados, resumos e eventos ignorados, notas ainda sem XML completo e falhas.
 5. A SEFAZ exige **1 hora** entre consultas depois que não há mais documentos. Um novo clique nesse intervalo apenas confere os arquivos locais e fica aguardando; a captura continua sozinha no horário indicado, enquanto o serviço estiver aberto.
+
+### Monitoramento automático (seção Monitoramento)
+
+1. Escolha a empresa, ligue **Monitoramento automático ativo**, informe o **intervalo em minutos** (mínimo 1) e a pasta de destino, e clique em **Salvar configuração**.
+2. A partir daí o NexFiscal captura sozinho, com o mesmo processo da captura manual, e mostra a última execução e a próxima consulta prevista.
+3. O intervalo é a periodicidade desejada: quando não há documentos novos, a SEFAZ só permite outra consulta após 1 hora, e o NexFiscal aguarda esse horário mesmo que o intervalo seja menor.
+4. Funciona **enquanto o serviço estiver em execução** (a janela do PowerShell aberta), mesmo com o navegador fechado. Se o serviço for encerrado, as capturas param e são retomadas quando ele voltar.
+5. Vem **desligado** para todas as empresas. Desligar não apaga histórico nem arquivos, e a captura manual continua disponível.
 
 Três limites do serviço oficial, que o NexFiscal não tem como contornar:
 
@@ -87,6 +95,9 @@ O serviço escuta somente `127.0.0.1:5187` (não configurável) e recusa requisi
 | `GET` | `/api/companies/{id}/nfe/capture` | Pasta lembrada, último pedido com contagens, próxima consulta permitida e quantidade de notas só com resumo |
 | `POST` | `/api/companies/{id}/nfe/captures` | `{destinationDirectory}`; cria o pedido de captura (ou devolve o que já está em andamento) |
 | `GET` | `/api/companies/{id}/nfe/pending` | Notas aguardando manifestação do destinatário |
+
+| `GET` | `/api/companies/{id}/nfe/monitor` | Configuração do monitoramento, próxima consulta prevista e última execução automática |
+| `PUT` | `/api/companies/{id}/nfe/monitor` | `{enabled,intervalMinutes,destinationDirectory}`; liga, desliga ou ajusta |
 
 Erros retornam `{error, kind, issues}` com mensagem em português.
 

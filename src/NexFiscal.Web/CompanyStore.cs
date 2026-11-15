@@ -34,7 +34,10 @@ internal static class CompanySql
     public const string HistoryCompanies =
         "SELECT \"CompanyId\" FROM \"BRAI_NEX\".\"BRAI_NEX_CaptureCursor\" " +
         "UNION SELECT \"CompanyId\" FROM \"BRAI_NEX\".\"BRAI_NEX_Envelope\" " +
-        "UNION SELECT \"CompanyId\" FROM \"BRAI_NEX\".\"BRAI_NEX_CaptureLog\"";
+        "UNION SELECT \"CompanyId\" FROM \"BRAI_NEX\".\"BRAI_NEX_CaptureLog\" " +
+        "UNION SELECT \"CompanyId\" FROM \"BRAI_NEX\".\"BRAI_NEX_NfeDocument\" " +
+        "UNION SELECT \"CompanyId\" FROM \"BRAI_NEX\".\"BRAI_NEX_NfeRecovery\" " +
+        "UNION SELECT \"CompanyId\" FROM \"BRAI_NEX\".\"BRAI_NEX_CaptureJob\"";
 
     public const string InsertCompany =
         "INSERT INTO \"BRAI_NEX\".\"BRAI_NEX_Company\" " +
@@ -64,8 +67,13 @@ internal static class CompanySql
     public const string CountCursor = "SELECT COUNT(*) FROM \"BRAI_NEX\".\"BRAI_NEX_CaptureCursor\" WHERE \"CompanyId\" = ?";
     public const string CountEnvelope = "SELECT COUNT(*) FROM \"BRAI_NEX\".\"BRAI_NEX_Envelope\" WHERE \"CompanyId\" = ?";
     public const string CountLog = "SELECT COUNT(*) FROM \"BRAI_NEX\".\"BRAI_NEX_CaptureLog\" WHERE \"CompanyId\" = ?";
+    public const string CountDocument = "SELECT COUNT(*) FROM \"BRAI_NEX\".\"BRAI_NEX_NfeDocument\" WHERE \"CompanyId\" = ?";
+    public const string CountRecoveryRows = "SELECT COUNT(*) FROM \"BRAI_NEX\".\"BRAI_NEX_NfeRecovery\" WHERE \"CompanyId\" = ?";
+    public const string CountJob = "SELECT COUNT(*) FROM \"BRAI_NEX\".\"BRAI_NEX_CaptureJob\" WHERE \"CompanyId\" = ?";
 
-    // Únicos DELETE do sistema: só o cadastro de empresa SEM histórico fiscal, por CompanyId, após confirmação.
+    // Únicos DELETE do sistema: só o cadastro (e a configuração) de empresa SEM histórico fiscal, por CompanyId, após confirmação.
+    public const string DeleteSettings = "DELETE FROM \"BRAI_NEX\".\"BRAI_NEX_CaptureSettings\" WHERE \"CompanyId\" = ?";
+    public const string DeleteMonitor = "DELETE FROM \"BRAI_NEX\".\"BRAI_NEX_NfeMonitor\" WHERE \"CompanyId\" = ?";
     public const string DeleteCertificate = "DELETE FROM \"BRAI_NEX\".\"BRAI_NEX_CompanyCertificate\" WHERE \"CompanyId\" = ?";
     public const string DeleteCompany = "DELETE FROM \"BRAI_NEX\".\"BRAI_NEX_Company\" WHERE \"CompanyId\" = ?";
 }
@@ -123,6 +131,8 @@ public sealed class HanaCompanyStore(
     {
         // Reconfere dentro da mesma transação da exclusão.
         if (await HasHistoryAsync(db, tx, companyId, ct)) return false;
+        await ExecuteAsync(db, tx, ct, CompanySql.DeleteSettings, companyId);
+        await ExecuteAsync(db, tx, ct, CompanySql.DeleteMonitor, companyId);
         await ExecuteAsync(db, tx, ct, CompanySql.DeleteCertificate, companyId);
         await ExecuteAsync(db, tx, ct, CompanySql.DeleteCompany, companyId);
         return true;
@@ -141,7 +151,10 @@ public sealed class HanaCompanyStore(
     private static async Task<bool> HasHistoryAsync(DbConnection db, DbTransaction? tx, string companyId, CancellationToken ct) =>
         await ScalarAsync(db, tx, ct, CompanySql.CountCursor, companyId) > 0 ||
         await ScalarAsync(db, tx, ct, CompanySql.CountEnvelope, companyId) > 0 ||
-        await ScalarAsync(db, tx, ct, CompanySql.CountLog, companyId) > 0;
+        await ScalarAsync(db, tx, ct, CompanySql.CountLog, companyId) > 0 ||
+        await ScalarAsync(db, tx, ct, CompanySql.CountDocument, companyId) > 0 ||
+        await ScalarAsync(db, tx, ct, CompanySql.CountRecoveryRows, companyId) > 0 ||
+        await ScalarAsync(db, tx, ct, CompanySql.CountJob, companyId) > 0;
 
     // ---------- infraestrutura ----------
 

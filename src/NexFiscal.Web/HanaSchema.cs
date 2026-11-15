@@ -52,7 +52,10 @@ public static class HanaSchemaVerifier
                 ("FinishedAtUtc", "TIMESTAMP"), ("NextRunAtUtc", "TIMESTAMP"), ("Attempts", "INTEGER"), ("NewComplete", "INTEGER"),
                 ("AlreadyPresent", "INTEGER"), ("Recovered", "INTEGER"), ("Ignored", "INTEGER"), ("Pending", "INTEGER"),
                 ("Failures", "INTEGER"), ("LastStatus", "INTEGER"), ("Message", "NVARCHAR")],
-            ["BRAI_NEX_CaptureSettings"] = [("CompanyId", "NVARCHAR"), ("DestinationDirectory", "NVARCHAR"), ("UpdatedAtUtc", "TIMESTAMP")]
+            ["BRAI_NEX_CaptureSettings"] = [("CompanyId", "NVARCHAR"), ("DestinationDirectory", "NVARCHAR"), ("UpdatedAtUtc", "TIMESTAMP")],
+            ["BRAI_NEX_NfeMonitor"] = [("CompanyId", "NVARCHAR"), ("Enabled", "TINYINT"), ("IntervalMinutes", "INTEGER"),
+                ("DestinationDirectory", "NVARCHAR"), ("NextRunAtUtc", "TIMESTAMP"), ("LastRunAtUtc", "TIMESTAMP"),
+                ("LastMessage", "NVARCHAR"), ("UpdatedAtUtc", "TIMESTAMP")]
         };
 
     public static async Task<HanaSchemaReport> VerifyAsync(DbConnection connection, CancellationToken ct)
@@ -101,7 +104,8 @@ public static class HanaSchemaInstaller
     [
         (1, "initial_nfe_capture", "NexFiscal.Web.sql.migrations.001_BRAI_NEX_initial.sql"),
         (2, "company_certificate", "NexFiscal.Web.sql.migrations.002_BRAI_NEX_company_certificate.sql"),
-        (3, "nfe_capture", "NexFiscal.Web.sql.migrations.003_BRAI_NEX_nfe_capture.sql")
+        (3, "nfe_capture", "NexFiscal.Web.sql.migrations.003_BRAI_NEX_nfe_capture.sql"),
+        (4, "nfe_monitor", "NexFiscal.Web.sql.migrations.004_BRAI_NEX_nfe_monitor.sql")
     ];
 
     /// <summary>Tabela → comando CREATE COLUMN TABLE completo, na ordem das migrações (respeita chaves estrangeiras).</summary>

@@ -465,7 +465,10 @@ public class CompanyServiceTests
                 Assert.EndsWith("WHERE \"CompanyId\" = ?", sql);
         }
         // Só o cadastro da empresa pode ser excluído; nunca cursor, envelope ou log.
-        Assert.Equal(["DeleteCertificate", "DeleteCompany"], statements.Where(s => s.Value.StartsWith("DELETE")).Select(s => s.Key).Order());
+        Assert.Equal(["DeleteCertificate", "DeleteCompany", "DeleteMonitor", "DeleteSettings"], statements.Where(s => s.Value.StartsWith("DELETE")).Select(s => s.Key).Order());
+        // Qualquer vestígio de captura conta como histórico: a empresa é arquivada, não excluída.
+        foreach (var table in new[] { "CaptureCursor", "Envelope", "CaptureLog", "NfeDocument", "NfeRecovery", "CaptureJob" })
+            Assert.Contains("BRAI_NEX_" + table, statements["HistoryCompanies"]);
         Assert.DoesNotContain(statements.Values, sql => Regex.IsMatch(sql, "^(DELETE|UPDATE|INSERT).*(CaptureCursor|Envelope|CaptureLog)"));
         // Colunas de cada tabela conferidas contra a migração.
         foreach (var column in Regex.Matches(statements["InsertCertificate"], "\"(\\w+)\"").Skip(2).Select(m => m.Groups[1].Value))

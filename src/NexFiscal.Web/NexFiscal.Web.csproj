@@ -10,4 +10,11 @@
   <ItemGroup>
     <EmbeddedResource Include="../../sql/migrations/001_BRAI_NEX_initial.sql" LogicalName="NexFiscal.Web.sql.migrations.001_BRAI_NEX_initial.sql" />
   </ItemGroup>
+  <!-- Ao compilar/rodar direto (Visual Studio, dotnet run) sem o script, gera a tela se ela ainda não existe. -->
+  <Target Name="NexFiscalBuildFrontend" BeforeTargets="Build" Condition="!Exists('$(MSBuildProjectDirectory)/wwwroot/index.html')">
+    <Message Importance="high" Text="NexFiscal: compilando o frontend (wwwroot ausente)..." />
+    <Exec Command="npm ci --no-audit --no-fund" WorkingDirectory="$(MSBuildProjectDirectory)/../../frontend" ContinueOnError="true" />
+    <Exec Command="npm run build" WorkingDirectory="$(MSBuildProjectDirectory)/../../frontend" ContinueOnError="true" />
+    <Warning Condition="!Exists('$(MSBuildProjectDirectory)/wwwroot/index.html')" Text="NexFiscal: o frontend não foi compilado. Instale o Node.js 20+ e execute scripts/Run-NexFiscalLocal.ps1." />
+  </Target>
 </Project>

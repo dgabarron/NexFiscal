@@ -74,8 +74,11 @@ app.Logger.LogInformation("Dados privados do NexFiscal em {Root}", dataDirectory
 try { app.Run(); }
 catch (IOException ex) when (ex.InnerException is AddressInUseException)
 {
-    app.Logger.LogCritical(
-        "A porta {Port} já está em uso. Feche a outra instância do NexFiscal (inclusive versões antigas) e execute novamente.", Port);
+    // Neste ponto o host já foi descartado: os loggers (ex.: Log de Eventos do Windows)
+    // não podem mais ser usados. Escrever direto no console.
+    Console.Error.WriteLine();
+    Console.Error.WriteLine($"ERRO: a porta {Port} já está em uso. Feche a outra instância do NexFiscal " +
+        "(inclusive versões antigas ou uma execução anterior ainda aberta) e execute novamente.");
     Environment.ExitCode = 1;
 }
 

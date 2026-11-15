@@ -4,3 +4,4 @@
 src/NexFiscal.Web/wwwroot/
 .nexfiscal-*/
 .nexfiscal-hana.dat
+**/TestResults/

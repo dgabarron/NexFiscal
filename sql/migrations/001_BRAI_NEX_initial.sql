@@ -1,8 +1,9 @@
 -- NexFiscal / BRAI_NEX
 -- Migration 001: initial persistence schema for NF-e capture.
--- Run ONCE using a migration/deployment account. Do not rerun against an existing schema.
+-- Applied by the NexFiscal setup (HanaSchemaInstaller), which creates ONLY the schema/tables that are missing.
+-- Never add DROP, TRUNCATE or ALTER here. Existing tables and data are never touched.
 -- All timestamps are UTC and must be written consistently by the application.
--- Runtime service account receives only DML rights on the schema.
+-- First install needs CREATE SCHEMA; afterwards the account only needs access to schema BRAI_NEX.
 CREATE SCHEMA "BRAI_NEX";
 
 CREATE COLUMN TABLE "BRAI_NEX"."BRAI_NEX_SchemaVersion" (

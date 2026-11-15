@@ -19,16 +19,18 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Compilar backend
-        run: dotnet build src/NexFiscal.Web/NexFiscal.Web.csproj -c Release
       - name: Compilar frontend
         working-directory: frontend
         run: |
-          npm install --no-audit --no-fund
+          npm ci --no-audit --no-fund
           npm run build
-      - name: Verificar teste unitário frontend
+      - name: Testes do frontend
         working-directory: frontend
         run: npm test
+      - name: Compilar backend
+        run: dotnet build NexFiscal.sln -c Release
+      - name: Testes do backend (HANA simulado)
+        run: dotnet test NexFiscal.sln -c Release --no-build
       - name: Smoke test local
         shell: pwsh
         run: |
@@ -48,7 +50,18 @@ jobs:
             $page = Invoke-WebRequest -Uri 'http://127.0.0.1:5187/' -TimeoutSec 3
             if ($page.Content -notmatch 'NexFiscal') { throw 'Frontend não disponível' }
             $hana = Invoke-RestMethod -Uri 'http://127.0.0.1:5187/api/setup/hana/status' -TimeoutSec 5
-            if ($hana.configured) { throw 'Teste iniciou com HANA indevidamente configurado' }
+            if ($hana.configured -or $hana.state -ne 'not_configured') { throw 'Teste iniciou com HANA indevidamente configurado' }
+            $body = @{ server = '127.0.0.1'; port = 39999; username = 'ci'; password = 'ci-sem-valor' } | ConvertTo-Json
+            try {
+              Invoke-RestMethod -Uri 'http://127.0.0.1:5187/api/setup/hana/test' -Method Post -ContentType 'application/json' -Body $body -TimeoutSec 60 | Out-Null
+              throw 'Teste de conexao deveria falhar sem HANA'
+            } catch [Microsoft.PowerShell.Commands.HttpResponseException] {
+              # Prova que o driver nativo SAP HANA carrega neste sistema e que o erro e classificado.
+              $kind = ($_.ErrorDetails.Message | ConvertFrom-Json).kind
+              if ($kind -notin 'connection_refused','connection_timeout','unreachable') { throw "Erro HANA inesperado: $kind" }
+            }
+            $after = Invoke-RestMethod -Uri 'http://127.0.0.1:5187/api/setup/hana/status' -TimeoutSec 5
+            if ($after.configured) { throw 'Falha de conexao nao pode salvar configuracao' }
           } finally {
             if (-not $proc.HasExited) { Stop-Process -Id $proc.Id -Force }
           }

@@ -1,38 +1,58 @@
-# NexFiscal V1 — Etapa 01: SAP HANA
+# NexFiscal V1 — Etapa 01: Conexão SAP HANA
 
-**Escopo desta branch: apenas configuração e validação SAP HANA.** Sem cadastro de empresa/A1, captura manual ou automática, CT-e, NFS-e ou outras telas.
+**Escopo desta branch: somente a Função 1 (configuração e validação do SAP HANA).** Não há cadastro de empresa/A1, captura manual ou automática, CT-e, NFS-e ou outras telas.
 
-## Como testar (Windows)
+**Estado:** código auditado e testado com HANA simulado. **Ainda não homologado em SAP HANA real** — veja o roteiro em [`docs/07-ETAPA-01-HANA-DECISOES-E-HOMOLOGACAO.md`](docs/07-ETAPA-01-HANA-DECISOES-E-HOMOLOGACAO.md).
 
-1. Extraia este ZIP **em uma pasta nova**. Não misture com a instalação anterior.
-2. Instale .NET SDK 8 e Node.js.
-3. Execute na raiz da pasta extraída:
+## Como executar (Windows)
+
+1. Baixe/extraia a branch `v1/etapa-01-hana` **em uma pasta nova**. Não misture com a instalação anterior.
+2. Instale o .NET SDK 8 e o Node.js 20+.
+3. Feche qualquer versão antiga do NexFiscal (ela usa a mesma porta 5187).
+4. Na raiz da pasta, execute:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\Run-NexFiscalLocal.ps1
 ```
 
-4. Acesse http://127.0.0.1:5187.
-5. Informe servidor, porta, usuário e senha SAP HANA.
-6. Clique em **Testar conexão**. A mensagem distingue conexão válida e estrutura pendente.
-7. Clique em **Salvar configuração**. A aplicação cria somente as tabelas ausentes de `BRAI_NEX`, valida estrutura e salva a conexão cifrada. Caso a criação falhe, nada é salvo.
-8. Feche a aplicação, inicie novamente, confirme que a conexão segue salva e validada.
+O script instala dependências, compila, roda os testes automatizados e inicia o serviço. Abra http://127.0.0.1:5187.
+
+## Como usar
+
+1. Informe servidor, porta SQL, usuário e senha do SAP HANA.
+2. **Testar conexão** — só lê. Não cria tabelas e não salva nada. Informa se a estrutura está validada, pendente ou incompatível.
+3. **Salvar configuração** — cria somente o schema/tabelas `BRAI_NEX` ausentes, valida colunas e tipos e só então grava as credenciais cifradas. Se algo falhar, nada é salvo.
+4. Feche o serviço (Ctrl+C), execute o script de novo e confirme que a tela abre com **Conexão salva e estrutura validada**, sem pedir login.
+
+Permissões do usuário HANA: na primeira instalação, `CREATE SCHEMA` (ou um schema `BRAI_NEX` já criado e pertencente a esse usuário). Depois disso, basta acesso ao schema `BRAI_NEX`.
 
 ## Preservação de dados
 
-Dados privados desta V1: `%LOCALAPPDATA%\NexFiscal\V1`. Esta localização **não depende da pasta de execução**. Não apague a pasta ou suas chaves `.nexfiscal-keys`. No Windows, as chaves são protegidas pelo DPAPI do usuário executando o serviço. Para servidor, mantenha a **mesma conta Windows**.
+- O NexFiscal nunca executa `DROP`, `TRUNCATE`, `ALTER`, `DELETE` ou `UPDATE` nesta etapa. Tabelas existentes não são tocadas; tabela incompatível bloqueia o salvamento e é listada na tela.
+- Dados privados: `%LOCALAPPDATA%\NexFiscal\V1` (não depende da pasta de execução). Contém `.nexfiscal-hana.dat` (credenciais cifradas) e `.nexfiscal-keys\` (chaves protegidas por DPAPI do usuário Windows). **Mantenha os dois juntos e use sempre a mesma conta Windows.**
+- Se a configuração salva não puder ser descriptografada, a tela mostra **Configuração salva ilegível**. Ela só é substituída com confirmação explícita, e o arquivo antigo é preservado como `.nexfiscal-hana.dat.ilegivel-<data>.bak`.
+- Para usar outra raiz, defina `NEXFISCAL_DATA_DIR` com caminho absoluto antes da primeira execução. Não aponte para a instalação legada.
 
-Para escolher raiz explícita, configure `NEXFISCAL_DATA_DIR` como caminho absoluto antes da primeira execução. Não aponte para uma instalação antiga sem revisar as chaves e arquivos.
-
-O serviço só escuta `127.0.0.1:5187`, não há login multiusuário. Ainda não é solução para rede/produção.
+O serviço escuta somente `127.0.0.1:5187` (não configurável) e recusa requisições de outras máquinas. Não há login multiusuário; não é solução para rede.
 
 ## Endpoints
 
-- `GET /api/health`
-- `GET /api/setup/hana/status` (nunca retorna senha)
-- `POST /api/setup/hana/test` (não salva nem cria tabelas)
-- `POST /api/setup/hana/save` (cria só tabelas ausentes, valida, salva credenciais cifradas)
+| Verbo | Rota | Comportamento |
+|---|---|---|
+| `GET` | `/api/health` | Produto, versão e etapa |
+| `GET` | `/api/setup/hana/status` | `state` (`not_configured`, `ready`, `schema_pending`, `unavailable`, `unreadable`), `configured`, `connected`, `schemaReady`, `tablesFound`, `message`, `server`, `port`, `username`, `issues`. Nunca retorna senha |
+| `POST` | `/api/setup/hana/test` | `{server,port,username,password}`; somente leitura |
+| `POST` | `/api/setup/hana/save` | Mesmo corpo (+ `replaceUnreadable` opcional); cria só o que falta, valida e salva cifrado |
 
-A validação das tabelas reaproveita o schema `BRAI_NEX` com cinco tabelas do projeto fiscal. Instalação não apaga dados e rejeita tabelas incompatíveis sem sobrescrevê-las.
+Erros retornam `{error, kind, issues}` com mensagem em português.
 
-**Teste no GitHub Actions não substitui sua homologação contra um HANA real.** Nesta etapa a única validação funcional necessária é testar conexão, estrutura e persistência após reiniciar.
+## Desenvolvimento
+
+```powershell
+dotnet test .\NexFiscal.sln -c Release
+cd frontend; npm test
+```
+
+Os testes do backend usam um SAP HANA simulado em memória (`tests/NexFiscal.Tests/FakeHana.cs`). **Eles e o GitHub Actions não substituem a homologação em HANA real.**
+
+Documentação do projeto: [`CLAUDE.md`](CLAUDE.md) e [`docs/`](docs/).

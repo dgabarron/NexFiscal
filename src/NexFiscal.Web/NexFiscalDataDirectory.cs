@@ -1,3 +1,5 @@
+namespace NexFiscal.Web;
+
 public sealed class NexFiscalDataDirectory
 {
     public string Root { get; }

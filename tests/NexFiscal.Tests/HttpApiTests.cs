@@ -17,6 +17,7 @@ public class NexFiscalApp : WebApplicationFactory<Program>
     public readonly FakeHanaServer Hana = new();
     public readonly InMemoryCompanyStore Companies = new();
     public readonly InMemoryCaptureStore Capture = new();
+    public readonly InMemoryManifestStore Manifest = new();
     public readonly FakeSefaz Sefaz = new();
     public readonly InMemoryNfseStore Nfse = new();
     public readonly FakeAdn Adn = new();
@@ -32,6 +33,7 @@ public class NexFiscalApp : WebApplicationFactory<Program>
             services.AddSingleton<ICaptureStore>(Capture);
             services.AddSingleton<ISefazTransport>(Sefaz);
             services.AddSingleton<INfseStore>(Nfse);
+            services.AddSingleton<IManifestStore>(Manifest);
             services.AddSingleton<IAdnTransport>(Adn);
             services.AddSingleton<TimeProvider>(new TestClock());
             services.AddSingleton<IStartupFilter>(new RemoteIpFilter(this));
@@ -76,7 +78,7 @@ public class HttpApiTests
         var status = await client.GetFromJsonAsync<JsonElement>("/api/setup/hana/status");
 
         Assert.Equal("NexFiscal", health.GetProperty("product").GetString());
-        Assert.Equal(5, health.GetProperty("stage").GetInt32());
+        Assert.Equal(6, health.GetProperty("stage").GetInt32());
         Assert.Equal("not_configured", status.GetProperty("state").GetString());
         Assert.False(status.GetProperty("configured").GetBoolean());
         Assert.False(File.Exists(Path.Combine(app.Root, ".nexfiscal-hana.dat")));
@@ -330,6 +332,23 @@ public class HttpApiTests
 
             var pending = await client.GetFromJsonAsync<JsonElement>($"/api/companies/{id}/nfe/pending");
             Assert.Equal(Sefaz.Key(102), pending[0].GetProperty("accessKey").GetString());
+            Assert.True(pending[0].GetProperty("canManifest").GetBoolean());
+
+            // Etapa 6: a ciência só sai por pedido explícito, com as notas marcadas na tela.
+            Assert.Empty(app.Sefaz.EventCalls);
+            Assert.Equal(HttpStatusCode.BadRequest, (await client.PostAsJsonAsync($"/api/companies/{id}/nfe/manifest", new { accessKeys = Array.Empty<string>() })).StatusCode);
+            app.Sefaz.ReplyEvents();
+            var manifest = await client.PostAsJsonAsync($"/api/companies/{id}/nfe/manifest", new { accessKeys = new[] { Sefaz.Key(102) } });
+            var manifestText = await manifest.Content.ReadAsStringAsync();
+            Assert.Equal(HttpStatusCode.OK, manifest.StatusCode);
+            Assert.Equal(1, JsonDocument.Parse(manifestText).RootElement.GetProperty("registered").GetInt32());
+            Assert.DoesNotContain("Signature", manifestText);
+            pending = await client.GetFromJsonAsync<JsonElement>($"/api/companies/{id}/nfe/pending");
+            Assert.Equal("registered", pending[0].GetProperty("manifestState").GetString());
+            Assert.False(pending[0].GetProperty("canManifest").GetBoolean());
+            var foreign = new HttpRequestMessage(HttpMethod.Post, $"/api/companies/{id}/nfe/manifest") { Content = JsonContent.Create(new { accessKeys = new[] { Sefaz.Key(102) } }) };
+            foreign.Headers.Add("Origin", "https://site-externo.example");
+            Assert.Equal(HttpStatusCode.Forbidden, (await client.SendAsync(foreign)).StatusCode);
 
             Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync("/api/companies/nao-existe/nfe/capture")).StatusCode);
         }

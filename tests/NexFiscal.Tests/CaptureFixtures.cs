@@ -60,6 +60,19 @@ public static class Sefaz
     public static string Blocked(long? last = null) =>
         Response(656, "Rejeicao: Consumo Indevido. Deve ser aguardado 1 hora para efetuar nova solicitacao caso nao existam mais documentos a serem pesquisados. Tente apos 1 hora", last, last);
 
+    public static string EventResponse(int lotStatus, string lotReason, params (string Key, int Status, string Reason)[] events) =>
+        "<?xml version=\"1.0\" encoding=\"utf-8\"?><soap:Envelope xmlns:soap=\"http://www.w3.org/2003/05/soap-envelope\"><soap:Body>" +
+        "<nfeRecepcaoEventoNFResult xmlns=\"http://www.portalfiscal.inf.br/nfe/wsdl/NFeRecepcaoEvento4\">" +
+        "<retEnvEvento xmlns=\"http://www.portalfiscal.inf.br/nfe\" versao=\"1.00\"><idLote>1</idLote><tpAmb>1</tpAmb><verAplic>AN_1.6.0</verAplic>" +
+        $"<cOrgao>91</cOrgao><cStat>{lotStatus}</cStat><xMotivo>{lotReason}</xMotivo>" +
+        string.Concat(events.Select((e, i) =>
+            "<retEvento versao=\"1.00\"><infEvento><tpAmb>1</tpAmb><verAplic>AN_1.6.0</verAplic><cOrgao>91</cOrgao>" +
+            $"<cStat>{e.Status}</cStat><xMotivo>{e.Reason}</xMotivo><chNFe>{e.Key}</chNFe><tpEvento>210210</tpEvento>" +
+            "<xEvento>Ciencia da Operacao</xEvento><nSeqEvento>1</nSeqEvento><CNPJDest>" + TestCertificates.CnpjA + "</CNPJDest>" +
+            "<dhRegEvento>2026-11-15T09:00:05-03:00</dhRegEvento>" +
+            (e.Status is 135 or 136 ? $"<nProt>89126000000{i:D4}</nProt>" : "") + "</infEvento></retEvento>")) +
+        "</retEnvEvento></nfeRecepcaoEventoNFResult></soap:Body></soap:Envelope>";
+
     public static string Zip(string xml)
     {
         using var output = new MemoryStream();
@@ -87,6 +100,55 @@ public sealed class FakeSefaz : ISefazTransport
         Calls.Add(call);
         if (Responses.Count == 0) throw new InvalidOperationException($"Consulta não esperada à SEFAZ: {call.Operation} {call.Nsu}");
         return Task.FromResult(Responses.Dequeue()(call));
+    }
+
+    // ---------- recepção de evento (manifestação do destinatário) ----------
+
+    public sealed record EventCall(Uri Url, string Action, string Envelope, string? Thumbprint)
+    {
+        public IReadOnlyList<string> Keys => Regex.Matches(Envelope, "<chNFe>(\\d{44})</chNFe>").Select(m => m.Groups[1].Value).ToList();
+    }
+    public readonly List<EventCall> EventCalls = [];
+    public readonly Queue<Func<EventCall, string>> EventResponses = new();
+
+    /// <summary>Próximo lote: a SEFAZ registra (135) todas as notas, exceto as indicadas em <paramref name="exceptions"/>.</summary>
+    public FakeSefaz ReplyEvents(params (string Key, int Status, string Reason)[] exceptions)
+    {
+        EventResponses.Enqueue(call => Sefaz.EventResponse(128, "Lote de evento processado", call.Keys.Select(key =>
+            exceptions.FirstOrDefault(e => e.Key == key) is { Key: not null } e ? e : (key, 135, "Evento registrado e vinculado a NF-e")).ToArray()));
+        return this;
+    }
+
+    public Task<string> SendAsync(Uri url, string soapAction, string soapEnvelope, X509Certificate2 clientCertificate, CancellationToken ct)
+    {
+        var call = new EventCall(url, soapAction, soapEnvelope,
+            clientCertificate.HasPrivateKey ? clientCertificate.GetCertHashString(System.Security.Cryptography.HashAlgorithmName.SHA256) : null);
+        EventCalls.Add(call);
+        if (EventResponses.Count == 0) throw new InvalidOperationException("Evento não esperado enviado à SEFAZ.");
+        return Task.FromResult(EventResponses.Dequeue()(call));
+    }
+}
+
+/// <summary>Substitui a tabela BRAI_NEX_NfeManifest nos testes, com a mesma regra do repositório real.</summary>
+public sealed class InMemoryManifestStore : IManifestStore
+{
+    public readonly Dictionary<(string Company, string Key, int Type), ManifestRow> Rows = [];
+
+    public Task<IReadOnlyList<ManifestRow>> ListAsync(string companyId, int eventType, CancellationToken ct)
+    {
+        lock (Rows)
+            return Task.FromResult<IReadOnlyList<ManifestRow>>(
+                Rows.Where(r => r.Key.Company == companyId && r.Key.Type == eventType).Select(r => r.Value).ToList());
+    }
+
+    public Task SaveAsync(string companyId, ManifestRow row, CancellationToken ct)
+    {
+        lock (Rows)
+        {
+            var id = (companyId, row.AccessKey, row.EventType);
+            if (!Rows.TryGetValue(id, out var current) || current.State != ManifestRow.Registered) Rows[id] = row;
+        }
+        return Task.CompletedTask;
     }
 }
 
@@ -245,6 +307,8 @@ public sealed class CaptureInstallation : IDisposable
     public NfseService Nfse = null!;
     public readonly string NfseFolder = Directory.CreateTempSubdirectory("nexfiscal-nfse-").FullName;
     public CaptureWorker Worker = null!;
+    public readonly InMemoryManifestStore ManifestStore = new();
+    public ManifestService Manifest = null!;
 
     public static async Task<CaptureInstallation> CreateAsync()
     {
@@ -265,6 +329,7 @@ public sealed class CaptureInstallation : IDisposable
         Monitor = new MonitorService(Store, Companies, signal, Clock);
         var nfseEngine = new NfseCaptureEngine(NfseStore, Store, Companies, Adn, Clock, logs.CreateLogger<NfseCaptureEngine>());
         Nfse = new NfseService(NfseStore, Store, Companies, signal, Clock);
+        Manifest = new ManifestService(Store, ManifestStore, new SefazManifestGateway(Sefaz), Companies, Clock, logs.CreateLogger<ManifestService>());
         Worker = new CaptureWorker(Store, engine, NfseStore, nfseEngine, Companies, signal, Clock, logs.CreateLogger<CaptureWorker>());
     }
 

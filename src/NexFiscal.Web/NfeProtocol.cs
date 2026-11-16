@@ -221,7 +221,7 @@ public static class NfeProtocol
         DtdProcessing = DtdProcessing.Prohibit, XmlResolver = null, MaxCharactersInDocument = MaxResponseChars
     };
 
-    private static XDocument Load(string xml)
+    internal static XDocument Load(string xml)
     {
         using var reader = XmlReader.Create(new StringReader(xml), SafeXml);
         return XDocument.Load(reader);

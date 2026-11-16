@@ -39,6 +39,9 @@ builder.Services.AddSingleton<NfeCaptureEngine>();
 builder.Services.AddSingleton<CaptureSignal>();
 builder.Services.AddSingleton<CaptureService>();
 builder.Services.AddSingleton<MonitorService>();
+builder.Services.AddSingleton<IManifestStore, HanaManifestStore>();
+builder.Services.AddSingleton<IManifestGateway, SefazManifestGateway>();
+builder.Services.AddSingleton<ManifestService>();
 builder.Services.AddSingleton<INfseStore, HanaNfseStore>();
 builder.Services.AddSingleton<IAdnTransport, HttpAdnTransport>();
 builder.Services.AddSingleton<NfseCaptureEngine>();
@@ -83,7 +86,7 @@ app.MapGet("/", () =>
         : Results.Problem("Frontend não compilado. Execute npm run build em frontend.", statusCode: 503);
 });
 
-app.MapGet("/api/health", () => Results.Ok(new { product = "NexFiscal", version = "V1", stage = 5 }));
+app.MapGet("/api/health", () => Results.Ok(new { product = "NexFiscal", version = "V1", stage = 6 }));
 
 app.MapGet("/api/setup/hana/status", async (HanaSetup hana, CancellationToken ct) =>
     Results.Ok(await hana.StatusAsync(ct)));
@@ -110,8 +113,10 @@ app.MapGet("/api/companies/{id}/nfe/capture", (string id, CaptureService capture
     Run(() => capture.GetAsync(id, ct)));
 app.MapPost("/api/companies/{id}/nfe/captures", (string id, CaptureRequest? request, CaptureService capture, CancellationToken ct) =>
     Run(() => capture.StartAsync(id, request, ct)));
-app.MapGet("/api/companies/{id}/nfe/pending", (string id, CaptureService capture, CancellationToken ct) =>
-    Run(() => capture.PendingAsync(id, ct)));
+app.MapGet("/api/companies/{id}/nfe/pending", (string id, ManifestService manifest, CancellationToken ct) =>
+    Run(() => manifest.PendingAsync(id, ct)));
+app.MapPost("/api/companies/{id}/nfe/manifest", (string id, ManifestRequest? request, ManifestService manifest, CancellationToken ct) =>
+    Run(() => manifest.AcknowledgeAsync(id, request, ct)));
 
 app.MapGet("/api/companies/{id}/nfe/monitor", (string id, MonitorService monitor, CancellationToken ct) =>
     Run(() => monitor.GetAsync(id, ct)));

@@ -38,7 +38,8 @@ internal static class CompanySql
         "UNION SELECT \"CompanyId\" FROM \"BRAI_NEX\".\"BRAI_NEX_NfeDocument\" " +
         "UNION SELECT \"CompanyId\" FROM \"BRAI_NEX\".\"BRAI_NEX_NfeRecovery\" " +
         "UNION SELECT \"CompanyId\" FROM \"BRAI_NEX\".\"BRAI_NEX_CaptureJob\" " +
-        "UNION SELECT \"CompanyId\" FROM \"BRAI_NEX\".\"BRAI_NEX_NfseDocument\"";
+        "UNION SELECT \"CompanyId\" FROM \"BRAI_NEX\".\"BRAI_NEX_NfseDocument\" " +
+        "UNION SELECT \"CompanyId\" FROM \"BRAI_NEX\".\"BRAI_NEX_NfeManifest\"";
 
     public const string InsertCompany =
         "INSERT INTO \"BRAI_NEX\".\"BRAI_NEX_Company\" " +
@@ -71,6 +72,7 @@ internal static class CompanySql
     public const string CountDocument = "SELECT COUNT(*) FROM \"BRAI_NEX\".\"BRAI_NEX_NfeDocument\" WHERE \"CompanyId\" = ?";
     public const string CountRecoveryRows = "SELECT COUNT(*) FROM \"BRAI_NEX\".\"BRAI_NEX_NfeRecovery\" WHERE \"CompanyId\" = ?";
     public const string CountJob = "SELECT COUNT(*) FROM \"BRAI_NEX\".\"BRAI_NEX_CaptureJob\" WHERE \"CompanyId\" = ?";
+    public const string CountManifest = "SELECT COUNT(*) FROM \"BRAI_NEX\".\"BRAI_NEX_NfeManifest\" WHERE \"CompanyId\" = ?";
     public const string CountNfseDocument = "SELECT COUNT(*) FROM \"BRAI_NEX\".\"BRAI_NEX_NfseDocument\" WHERE \"CompanyId\" = ?";
 
     // Únicos DELETE do sistema: só o cadastro (e a configuração) de empresa SEM histórico fiscal, por CompanyId, após confirmação.
@@ -159,7 +161,8 @@ public sealed class HanaCompanyStore(
         await ScalarAsync(db, tx, ct, CompanySql.CountDocument, companyId) > 0 ||
         await ScalarAsync(db, tx, ct, CompanySql.CountRecoveryRows, companyId) > 0 ||
         await ScalarAsync(db, tx, ct, CompanySql.CountJob, companyId) > 0 ||
-        await ScalarAsync(db, tx, ct, CompanySql.CountNfseDocument, companyId) > 0;
+        await ScalarAsync(db, tx, ct, CompanySql.CountNfseDocument, companyId) > 0 ||
+        await ScalarAsync(db, tx, ct, CompanySql.CountManifest, companyId) > 0;
 
     // ---------- infraestrutura ----------
 

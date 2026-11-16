@@ -11,6 +11,9 @@ namespace NexFiscal.Web;
 public interface ISefazTransport
 {
     Task<string> SendAsync(Uri url, string soapEnvelope, X509Certificate2 clientCertificate, CancellationToken ct);
+
+    /// <summary>Mesmo envio, para outro serviço da SEFAZ (ex.: recepção de evento), identificado pela ação SOAP.</summary>
+    Task<string> SendAsync(Uri url, string soapAction, string soapEnvelope, X509Certificate2 clientCertificate, CancellationToken ct);
 }
 
 /// <summary>
@@ -24,7 +27,10 @@ public sealed class HttpSefazTransport : ISefazTransport
     /// <summary>Somente para testes automatizados com servidor local: aceita o certificado de teste indicado.</summary>
     internal X509Certificate2? TrustedTestServerCertificate { get; init; }
 
-    public async Task<string> SendAsync(Uri url, string soapEnvelope, X509Certificate2 clientCertificate, CancellationToken ct)
+    public Task<string> SendAsync(Uri url, string soapEnvelope, X509Certificate2 clientCertificate, CancellationToken ct) =>
+        SendAsync(url, NfeProtocol.SoapAction, soapEnvelope, clientCertificate, ct);
+
+    public async Task<string> SendAsync(Uri url, string soapAction, string soapEnvelope, X509Certificate2 clientCertificate, CancellationToken ct)
     {
         using var handler = new SocketsHttpHandler
         {
@@ -46,7 +52,7 @@ public sealed class HttpSefazTransport : ISefazTransport
         using var request = new HttpRequestMessage(HttpMethod.Post, url);
         request.Content = new StringContent(soapEnvelope, Encoding.UTF8);
         request.Content.Headers.ContentType = new MediaTypeHeaderValue("application/soap+xml") { CharSet = "utf-8" };
-        request.Content.Headers.ContentType.Parameters.Add(new NameValueHeaderValue("action", "\"" + NfeProtocol.SoapAction + "\""));
+        request.Content.Headers.ContentType.Parameters.Add(new NameValueHeaderValue("action", "\"" + soapAction + "\""));
 
         try
         {

@@ -43,7 +43,7 @@ jobs:
             for ($i = 0; $i -lt 30; $i++) {
               try {
                 $status = Invoke-RestMethod -Uri 'http://127.0.0.1:5187/api/health' -TimeoutSec 2
-                if ($status.product -eq 'NexFiscal' -and $status.stage -eq 5) { $ready = $true; break }
+                if ($status.product -eq 'NexFiscal' -and $status.stage -eq 6) { $ready = $true; break }
               } catch { Start-Sleep -Seconds 1 }
             }
             if (-not $ready) { throw 'API não inicializou' }

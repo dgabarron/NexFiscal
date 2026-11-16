@@ -157,3 +157,20 @@ export function countersFor(kind, job) {
   return counters.filter(c => c.key !== "pending").map(c => c.key === "ignored" ? { ...c, label: "Eventos (não são notas)" }
     : c.key === "newComplete" ? { ...c, label: "NFS-e novas" } : c);
 }
+
+// ---------- Ciência da Operação (etapa 6) ----------
+
+export const MANIFEST_LIMIT = 100;
+
+// Situação da ciência de uma nota pendente, como aparece na lista.
+export function describeManifest(note) {
+  if (note?.manifestState === "registered") return { tone: "ok", text: note.manifestMessage || "Ciência registrada. Aguardando o XML completo." };
+  if (note?.manifestState === "rejected") return { tone: "error", text: note.manifestMessage || "A SEFAZ recusou a ciência." };
+  if (note && !note.canManifest) return { tone: "neutral", text: "Manifestação disponível só no portal da SEFAZ." };
+  return { tone: "neutral", text: "Ciência ainda não registrada" };
+}
+
+// Notas que podem ser marcadas, limitadas ao máximo de um envio.
+export function selectableKeys(notes) {
+  return (notes || []).filter(n => n.canManifest).slice(0, MANIFEST_LIMIT).map(n => n.accessKey);
+}

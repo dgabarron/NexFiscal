@@ -1,14 +1,14 @@
-# NexFiscal — Etapa 05: NFS-e nacional
+# NexFiscal — Etapa 06: Ciência da Operação (manifestação do destinatário)
 
-**Escopo desta branch:** as quatro funções da V1 (conexão SAP HANA, empresas e A1, captura manual e monitoramento automático de NF-e — todas homologadas) e a **captura manual e automática de NFS-e do padrão nacional**, pelo Ambiente de Dados Nacional (ADN). Não há CT-e nem envio de manifestação.
+**Escopo desta branch:** as quatro funções da V1 (conexão SAP HANA, empresas e A1, captura manual e monitoramento automático de NF-e — todas homologadas), a captura de **NFS-e do padrão nacional** (etapa 5, ainda aguardando homologação) e o registro da **Ciência da Operação** para as NF-e que a SEFAZ entregou só em resumo. Não há CT-e nem manifestação conclusiva (confirmação, desconhecimento, operação não realizada).
 
-**Estado da NFS-e:** testada com ADN e HANA simulados. **Nunca consultou o ADN real**, e o formato do corpo da resposta não pôde ser conferido na documentação oficial — veja [`docs/11-ETAPA-05-NFSE-DECISOES-E-HOMOLOGACAO.md`](docs/11-ETAPA-05-NFSE-DECISOES-E-HOMOLOGACAO.md). Etapas anteriores: [`docs/07`](docs/07-ETAPA-01-HANA-DECISOES-E-HOMOLOGACAO.md), [`docs/08`](docs/08-ETAPA-02-EMPRESAS-A1-DECISOES-E-HOMOLOGACAO.md), [`docs/09`](docs/09-ETAPA-03-CAPTURA-NFE-DECISOES-E-HOMOLOGACAO.md) e [`docs/10`](docs/10-ETAPA-04-MONITORAMENTO-DECISOES-E-HOMOLOGACAO.md).
+**Estado da Ciência da Operação:** testada com SEFAZ e HANA simulados e conferida contra os schemas oficiais do evento. **Nunca foi enviada à SEFAZ real** — veja [`docs/12-ETAPA-06-MANIFESTACAO-DECISOES-E-HOMOLOGACAO.md`](docs/12-ETAPA-06-MANIFESTACAO-DECISOES-E-HOMOLOGACAO.md). Etapas anteriores: [`docs/07`](docs/07-ETAPA-01-HANA-DECISOES-E-HOMOLOGACAO.md), [`docs/08`](docs/08-ETAPA-02-EMPRESAS-A1-DECISOES-E-HOMOLOGACAO.md), [`docs/09`](docs/09-ETAPA-03-CAPTURA-NFE-DECISOES-E-HOMOLOGACAO.md), [`docs/10`](docs/10-ETAPA-04-MONITORAMENTO-DECISOES-E-HOMOLOGACAO.md) e [`docs/11`](docs/11-ETAPA-05-NFSE-DECISOES-E-HOMOLOGACAO.md).
 
 **Plataforma:** aplicação exclusiva para **Windows**, integrada exclusivamente ao banco **SAP HANA do SAP Business One**. A interface segue o **Microsoft Fluent 2** (Fluent UI React v9) e acompanha o tema claro/escuro do Windows.
 
 ## Como executar (Windows)
 
-1. Baixe/extraia a branch `v1/etapa-05-nfse` **em uma pasta nova**. Não misture com a instalação anterior.
+1. Baixe/extraia a branch `v1/etapa-06-manifestacao` **em uma pasta nova**. Não misture com a instalação anterior.
 2. Instale o .NET SDK 8 e o Node.js 20+.
 3. Feche qualquer versão antiga do NexFiscal (ela usa a mesma porta 5187).
 4. Na raiz da pasta, execute:
@@ -47,6 +47,17 @@ A conexão salva e as empresas cadastradas continuam valendo. Na primeira abertu
 4. A tela mostra: XMLs novos, já presentes, recuperados, resumos e eventos ignorados, notas ainda sem XML completo e falhas.
 5. A SEFAZ exige **1 hora** entre consultas depois que não há mais documentos. Um novo clique nesse intervalo apenas confere os arquivos locais e fica aguardando; a captura continua sozinha no horário indicado, enquanto o serviço estiver aberto.
 
+### Ciência da Operação (seção Captura, aba NF-e)
+
+Quando a empresa é a destinatária, a SEFAZ entrega primeiro só o **resumo** da nota. O XML completo é liberado depois que a empresa registra a Ciência da Operação.
+
+1. Depois de uma captura com pendências, aparece o bloco **"N nota(s) aguardando manifestação do destinatário"**. Clique em **Ver notas pendentes**.
+2. Marque as notas desejadas (ou todas) e clique em **Registrar ciência da operação**. Leia o aviso e confirme.
+3. O NexFiscal assina o evento com o A1 da empresa e envia à SEFAZ. A lista mostra, nota a nota, se a ciência foi registrada ou por que a SEFAZ recusou (prazo encerrado, nota cancelada etc.).
+4. O XML completo chega na **próxima captura** (manual ou automática), respeitando o intervalo de 1 hora da SEFAZ.
+
+A ciência **nunca é enviada automaticamente** — só para as notas marcadas e depois da confirmação. Ela não confirma nem recusa a operação e não pode ser desfeita. A manifestação conclusiva continua sendo feita fora do NexFiscal (portal da SEFAZ ou sistema fiscal), no prazo legal. Cada envio registra até 100 notas.
+
 ### NFS-e nacional (abas NFS-e das seções Captura e Monitoramento)
 
 1. Nas seções **Captura** e **Monitoramento**, escolha a aba **NFS-e**. O funcionamento é o mesmo da NF-e: empresa, pasta de destino, botão de captura e, se quiser, monitoramento automático.
@@ -64,7 +75,7 @@ A conexão salva e as empresas cadastradas continuam valendo. Na primeira abertu
 
 Três limites do serviço oficial, que o NexFiscal não tem como contornar:
 
-- **Destinatário só recebe o XML completo depois da manifestação** (Ciência da Operação ou Confirmação). Antes disso a SEFAZ entrega apenas o resumo. O NexFiscal lista essas notas, mas não envia manifestação.
+- **Destinatário só recebe o XML completo depois da manifestação** (Ciência da Operação ou Confirmação). Antes disso a SEFAZ entrega apenas o resumo. O NexFiscal lista essas notas e registra a Ciência da Operação quando você pede; o prazo oficial para a ciência é de 10 dias da autorização da nota, e fora dele a SEFAZ recusa.
 - **Documentos ficam disponíveis por até 90 dias**, e a numeração só é gerada para quem usou a distribuição nos últimos 60 dias — não há histórico retroativo.
 - **Outro sistema consultando a distribuição de NF-e do mesmo CNPJ** (inclusive a versão antiga do NexFiscal) faz a SEFAZ bloquear as consultas por 1 hora. Use apenas um.
 
@@ -101,7 +112,8 @@ O serviço escuta somente `127.0.0.1:5187` (não configurável) e recusa requisi
 
 | `GET` | `/api/companies/{id}/nfe/capture` | Pasta lembrada, último pedido com contagens, próxima consulta permitida e quantidade de notas só com resumo |
 | `POST` | `/api/companies/{id}/nfe/captures` | `{destinationDirectory}`; cria o pedido de captura (ou devolve o que já está em andamento) |
-| `GET` | `/api/companies/{id}/nfe/pending` | Notas aguardando manifestação do destinatário |
+| `GET` | `/api/companies/{id}/nfe/pending` | Notas aguardando manifestação do destinatário, com a situação da ciência de cada uma |
+| `POST` | `/api/companies/{id}/nfe/manifest` | `{accessKeys}` (notas marcadas na tela); registra a Ciência da Operação e devolve o resultado por nota |
 
 | `GET` | `/api/companies/{id}/nfe/monitor` | Configuração do monitoramento, próxima consulta prevista e última execução automática |
 | `PUT` | `/api/companies/{id}/nfe/monitor` | `{enabled,intervalMinutes,destinationDirectory}`; liga, desliga ou ajusta |

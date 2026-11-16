@@ -111,3 +111,17 @@ test("nf-e e nfs-e têm fonte e contagens próprias", () => {
   assert.deepEqual(nfse.map(c => c.key), ["newComplete", "alreadyPresent", "recovered", "ignored", "failures"]);
   assert.equal(nfse[0].label, "NFS-e novas");
 });
+
+test("ciência: situação por nota e seleção limitada às notas que podem ser enviadas", async () => {
+  const { describeManifest, selectableKeys, MANIFEST_LIMIT } = await import("./api.js");
+  assert.equal(describeManifest({ canManifest: true }).text, "Ciência ainda não registrada");
+  assert.equal(describeManifest({ canManifest: false, manifestState: "registered", manifestMessage: "Ciência registrada. Aguardando o XML completo." }).tone, "ok");
+  assert.match(describeManifest({ canManifest: true, manifestState: "rejected", manifestMessage: "A SEFAZ recusou: prazo para manifestação encerrado." }).text, /prazo/);
+  assert.equal(describeManifest({ canManifest: true, manifestState: "rejected" }).tone, "error");
+  assert.match(describeManifest({ canManifest: false }).text, /portal da SEFAZ/);
+  const notes = Array.from({ length: 130 }, (_, i) => ({ accessKey: "k" + i, canManifest: i % 13 !== 0 }));
+  const keys = selectableKeys(notes);
+  assert.equal(keys.length, MANIFEST_LIMIT);
+  assert.ok(!keys.includes("k0") && !keys.includes("k13") && keys.includes("k1"));
+  assert.deepEqual(selectableKeys(null), []);
+});

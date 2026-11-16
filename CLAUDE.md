@@ -18,7 +18,10 @@ Construir o **NexFiscal V1**, aplicação local de captura de XML completo de NF
 10. Nunca alterar `main` ou mesclar PRs sem pedido explícito; trabalhar em branches específicas e produzir mudanças pequenas, reversíveis e testadas.
 
 ## Atualização de escopo — 15/11/2026
-Depois de homologar as quatro funções acima, o usuário pediu a captura (manual e automática) da **NFS-e do padrão nacional (ADN)**, entregue como etapa 5 na branch `v1/etapa-05-nfse`. A regra 1 continua valendo para CT-e e demais itens; NFS-e deixou de estar fora do escopo. Manifestação do destinatário da NF-e segue **não implementada**, aguardando decisão expressa do usuário. Detalhes em `docs/07` a `docs/11`.
+Depois de homologar as quatro funções acima, o usuário pediu a captura (manual e automática) da **NFS-e do padrão nacional (ADN)**, entregue como etapa 5 na branch `v1/etapa-05-nfse`. A regra 1 continua valendo para CT-e e demais itens; NFS-e deixou de estar fora do escopo. Detalhes em `docs/07` a `docs/11`.
+
+## Atualização de escopo — 16/11/2026
+O usuário delegou a escolha do próximo passo ("Faça o que acredita ser o melhor caminho"). Foi entregue, como etapa 6 na branch `v1/etapa-06-manifestacao`, o registro da **Ciência da Operação** (evento 210210) para as NF-e conhecidas só pelo resumo. Regras: só é enviada por ação do operador, para notas marcadas na tela e após confirmação; **nunca automaticamente**; o operador não digita chaves. Manifestação conclusiva (confirmação, desconhecimento, operação não realizada) segue **não implementada**. Etapas 5 e 6 ainda **não foram homologadas** pelo usuário. Detalhes em `docs/12`.
 
 ## Repositório e branch de referência
 - GitHub: https://github.com/dgabarron/NexFiscal

@@ -116,7 +116,7 @@ public sealed class NfeCaptureEngine(
         var message = "Todos os documentos disponibilizados pela SEFAZ nesta janela foram processados.";
         if (note is not null) message = note;
         if (pending > 0)
-            message += $" {pending} nota(s) ainda sem XML completo: a SEFAZ só libera o XML ao destinatário depois da manifestação (Ciência da Operação), que o NexFiscal não envia.";
+            message += $" {pending} nota(s) ainda sem XML completo: a SEFAZ só libera o XML ao destinatário depois da manifestação. Registre a Ciência da Operação na lista de notas pendentes da tela Captura.";
         if (counters.Failures > 0) message += $" {counters.Failures} item(ns) com falha; veja os detalhes e tente novamente depois.";
         return Apply(job, counters) with
         {
